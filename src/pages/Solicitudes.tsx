@@ -359,25 +359,33 @@ export default function Solicitudes() {
       {/* VER */}
       <Modal open={modal === 'ver'} onClose={cerrar} cerrableFuera={false} titulo={`Solicitud SC-${String(seleccion?.id).padStart(6, '0')}`} ancho="max-w-4xl">
         {seleccion && (
-          <div className="grid grid-cols-3 gap-x-5 gap-y-3 text-sm">
-            <Campo label="# Ingreso" valor={seleccion.numero_ingreso} />
-            <Campo label="Documento" valor={seleccion.documento_paciente} />
-            <Campo label="Paciente" valor={seleccion.nombre_paciente} />
-            <Campo label="Edad" valor={seleccion.edad} />
-            <Campo label="EPS" valor={seleccion.eps?.nombre} />
-            <Campo label="Unidad / Cama" valor={[seleccion.unidades?.nombre, seleccion.cama].filter(Boolean).join(' - ')} />
-            <Campo label="Especialidad" valor={[seleccion.especialidades?.nombre].filter(Boolean).join(' ')} />
-            <Campo label="Reportado por" valor={seleccion.perfiles?.nombre} />
-            <Campo label="Tiempo estimado" valor={seleccion.tiempo_estimado_minutos ? `${seleccion.tiempo_estimado_minutos} min` : null} />
-            <Campo label="Procedimiento" valor={seleccion.procedimiento} full />
-            <Campo label="Valoración preanestésica" valor={seleccion.valoracion_preanestesica} />
-            <Campo label="Boleta quirúrgica" valor={seleccion.boleta_quirurgica} />
-            <Campo label="Autorización aseguradora" valor={seleccion.autorizacion_aseguradora} />
-            <Campo label="Estado material osteosíntesis" valor={seleccion.estado_material_osteosintesis} />
-            <Campo label="Casa médica" valor={seleccion.casa_medica_material} />
-            <Campo label="Observaciones programación" valor={seleccion.observaciones_programacion} full />
-            {seleccion.estado === 'fallido' && <Campo label="Resultado de la consulta" valor={seleccion.gomedisys_resultado} full />}
-            {seleccion.estado === 'cancelado' && <Campo label="Motivo cancelación" valor={seleccion.motivo_cancelacion} full />}
+          <div className="space-y-3">
+            <div className="rounded-xl border border-[#0D2D6B]/20 bg-[#EAF0FA] p-3">
+              <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[#0D2D6B]/70">Datos del paciente</div>
+              <div className="grid grid-cols-3 gap-x-5 gap-y-2 text-sm">
+                <Campo label="# Ingreso" valor={seleccion.numero_ingreso} />
+                <Campo label="Documento" valor={seleccion.documento_paciente} />
+                <Campo label="Paciente" valor={seleccion.nombre_paciente} />
+                <Campo label="Edad" valor={seleccion.edad} />
+                <Campo label="EPS" valor={seleccion.eps?.nombre} />
+                <Campo label="Unidad / Cama" valor={[seleccion.unidades?.nombre, seleccion.cama].filter(Boolean).join(' - ')} />
+                <Campo label="Especialidad" valor={[seleccion.especialidades?.nombre].filter(Boolean).join(' ')} />
+                <Campo label="Reportado por" valor={seleccion.perfiles?.nombre} />
+                <Campo label="Tiempo estimado" valor={seleccion.tiempo_estimado_minutos ? `${seleccion.tiempo_estimado_minutos} min` : null} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-x-5 gap-y-3 text-sm">
+              <Campo label="Procedimiento" valor={seleccion.procedimiento} full />
+              <Campo label="Valoración preanestésica" valor={seleccion.valoracion_preanestesica} />
+              <Campo label="Boleta quirúrgica" valor={seleccion.boleta_quirurgica} />
+              <Campo label="Autorización aseguradora" valor={seleccion.autorizacion_aseguradora} />
+              <Campo label="Estado material osteosíntesis" valor={seleccion.estado_material_osteosintesis} />
+              <Campo label="Casa médica" valor={seleccion.casa_medica_material} />
+              <Campo label="Observaciones programación" valor={seleccion.observaciones_programacion} full />
+              {seleccion.estado === 'fallido' && <Campo label="Resultado de la consulta" valor={seleccion.gomedisys_resultado} full />}
+              {seleccion.estado === 'cancelado' && <Campo label="Motivo cancelación" valor={seleccion.motivo_cancelacion} full />}
+            </div>
           </div>
         )}
       </Modal>
@@ -489,8 +497,8 @@ function ModalEditar({ open, seleccion, error, guardando, onClose, onGuardar }: 
     <Modal open={open} onClose={onClose} titulo="Editar solicitud" ancho="max-w-3xl">
       <div className="space-y-3">
         {seleccion && (
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
-            <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">Datos del paciente (solo lectura)</div>
+          <div className="rounded-xl border border-[#0D2D6B]/20 bg-[#EAF0FA] p-2.5">
+            <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[#0D2D6B]/70">Datos del paciente (solo lectura)</div>
             <div className="grid grid-cols-3 gap-x-4 gap-y-1.5 text-sm">
               <Campo label="# Ingreso" valor={seleccion.numero_ingreso} />
               <Campo label="Documento" valor={seleccion.documento_paciente} />
@@ -611,8 +619,8 @@ function ModalNotificar({ open, seleccion, recomendaciones, error, guardando, on
     <Modal open={open} onClose={onClose} titulo="Notificar al paciente" ancho="max-w-xl">
       <div className="space-y-3">
         {seleccion && (
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Datos del paciente</div>
+          <div className="rounded-xl border border-[#0D2D6B]/20 bg-[#EAF0FA] p-3">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#0D2D6B]/70">Datos del paciente</div>
             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
               <Campo label="# Ingreso" valor={seleccion.numero_ingreso} />
               <Campo label="Documento" valor={seleccion.documento_paciente} />
