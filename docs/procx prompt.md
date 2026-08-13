@@ -415,3 +415,79 @@ Se requiere construir una app que permita
 		  de login (ver también `references/gotchas.md` del skill
 		  cac-fullstack-app) para no repetirlo en próximas apps.
 
+
+	10.- AJUSTES RONDA 3 — GESTIÓN DE SOLICITUDES Y DASHBOARD (2026-08-13)
+
+		10.1.- Nuevo módulo independiente "Solicitudes reportadas"
+			Se separó la cola de intake (estado reportado/fallido) de "Gestión
+			de solicitudes" en una página nueva e independiente:
+			src/pages/SolicitudesReportadas.tsx, ruta /solicitudes-reportadas,
+			módulo "solicitudes_reportadas" en rol_permisos (mismo acceso que
+			"solicitudes": administrador y programador sí, médico y
+			visualizador no). Esta página solo tiene las acciones Ver /
+			Consultar GoMedisys / Cancelar. Cuando la consulta a GoMedisys es
+			exitosa (estado pasa a "procesado"), el registro desaparece de
+			esta cola y aparece en "Gestión de solicitudes", que ahora excluye
+			explícitamente los estados reportado y fallido
+			(`.not('estado', 'in', '(reportado,fallido)')`). Este patrón
+			(bandeja de intake separada de la bandeja de gestión) es
+			reutilizable en otros proyectos con un flujo de "cola de entrada
+			→ cola de trabajo".
+
+		10.2.- "Gestión de solicitudes" — ajustes de UI
+			- Cards de métricas pequeñas en la parte superior (dos filas: por
+			  especialidad y por estado), recalculadas siempre a partir del
+			  conjunto ya filtrado (`filtradas`), no de una consulta aparte —
+			  garantiza que reflejen exactamente los filtros y la búsqueda
+			  vigentes.
+			- Cabecera de tabla con fondo azul institucional (`bg-[#0D2D6B]`)
+			  y texto blanco, en vez del gris claro por defecto.
+			- Columna "# Ingreso" agregada justo después de "Fecha".
+			- La columna "Especialidad" ahora muestra debajo, en texto
+			  pequeño gris, el nombre del médico que reportó el caso
+			  ("Dr(a). …") — resuelto como
+			  `nombre_medico_reporta || perfiles.nombre` (fallback al perfil
+			  de quien está autenticado como reportante).
+			- Nuevos filtros: médico (texto libre, cliente-side), quirófano
+			  (select, servidor) y hora (input time, servidor, match exacto
+			  contra `hora_programada`).
+			- El modal "Ver" se reorganizó en 4 bloques con color de fondo
+			  propio: Paciente (azul, existente), Orden Cx (violeta:
+			  procedimiento, especialidad, tiempo estimado, reportado por),
+			  Boleta Qx (ámbar: valoración preanestésica, autorización
+			  aseguradora, material de osteosíntesis, casa médica) y Gestión
+			  (gris: estado, programación, notificación, observaciones,
+			  motivo de cancelación si aplica).
+			- Columna "Programación": ahora muestra primero el nombre del
+			  quirófano (línea en negrita) y debajo, en texto más pequeño, la
+			  fecha y hora — antes iba en una sola línea con el quirófano al
+			  final.
+			- Se retiró la acción "Consultar GoMedisys" (rayo) de esta
+			  tabla: ya no aplica porque los registros aquí siempre llegaron
+			  desde la consulta exitosa; esa acción vive ahora solo en
+			  "Solicitudes reportadas".
+
+		10.3.- Reporte de cirugía — nombre del médico cuando reporta un programador
+			Columna nueva `solicitudes_cirugia.nombre_medico_reporta` (text,
+			nullable). En ReportarCirugia.tsx, si el usuario autenticado
+			tiene rol "programador", el formulario pide obligatoriamente el
+			nombre del médico cirujano y lo guarda en esa columna; si reporta
+			un usuario rol "médico", el campo no se muestra y el nombre se
+			resuelve directamente del perfil de quien reporta
+			(`perfiles.nombre` vía `reportado_por`). Toda la UI que muestra
+			"médico" usa este mismo fallback
+			(`nombre_medico_reporta || perfiles.nombre`).
+
+		10.4.- Dashboard — barra "Por especialidad" con desglose de 3 colores
+			La barra por especialidad pasó de un solo color proporcional al
+			total, a una barra apilada de 3 segmentos por especialidad:
+			programadas/en curso (degradado azul institucional), realizadas
+			(verde esmeralda) y canceladas (rojo claro), con una leyenda de
+			colores debajo del gráfico. Los tres conteos respetan los mismos
+			filtros del Dashboard (fecha, estado, especialidad, quirófano).
+
+		10.5.- Migración aplicada
+			supabase/migrations/0013_ajustes_ago2026_gestion.sql — agrega la
+			columna nombre_medico_reporta y el módulo solicitudes_reportadas
+			en rol_permisos (constraint + semilla). Tipos regenerados en
+			src/lib/database.types.ts vía MCP de Supabase.

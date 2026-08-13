@@ -14,10 +14,13 @@ export default function ReportarCirugia() {
   const [documento, setDocumento] = useState('')
   const [especialidadId, setEspecialidadId] = useState('')
   const [subespecialidad, setSubespecialidad] = useState('')
+  const [nombreMedico, setNombreMedico] = useState('')
   const [archivo, setArchivo] = useState<File | null>(null)
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState('')
   const [idCreado, setIdCreado] = useState<number | null>(null)
+
+  const esProgramador = perfil?.rol === 'programador'
 
   useEffect(() => {
     supabase.from('especialidades').select('id, nombre').eq('activo', true).order('nombre').then(({ data }) => {
@@ -48,6 +51,7 @@ export default function ReportarCirugia() {
           documento_paciente: documento,
           especialidad_id: Number(especialidadId),
           subespecialidad: esOrtopedia ? subespecialidad || null : null,
+          nombre_medico_reporta: esProgramador ? nombreMedico : null,
           soporte_url: soporteUrl,
           reportado_por: session!.user.id,
         })
@@ -56,7 +60,7 @@ export default function ReportarCirugia() {
 
       if (insErr) throw insErr
       setIdCreado(data.id)
-      setNumeroIngreso(''); setDocumento(''); setEspecialidadId(''); setSubespecialidad(''); setArchivo(null)
+      setNumeroIngreso(''); setDocumento(''); setEspecialidadId(''); setSubespecialidad(''); setNombreMedico(''); setArchivo(null)
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -90,6 +94,19 @@ export default function ReportarCirugia() {
             />
           </div>
         </div>
+
+        {esProgramador && (
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-600">Nombre del médico que reporta</label>
+            <input
+              required
+              value={nombreMedico}
+              onChange={(e) => setNombreMedico(e.target.value)}
+              placeholder="Nombre completo del médico cirujano"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0D2D6B] focus:outline-none focus:ring-2 focus:ring-[#0D2D6B]/20"
+            />
+          </div>
+        )}
 
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-600">Especialidad de la cirugía</label>

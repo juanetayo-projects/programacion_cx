@@ -8,8 +8,8 @@ import {
   type Estado, type EstadoNotificable,
 } from '../lib/constantes'
 import {
-  Eye, Zap, Pencil, CalendarClock, BellRing, RefreshCw, Ban, Undo2,
-  CheckCircle2, XCircle, Clock, Send, Repeat, FileWarning, Loader2, PauseCircle, CircleSlash,
+  Eye, Pencil, CalendarClock, BellRing, RefreshCw, Ban, Undo2,
+  CheckCircle2, Clock, Send, Repeat, PauseCircle, CircleSlash,
 } from 'lucide-react'
 
 type Solicitud = {
@@ -39,6 +39,7 @@ type Solicitud = {
   email_paciente: string | null
   notas_notificacion: string | null
   canales_notificacion: string[]
+  nombre_medico_reporta: string | null
   especialidades: { nombre: string } | null
   eps: { nombre: string } | null
   unidades: { nombre: string } | null
@@ -46,10 +47,12 @@ type Solicitud = {
   perfiles: { nombre: string } | null
 }
 
-const ICONO_ESTADO: Record<Estado, React.ReactNode> = {
-  reportado: <FileWarning size={13} />,
+// Estados que ya pasaron por la consulta GoMedisys — este módulo solo gestiona
+// registros a partir de ahí; los recién reportados viven en "Solicitudes reportadas".
+const ESTADOS_GESTION = ESTADOS.filter((e) => e !== 'reportado' && e !== 'fallido')
+
+const ICONO_ESTADO: Partial<Record<Estado, React.ReactNode>> = {
   procesado: <CheckCircle2 size={13} />,
-  fallido: <XCircle size={13} />,
   programado: <Clock size={13} />,
   notificado: <BellRing size={13} />,
   aplazado: <PauseCircle size={13} />,
@@ -69,14 +72,16 @@ export default function Solicitudes() {
   const [filtroEspecialidad, setFiltroEspecialidad] = useState('')
   const [filtroDesde, setFiltroDesde] = useState('')
   const [filtroHasta, setFiltroHasta] = useState('')
+  const [filtroQuirofano, setFiltroQuirofano] = useState('')
+  const [filtroHora, setFiltroHora] = useState('')
+  const [filtroMedico, setFiltroMedico] = useState('')
   const [busqueda, setBusqueda] = useState('')
   const [especialidades, setEspecialidades] = useState<{ id: number; nombre: string }[]>([])
   const [quirofanos, setQuirofanos] = useState<{ id: number; nombre: string; numero: number }[]>([])
   const [recomendaciones, setRecomendaciones] = useState<{ especialidad_id: number; titulo: string; contenido: string }[]>([])
 
   const [seleccion, setSeleccion] = useState<Solicitud | null>(null)
-  const [modal, setModal] = useState<'' | 'ver' | 'editar' | 'programar' | 'notificar' | 'reprogramar' | 'cancelar' | 'reactivar' | 'consultar'>('')
-  const [consultando, setConsultando] = useState<number | null>(null)
+  const [modal, setModal] = useState<'' | 'ver' | 'editar' | 'programar' | 'notificar' | 'reprogramar' | 'cancelar' | 'reactivar'>('')
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
 
@@ -85,11 +90,14 @@ export default function Solicitudes() {
     let q = supabase
       .from('solicitudes_cirugia')
       .select('*, especialidades(nombre), eps(nombre), unidades(nombre), quirofanos(nombre), perfiles!solicitudes_cirugia_reportado_por_fkey(nombre)')
+      .not('estado', 'in', '(reportado,fallido)')
       .order('fecha_reporte', { ascending: false })
     if (filtroEstado) q = q.eq('estado', filtroEstado)
     if (filtroEspecialidad) q = q.eq('especialidad_id', Number(filtroEspecialidad))
     if (filtroDesde) q = q.gte('fecha_reporte', filtroDesde)
     if (filtroHasta) q = q.lte('fecha_reporte', `${filtroHasta}T23:59:59`)
+    if (filtroQuirofano) q = q.eq('quirofano_id', Number(filtroQuirofano))
+    if (filtroHora) q = q.eq('hora_programada', filtroHora)
     const { data, error } = await q
     if (!error) setFilas((data ?? []) as unknown as Solicitud[])
     setCargando(false)
@@ -97,7 +105,7 @@ export default function Solicitudes() {
 
   useEffect(() => {
     cargar()
-  }, [filtroEstado, filtroEspecialidad, filtroDesde, filtroHasta])
+  }, [filtroEstado, filtroEspecialidad, filtroDesde, filtroHasta, filtroQuirofano, filtroHora])
 
   useEffect(() => {
     supabase.from('especialidades').select('id, nombre').order('nombre').then(({ data }) => setEspecialidades(data ?? []))
@@ -105,15 +113,42 @@ export default function Solicitudes() {
     supabase.from('recomendaciones_cirugia').select('especialidad_id, titulo, contenido').eq('activo', true).then(({ data }) => setRecomendaciones(data ?? []))
   }, [])
 
+  function medicoDe(f: Solicitud) {
+    return f.nombre_medico_reporta || f.perfiles?.nombre || '—'
+  }
+
   const filtradas = useMemo(() => {
-    if (!busqueda) return filas
-    const b = busqueda.toLowerCase()
-    return filas.filter((f) =>
-      f.documento_paciente.toLowerCase().includes(b) ||
-      f.numero_ingreso.toLowerCase().includes(b) ||
-      (f.nombre_paciente ?? '').toLowerCase().includes(b),
-    )
-  }, [filas, busqueda])
+    let r = filas
+    if (filtroMedico) {
+      const m = filtroMedico.toLowerCase()
+      r = r.filter((f) => medicoDe(f).toLowerCase().includes(m))
+    }
+    if (busqueda) {
+      const b = busqueda.toLowerCase()
+      r = r.filter((f) =>
+        f.documento_paciente.toLowerCase().includes(b) ||
+        f.numero_ingreso.toLowerCase().includes(b) ||
+        (f.nombre_paciente ?? '').toLowerCase().includes(b),
+      )
+    }
+    return r
+  }, [filas, busqueda, filtroMedico])
+
+  // Cards de métricas — reflejan siempre los filtros/búsqueda vigentes
+  const porEspecialidad = useMemo(() => {
+    const conteo: Record<string, number> = {}
+    for (const f of filtradas) {
+      const nombre = f.especialidades?.nombre ?? 'Sin especialidad'
+      conteo[nombre] = (conteo[nombre] ?? 0) + 1
+    }
+    return Object.entries(conteo).sort((a, b) => b[1] - a[1])
+  }, [filtradas])
+
+  const porEstado = useMemo(() => {
+    const conteo: Partial<Record<Estado, number>> = {}
+    for (const f of filtradas) conteo[f.estado] = (conteo[f.estado] ?? 0) + 1
+    return ESTADOS_GESTION.map((e) => [e, conteo[e] ?? 0] as const)
+  }, [filtradas])
 
   function abrir(fila: Solicitud, m: typeof modal) {
     setSeleccion(fila)
@@ -124,28 +159,6 @@ export default function Solicitudes() {
     setModal('')
     setSeleccion(null)
     setError('')
-  }
-
-  async function consultarApi(fila: Solicitud) {
-    setConsultando(fila.id)
-    try {
-      const { data, error } = await supabase.functions.invoke('consulta-gomedisys', { body: { solicitudId: fila.id } })
-      if (error) throw new Error(error.message)
-      if (data?.ok === false) {
-        alert(`No fue posible consultar GoMedisys:\n\n${data.error}\n\nValida directamente en la aplicación de GoMedisys.`)
-      }
-      cargar()
-    } catch (e) {
-      alert((e as Error).message)
-    } finally {
-      setConsultando(null)
-    }
-  }
-
-  async function confirmarConsultarApi() {
-    if (!seleccion) return
-    await consultarApi(seleccion)
-    cerrar()
   }
 
   async function guardarEdicion(campos: {
@@ -254,14 +267,25 @@ export default function Solicitudes() {
 
   return (
     <div>
-      <PageHeader titulo="Gestión de solicitudes" subtitulo="Solicitudes de cirugía reportadas por los médicos" />
+      <PageHeader titulo="Gestión de solicitudes" subtitulo="Solicitudes ya procesadas en GoMedisys, pendientes de programar / notificar" />
+
+      <div className="mb-3 flex flex-wrap gap-2">
+        {porEspecialidad.map(([nombre, total]) => (
+          <MiniCard key={nombre} label={nombre} valor={total} />
+        ))}
+      </div>
+      <div className="mb-4 flex flex-wrap gap-2">
+        {porEstado.map(([e, total]) => (
+          <MiniCard key={e} label={ESTADOS_LABEL[e]} valor={total} className={ESTADOS_COLOR[e]} />
+        ))}
+      </div>
 
       <FilterBar>
         <div>
           <label className="mb-1 block text-xs font-medium text-slate-500">Estado</label>
           <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
             <option value="">Todos</option>
-            {ESTADOS.map((e) => <option key={e} value={e}>{ESTADOS_LABEL[e]}</option>)}
+            {ESTADOS_GESTION.map((e) => <option key={e} value={e}>{ESTADOS_LABEL[e]}</option>)}
           </select>
         </div>
         <div>
@@ -270,6 +294,21 @@ export default function Solicitudes() {
             <option value="">Todas</option>
             {especialidades.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
           </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-500">Médico</label>
+          <input value={filtroMedico} onChange={(e) => setFiltroMedico(e.target.value)} placeholder="Nombre del médico…" className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-500">Quirófano</label>
+          <select value={filtroQuirofano} onChange={(e) => setFiltroQuirofano(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
+            <option value="">Todos</option>
+            {quirofanos.map((q) => <option key={q.id} value={q.id}>{q.nombre}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-500">Hora</label>
+          <input type="time" value={filtroHora} onChange={(e) => setFiltroHora(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-slate-500">Reportado desde</label>
@@ -288,10 +327,11 @@ export default function Solicitudes() {
       <div className="neu-card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="tabla-cac w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+            <thead className="bg-[#0D2D6B] text-left text-xs font-semibold uppercase text-white">
               <tr>
                 <th className="px-4 py-2.5">ID</th>
                 <th className="px-4 py-2.5">Fecha</th>
+                <th className="px-4 py-2.5"># Ingreso</th>
                 <th className="px-4 py-2.5">Documento</th>
                 <th className="px-4 py-2.5">Paciente</th>
                 <th className="px-4 py-2.5">Especialidad</th>
@@ -302,34 +342,35 @@ export default function Solicitudes() {
             </thead>
             <tbody>
               {cargando ? (
-                <tr><td colSpan={8} className="p-10 text-center"><Spinner className="mx-auto" /></td></tr>
+                <tr><td colSpan={9} className="p-10 text-center"><Spinner className="mx-auto" /></td></tr>
               ) : filtradas.length === 0 ? (
-                <tr><td colSpan={8}><EstadoVacio titulo="Sin solicitudes" descripcion="Ajusta los filtros o espera nuevos reportes" /></td></tr>
+                <tr><td colSpan={9}><EstadoVacio titulo="Sin solicitudes" descripcion="Ajusta los filtros o espera nuevos registros procesados" /></td></tr>
               ) : (
                 filtradas.map((f) => (
                   <tr key={f.id} className="border-t border-slate-100">
                     <td className="px-4 py-2.5 font-mono text-xs text-slate-500">SC-{String(f.id).padStart(6, '0')}</td>
                     <td className="px-4 py-2.5 text-slate-500">{new Date(f.fecha_reporte).toLocaleDateString('es-CO')}</td>
+                    <td className="px-4 py-2.5 text-slate-500">{f.numero_ingreso}</td>
                     <td className="px-4 py-2.5">{f.documento_paciente}</td>
                     <td className="px-4 py-2.5">{f.nombre_paciente ?? '—'}</td>
-                    <td className="px-4 py-2.5">{f.especialidades?.nombre}</td>
+                    <td className="px-4 py-2.5">
+                      <div>{f.especialidades?.nombre}</div>
+                      <div className="text-xs text-slate-400">Dr(a). {medicoDe(f)}</div>
+                    </td>
                     <td className="px-4 py-2.5">
                       <Badge className={ESTADOS_COLOR[f.estado]}>{ICONO_ESTADO[f.estado]} {ESTADOS_LABEL[f.estado]}</Badge>
                     </td>
                     <td className="px-4 py-2.5 text-slate-500">
-                      {f.fecha_programada ? `${f.fecha_programada} ${f.hora_programada ?? ''} · ${f.quirofanos?.nombre ?? ''}` : '—'}
+                      {f.fecha_programada ? (
+                        <>
+                          <div className="font-medium text-slate-700">{f.quirofanos?.nombre ?? '—'}</div>
+                          <div className="text-xs">{f.fecha_programada} {f.hora_programada ?? ''}</div>
+                        </>
+                      ) : '—'}
                     </td>
                     <td className="px-4 py-2.5">
                       <div className="flex justify-end gap-1.5">
                         <button title="Ver" onClick={() => abrir(f, 'ver')} className="text-slate-500 hover:text-[#0D2D6B]"><Eye size={15} /></button>
-                        <button
-                          title="Consultar GoMedisys"
-                          disabled={f.estado === 'procesado' || consultando === f.id}
-                          onClick={() => abrir(f, 'consultar')}
-                          className="text-slate-500 hover:text-[#0D2D6B] disabled:opacity-30"
-                        >
-                          {consultando === f.id ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />}
-                        </button>
                         <button title="Editar" onClick={() => abrir(f, 'editar')} className="text-slate-500 hover:text-[#0D2D6B]"><Pencil size={15} /></button>
                         {!ESTADOS_PROGRAMADOS.includes(f.estado) && f.estado !== 'realizado' && f.estado !== 'cancelado' && (
                           <button title="Programar" onClick={() => abrir(f, 'programar')} className="text-slate-500 hover:text-[#0D2D6B]"><CalendarClock size={15} /></button>
@@ -361,7 +402,7 @@ export default function Solicitudes() {
         {seleccion && (
           <div className="space-y-3">
             <div className="rounded-xl border border-[#0D2D6B]/20 bg-[#EAF0FA] p-3">
-              <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[#0D2D6B]/70">Datos del paciente</div>
+              <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[#0D2D6B]/70">Paciente</div>
               <div className="grid grid-cols-3 gap-x-5 gap-y-2 text-sm">
                 <Campo label="# Ingreso" valor={seleccion.numero_ingreso} />
                 <Campo label="Documento" valor={seleccion.documento_paciente} />
@@ -369,42 +410,38 @@ export default function Solicitudes() {
                 <Campo label="Edad" valor={seleccion.edad} />
                 <Campo label="EPS" valor={seleccion.eps?.nombre} />
                 <Campo label="Unidad / Cama" valor={[seleccion.unidades?.nombre, seleccion.cama].filter(Boolean).join(' - ')} />
-                <Campo label="Especialidad" valor={[seleccion.especialidades?.nombre].filter(Boolean).join(' ')} />
-                <Campo label="Reportado por" valor={seleccion.perfiles?.nombre} />
-                <Campo label="Tiempo estimado" valor={seleccion.tiempo_estimado_minutos ? `${seleccion.tiempo_estimado_minutos} min` : null} />
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-x-5 gap-y-3 text-sm">
-              <Campo label="Procedimiento" valor={seleccion.procedimiento} full />
-              <Campo label="Valoración preanestésica" valor={seleccion.valoracion_preanestesica} />
-              <Campo label="Boleta quirúrgica" valor={seleccion.boleta_quirurgica} />
-              <Campo label="Autorización aseguradora" valor={seleccion.autorizacion_aseguradora} />
-              <Campo label="Estado material osteosíntesis" valor={seleccion.estado_material_osteosintesis} />
-              <Campo label="Casa médica" valor={seleccion.casa_medica_material} />
-              <Campo label="Observaciones programación" valor={seleccion.observaciones_programacion} full />
-              {seleccion.estado === 'fallido' && <Campo label="Resultado de la consulta" valor={seleccion.gomedisys_resultado} full />}
-              {seleccion.estado === 'cancelado' && <Campo label="Motivo cancelación" valor={seleccion.motivo_cancelacion} full />}
+            <div className="rounded-xl border border-violet-300/50 bg-violet-50 p-3">
+              <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-violet-700/80">Orden Cx</div>
+              <div className="grid grid-cols-3 gap-x-5 gap-y-2 text-sm">
+                <Campo label="Procedimiento" valor={seleccion.procedimiento} full />
+                <Campo label="Especialidad" valor={seleccion.especialidades?.nombre} />
+                <Campo label="Tiempo estimado" valor={seleccion.tiempo_estimado_minutos ? `${seleccion.tiempo_estimado_minutos} min` : null} />
+                <Campo label="Reportado por" valor={medicoDe(seleccion)} />
+              </div>
             </div>
-          </div>
-        )}
-      </Modal>
 
-      {/* CONSULTAR GOMEDISYS */}
-      <Modal open={modal === 'consultar'} onClose={cerrar} titulo="Consultar GoMedisys" ancho="max-w-md">
-        {seleccion && (
-          <div className="space-y-3">
-            <p className="text-sm text-slate-600">
-              ¿Consultar GoMedisys para la solicitud <strong>SC-{String(seleccion.id).padStart(6, '0')}</strong>
-              {' '}del paciente <strong>{seleccion.nombre_paciente ?? seleccion.documento_paciente}</strong>? Se traerán
-              los datos oficiales (nombre, edad, EPS, procedimiento, etc.) y quedarán marcados como no editables.
-            </p>
-            <div className="flex justify-end gap-2 pt-2">
-              <Boton variante="secundario" onClick={cerrar}>Cancelar</Boton>
-              <Boton disabled={consultando === seleccion.id} className="flex items-center gap-1.5" onClick={confirmarConsultarApi}>
-                {consultando === seleccion.id ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
-                {consultando === seleccion.id ? 'Consultando…' : 'Consultar'}
-              </Boton>
+            <div className="rounded-xl border border-amber-300/60 bg-amber-50 p-3">
+              <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-amber-700/80">Boleta Qx</div>
+              <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-sm">
+                <Campo label="Valoración preanestésica" valor={seleccion.valoracion_preanestesica} />
+                <Campo label="Autorización aseguradora" valor={seleccion.autorizacion_aseguradora} />
+                <Campo label="Estado material osteosíntesis" valor={seleccion.estado_material_osteosintesis} />
+                <Campo label="Casa médica" valor={seleccion.casa_medica_material} />
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-300 bg-slate-50 p-3">
+              <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-600">Gestión</div>
+              <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-sm">
+                <Campo label="Estado" valor={ESTADOS_LABEL[seleccion.estado]} />
+                <Campo label="Programación" valor={seleccion.fecha_programada ? `${seleccion.quirofanos?.nombre ?? ''} · ${seleccion.fecha_programada} ${seleccion.hora_programada ?? ''}` : null} />
+                <Campo label="Notificación" valor={seleccion.notas_notificacion || seleccion.canales_notificacion?.length ? `${seleccion.canales_notificacion?.join(', ') || ''} ${seleccion.notas_notificacion ?? ''}`.trim() : null} full />
+                <Campo label="Observaciones programación" valor={seleccion.observaciones_programacion} full />
+                {seleccion.estado === 'cancelado' && <Campo label="Motivo cancelación" valor={seleccion.motivo_cancelacion} full />}
+              </div>
             </div>
           </div>
         )}
@@ -457,6 +494,15 @@ export default function Solicitudes() {
 
       {/* CANCELAR */}
       <ModalCancelar open={modal === 'cancelar'} error={error} guardando={guardando} onClose={cerrar} onGuardar={cancelar} />
+    </div>
+  )
+}
+
+function MiniCard({ label, valor, className }: { label: string; valor: number; className?: string }) {
+  return (
+    <div className={`flex items-center gap-2 rounded-lg border bg-white px-2.5 py-1.5 text-xs shadow-sm ${className ?? 'border-slate-200 text-slate-600'}`}>
+      <span className="font-semibold">{valor}</span>
+      <span className="opacity-80">{label}</span>
     </div>
   )
 }

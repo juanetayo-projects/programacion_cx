@@ -12,9 +12,11 @@ function metricasVacias(): Metricas {
   return base
 }
 
+type EspecialidadDesglose = { nombre: string; total: number; realizadas: number; canceladas: number; programadas: number }
+
 export default function Dashboard() {
   const [m, setM] = useState<Metricas | null>(null)
-  const [porEspecialidad, setPorEspecialidad] = useState<{ nombre: string; total: number }[]>([])
+  const [porEspecialidad, setPorEspecialidad] = useState<EspecialidadDesglose[]>([])
 
   const [filtroDesde, setFiltroDesde] = useState('')
   const [filtroHasta, setFiltroHasta] = useState('')
@@ -31,7 +33,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     let qEstados = supabase.from('solicitudes_cirugia').select('estado')
-    let qEspecialidades = supabase.from('solicitudes_cirugia').select('especialidades(nombre)')
+    let qEspecialidades = supabase.from('solicitudes_cirugia').select('estado, especialidades(nombre)')
     if (filtroDesde) { qEstados = qEstados.gte('fecha_reporte', filtroDesde); qEspecialidades = qEspecialidades.gte('fecha_reporte', filtroDesde) }
     if (filtroHasta) { qEstados = qEstados.lte('fecha_reporte', `${filtroHasta}T23:59:59`); qEspecialidades = qEspecialidades.lte('fecha_reporte', `${filtroHasta}T23:59:59`) }
     if (filtroEstado) { qEstados = qEstados.eq('estado', filtroEstado); qEspecialidades = qEspecialidades.eq('estado', filtroEstado) }
@@ -48,12 +50,16 @@ export default function Dashboard() {
     })
 
     qEspecialidades.then(({ data }) => {
-      const conteo: Record<string, number> = {}
-      for (const row of (data ?? []) as unknown as { especialidades: { nombre: string } | null }[]) {
+      const conteo: Record<string, EspecialidadDesglose> = {}
+      for (const row of (data ?? []) as unknown as { estado: Estado; especialidades: { nombre: string } | null }[]) {
         const nombre = row.especialidades?.nombre ?? 'Sin especialidad'
-        conteo[nombre] = (conteo[nombre] ?? 0) + 1
+        if (!conteo[nombre]) conteo[nombre] = { nombre, total: 0, realizadas: 0, canceladas: 0, programadas: 0 }
+        conteo[nombre].total++
+        if (row.estado === 'realizado') conteo[nombre].realizadas++
+        else if (row.estado === 'cancelado') conteo[nombre].canceladas++
+        else conteo[nombre].programadas++
       }
-      setPorEspecialidad(Object.entries(conteo).map(([nombre, total]) => ({ nombre, total })).sort((a, b) => b.total - a.total))
+      setPorEspecialidad(Object.values(conteo).sort((a, b) => b.total - a.total))
     })
   }, [filtroDesde, filtroHasta, filtroEstado, filtroEspecialidad, filtroQuirofano])
 
@@ -117,18 +123,25 @@ export default function Dashboard() {
         <div className="neu-card p-5">
           <h2 className="mb-3 font-semibold text-[#0D2D6B]">Por especialidad</h2>
           <div className="space-y-2">
-            {porEspecialidad.map((e) => (
-              <div key={e.nombre} className="flex items-center gap-3 text-sm">
-                <div className="w-40 shrink-0 truncate text-slate-600">{e.nombre}</div>
-                <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-[#0D2D6B] to-[#16468E]"
-                    style={{ width: `${m?.total ? (e.total / m.total) * 100 : 0}%` }}
-                  />
+            {porEspecialidad.map((e) => {
+              const max = Math.max(...porEspecialidad.map((x) => x.total), 1)
+              return (
+                <div key={e.nombre} className="flex items-center gap-3 text-sm">
+                  <div className="w-40 shrink-0 truncate text-slate-600">{e.nombre}</div>
+                  <div className="flex h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-full bg-gradient-to-r from-[#0D2D6B] to-[#16468E]" style={{ width: `${(e.programadas / max) * 100}%` }} />
+                    <div className="h-full bg-emerald-500" style={{ width: `${(e.realizadas / max) * 100}%` }} />
+                    <div className="h-full bg-red-400" style={{ width: `${(e.canceladas / max) * 100}%` }} />
+                  </div>
+                  <div className="w-8 text-right font-semibold text-slate-600">{e.total}</div>
                 </div>
-                <div className="w-8 text-right font-semibold text-slate-600">{e.total}</div>
-              </div>
-            ))}
+              )
+            })}
+          </div>
+          <div className="mt-4 flex flex-wrap gap-4 border-t border-slate-100 pt-3 text-xs text-slate-500">
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-gradient-to-r from-[#0D2D6B] to-[#16468E]" /> Programadas / en curso</span>
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Realizadas</span>
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-red-400" /> Canceladas</span>
           </div>
         </div>
       </div>

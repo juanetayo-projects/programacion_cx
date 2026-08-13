@@ -80,7 +80,7 @@ export type CanalNotificacion = (typeof CANALES_NOTIFICACION)[number]
 
 // Módulos de la app — usados por Roles y Permisos para controlar el acceso por rol
 export const MODULOS = [
-  'dashboard', 'reportar', 'solicitudes', 'quirofanos', 'calor', 'reportes',
+  'dashboard', 'reportar', 'solicitudes_reportadas', 'solicitudes', 'quirofanos', 'calor', 'reportes',
   'admin_usuarios', 'admin_catalogos', 'admin_roles',
 ] as const
 export type Modulo = (typeof MODULOS)[number]
@@ -88,6 +88,7 @@ export type Modulo = (typeof MODULOS)[number]
 export const MODULOS_LABEL: Record<Modulo, string> = {
   dashboard: 'Dashboard',
   reportar: 'Reportar cirugía',
+  solicitudes_reportadas: 'Solicitudes reportadas',
   solicitudes: 'Gestión de solicitudes',
   quirofanos: 'Mapa de quirófanos',
   calor: 'Mapa de calor',

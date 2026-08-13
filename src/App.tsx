@@ -6,6 +6,7 @@ import Login from './pages/Login'
 import Reset from './pages/Reset'
 import Dashboard from './pages/Dashboard'
 import ReportarCirugia from './pages/ReportarCirugia'
+import SolicitudesReportadas from './pages/SolicitudesReportadas'
 import Solicitudes from './pages/Solicitudes'
 import Quirofanos from './pages/Quirofanos'
 import Calor from './pages/Calor'
@@ -47,6 +48,7 @@ export default function App() {
 
           <Route path="/" element={<Guard modulo="dashboard"><Dashboard /></Guard>} />
           <Route path="/reportar" element={<Guard modulo="reportar"><ReportarCirugia /></Guard>} />
+          <Route path="/solicitudes-reportadas" element={<Guard modulo="solicitudes_reportadas"><SolicitudesReportadas /></Guard>} />
           <Route path="/solicitudes" element={<Guard modulo="solicitudes"><Solicitudes /></Guard>} />
           <Route path="/quirofanos" element={<Guard modulo="quirofanos"><Quirofanos /></Guard>} />
           <Route path="/calor" element={<Guard modulo="calor"><Calor /></Guard>} />

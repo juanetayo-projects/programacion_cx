@@ -243,6 +243,7 @@ export type Database = {
           hora_programada: string | null
           id: number
           motivo_cancelacion: string | null
+          nombre_medico_reporta: string | null
           nombre_paciente: string | null
           notas_notificacion: string | null
           notificado_en: string | null
@@ -287,6 +288,7 @@ export type Database = {
           hora_programada?: string | null
           id?: never
           motivo_cancelacion?: string | null
+          nombre_medico_reporta?: string | null
           nombre_paciente?: string | null
           notas_notificacion?: string | null
           notificado_en?: string | null
@@ -331,6 +333,7 @@ export type Database = {
           hora_programada?: string | null
           id?: never
           motivo_cancelacion?: string | null
+          nombre_medico_reporta?: string | null
           nombre_paciente?: string | null
           notas_notificacion?: string | null
           notificado_en?: string | null
@@ -468,6 +471,7 @@ export type Database = {
     }
     Functions: {
       es_programador_o_admin: { Args: never; Returns: boolean }
+      get_secret: { Args: { secret_name: string }; Returns: string }
       is_admin: { Args: never; Returns: boolean }
       rol_actual: { Args: never; Returns: string }
     }
