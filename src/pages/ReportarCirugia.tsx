@@ -66,7 +66,7 @@ export default function ReportarCirugia() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <PageHeader titulo="Reportar cirugía" subtitulo={`Médico: ${perfil?.nombre ?? ''}`} />
+      <PageHeader titulo="Reportar cirugía" subtitulo={`Reportado por: ${perfil?.nombre ?? ''}`} />
 
       <form onSubmit={enviar} className="neu-card space-y-4 p-6">
         <div className="grid grid-cols-2 gap-4">

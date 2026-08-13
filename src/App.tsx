@@ -38,7 +38,7 @@ export default function App() {
           <Route path="/reset" element={<Reset />} />
 
           <Route path="/" element={<Guard><Dashboard /></Guard>} />
-          <Route path="/reportar" element={<Guard roles={['medico', 'administrador']}><ReportarCirugia /></Guard>} />
+          <Route path="/reportar" element={<Guard roles={['medico', 'programador', 'administrador']}><ReportarCirugia /></Guard>} />
           <Route path="/solicitudes" element={<Guard roles={['administrador', 'programador']}><Solicitudes /></Guard>} />
           <Route path="/quirofanos" element={<Guard><Quirofanos /></Guard>} />
           <Route path="/calor" element={<Guard><Calor /></Guard>} />
