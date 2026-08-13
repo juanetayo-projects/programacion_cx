@@ -259,3 +259,67 @@ Se requiere construir una app que permita
 		Proyecto Supabase nuevo "programacion_cx": ~US$10/mes adicionales,
 		confirmado con el usuario antes de crearlo.
 
+
+8.- INFORME FINAL DE DESARROLLO (2026-08-13)
+
+	8.1.- Código fuente
+		Ruta local: C:\www\programacion_cx
+		Repositorio: https://github.com/juanetayo-projects/programacion_cx (público)
+		Desplegado en: https://juanetayo-projects.github.io/programacion_cx/
+		Chat de desarrollo: sesión "Programación de Cirugías" en Claude Code
+		(este archivo, docs/procx prompt.md, es el registro de las decisiones).
+
+	8.2.- Estructura del proyecto
+		src/components/  ui.tsx (Card/Modal/FilterBar/Badge…), CrudTable.tsx
+		                 (CRUD genérico con soporte de llaves foráneas),
+		                 Shell.tsx (layout), HeatmapDiaHora.tsx (reutilizable)
+		src/lib/         supabase.ts, auth.tsx (AuthProvider), constantes.ts,
+		                 data.ts, exportar.ts (Excel/PDF), database.types.ts
+		src/pages/       Login, Reset, Dashboard, ReportarCirugia, Solicitudes,
+		                 Quirofanos, Calor, Reportes, admin/Usuarios,
+		                 admin/Catalogos
+		supabase/migrations/  0001-0009: esquema, RLS, catálogos, admin
+		                 inicial, contacto paciente, helper de secrets,
+		                 bucket de soportes (los datos históricos con PII
+		                 real, 0006, se aplicaron directo a la base y NO se
+		                 versionan en git)
+		supabase/functions/   admin-usuarios, consulta-gomedisys,
+		                 notificar-paciente
+		scripts/migracion/    generar_sql_historico.py (script de migración,
+		                 reutilizable si se necesita re-importar)
+		docs/            este archivo (el Excel origen NO se versiona, PII)
+
+	8.3.- Módulos entregados y funcionando (verificados en navegador)
+		- Auth: login, autorregistro, recuperación de contraseña, roles
+		  (administrador/programador/médico/visualizador)
+		- Reportar cirugía (médicos, una pantalla, con carga de soporte)
+		- Gestión de solicitudes: Ver/Consultar GoMedisys/Editar/Programar/
+		  Notificar/Reprogramar/Cancelar, con filtros e iconos por estado
+		- Mapa de quirófanos: grilla día×hora por sala con detalle al clic
+		- Mapa de calor: ocupación día de la semana × hora + barras por
+		  quirófano
+		- Reportes: filtros completos + exportación Excel/PDF con logo y
+		  título institucional
+		- Administración: usuarios (alta/reset/activar-desactivar) y
+		  catálogos (especialidades, EPS, unidades, quirófanos,
+		  recomendaciones) vía CRUD genérico
+		- Dashboard con métricas reales
+		- 94 registros históricos migrados desde el Excel
+
+	8.4.- Pendiente para dejar 100% operativo
+		- GoMedisys: falta el query T-SQL validado por el cliente y las
+		  credenciales (GOMEDISYS_HOST/PORT/DATABASE/USERNAME/PASSWORD como
+		  secrets de Supabase) — la Edge Function ya tiene toda la lógica
+		  lista, solo falta conectarla a la fuente real
+		- Resend: falta configurar RESEND_API_KEY en Supabase Vault para
+		  que las notificaciones por correo se envíen de verdad
+		- SMS/WhatsApp: no implementado (no se definió proveedor)
+		- Confirmación de autorregistro por correo con remitente Resend:
+		  requiere configurar SMTP personalizado en Supabase Auth desde el
+		  dashboard (fuera del alcance de las herramientas usadas en esta
+		  sesión)
+		- Contraseña del admin inicial: generada aleatoria y desconocida;
+		  usar "¿Olvidaste tu contraseña?" una vez el correo esté configurado
+		- Bundle grande por exceljs/pdfmake (import dinámico ya aplicado;
+		  se cargan solo al exportar, no en la carga inicial)
+
