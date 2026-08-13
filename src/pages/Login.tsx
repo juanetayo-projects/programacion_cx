@@ -17,36 +17,50 @@ export default function Login() {
     e.preventDefault()
     setError('')
     setCargando(true)
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    setCargando(false)
-    if (error) setError('Credenciales inválidas. Verifica tu correo y contraseña.')
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) setError('Credenciales inválidas. Verifica tu correo y contraseña.')
+    } catch (err) {
+      setError(`No se pudo iniciar sesión: ${(err as Error).message ?? 'error desconocido'}. Verifica que tu navegador permita cookies/almacenamiento local para este sitio.`)
+    } finally {
+      setCargando(false)
+    }
   }
 
   async function registrar(e: FormEvent) {
     e.preventDefault()
     setError('')
     setCargando(true)
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { nombre },
-        emailRedirectTo: `${window.location.origin}${import.meta.env.BASE_URL}#/login`,
-      },
-    })
-    setCargando(false)
-    if (error) setError(error.message)
-    else setMensaje('Cuenta creada. Revisa tu correo para confirmar el usuario antes de ingresar.')
+    try {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { nombre },
+          emailRedirectTo: `${window.location.origin}${import.meta.env.BASE_URL}#/login`,
+        },
+      })
+      if (error) setError(error.message)
+      else setMensaje('Cuenta creada. Revisa tu correo para confirmar el usuario antes de ingresar.')
+    } catch (err) {
+      setError(`No se pudo crear la cuenta: ${(err as Error).message ?? 'error desconocido'}`)
+    } finally {
+      setCargando(false)
+    }
   }
 
   async function recuperar(e: FormEvent) {
     e.preventDefault()
     setError('')
-    await supabase.auth.resetPasswordForEmail(emailRecuperar, {
-      redirectTo: `${window.location.origin}${import.meta.env.BASE_URL}#/reset`,
-    })
-    setMensaje('Si el correo existe, te enviamos un enlace para restablecer la contraseña.')
-    setModalRecuperar(false)
+    try {
+      await supabase.auth.resetPasswordForEmail(emailRecuperar, {
+        redirectTo: `${window.location.origin}${import.meta.env.BASE_URL}#/reset`,
+      })
+      setMensaje('Si el correo existe, te enviamos un enlace para restablecer la contraseña.')
+      setModalRecuperar(false)
+    } catch (err) {
+      setError(`No se pudo enviar el enlace: ${(err as Error).message ?? 'error desconocido'}`)
+    }
   }
 
   return (
