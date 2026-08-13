@@ -51,17 +51,19 @@ export function Modal({
   titulo,
   children,
   ancho = 'max-w-lg',
+  fondo = 'bg-white',
 }: {
   open: boolean
   onClose: () => void
   titulo?: string
   children: ReactNode
   ancho?: string
+  fondo?: string
 }) {
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className={`w-full ${ancho} max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl`} onClick={(e) => e.stopPropagation()}>
+      <div className={`w-full ${ancho} max-h-[90vh] overflow-y-auto rounded-2xl ${fondo} shadow-2xl`} onClick={(e) => e.stopPropagation()}>
         {titulo && (
           <div className="sticky top-0 rounded-t-2xl bg-gradient-to-r from-[#0D2D6B] to-[#16468E] px-5 py-3 font-medium text-white">
             {titulo}

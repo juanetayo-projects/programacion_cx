@@ -50,8 +50,8 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-[#eef1f6] p-4">
-      <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-[#0D2D6B] p-4">
+      <div className="w-full max-w-md overflow-hidden rounded-2xl bg-[#EAF0FA] shadow-2xl">
         <div className="flex flex-col items-center gap-2 bg-gradient-to-br from-[#0D2D6B] to-[#16468E] px-6 py-8">
           <img src={`${import.meta.env.BASE_URL}images/logo_cacsb_blanc.png`} alt="CAC Santa Bárbara" className="h-14" />
           <h1 className="text-center text-lg font-semibold text-white">Programación de Cirugías</h1>
@@ -116,7 +116,7 @@ export default function Login() {
         </form>
       </div>
 
-      <Modal open={modalRecuperar} onClose={() => setModalRecuperar(false)} titulo="Recuperar contraseña">
+      <Modal open={modalRecuperar} onClose={() => setModalRecuperar(false)} titulo="Recuperar contraseña" fondo="bg-[#EAF0FA]">
         <form onSubmit={recuperar} className="space-y-4">
           <p className="text-sm text-slate-500">Te enviaremos un enlace a tu correo para restablecer tu contraseña.</p>
           <input
