@@ -75,7 +75,7 @@ export default function Solicitudes() {
   const [recomendaciones, setRecomendaciones] = useState<{ especialidad_id: number; titulo: string; contenido: string }[]>([])
 
   const [seleccion, setSeleccion] = useState<Solicitud | null>(null)
-  const [modal, setModal] = useState<'' | 'ver' | 'editar' | 'programar' | 'notificar' | 'reprogramar' | 'cancelar'>('')
+  const [modal, setModal] = useState<'' | 'ver' | 'editar' | 'programar' | 'notificar' | 'reprogramar' | 'cancelar' | 'reactivar' | 'consultar'>('')
   const [consultando, setConsultando] = useState<number | null>(null)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
@@ -140,6 +140,12 @@ export default function Solicitudes() {
     } finally {
       setConsultando(null)
     }
+  }
+
+  async function confirmarConsultarApi() {
+    if (!seleccion) return
+    await consultarApi(seleccion)
+    cerrar()
   }
 
   async function guardarEdicion(campos: {
@@ -227,14 +233,22 @@ export default function Solicitudes() {
     }
   }
 
-  async function reactivarCancelacion(fila: Solicitud) {
-    if (!confirm(`¿Quitar la cancelación de la solicitud SC-${String(fila.id).padStart(6, '0')}?`)) return
-    const nuevoEstado: Estado = fila.fecha_programada ? 'programado' : fila.gomedisys_resultado ? 'procesado' : 'reportado'
+  function proximoEstadoAlReactivar(fila: Solicitud): Estado {
+    return fila.fecha_programada ? 'programado' : fila.gomedisys_resultado ? 'procesado' : 'reportado'
+  }
+
+  async function reactivarCancelacion() {
+    if (!seleccion) return
+    setGuardando(true)
+    setError('')
+    const nuevoEstado = proximoEstadoAlReactivar(seleccion)
     const { error } = await supabase.from('solicitudes_cirugia').update({
       estado: nuevoEstado, cancelado: false, motivo_cancelacion: null, cancelado_por: null, cancelado_en: null,
-    }).eq('id', fila.id)
-    if (error) { alert(error.message); return }
-    await supabase.from('solicitudes_historial').insert({ solicitud_id: fila.id, accion: 'reactivado', usuario_id: session!.user.id, detalle: { estado: nuevoEstado } })
+    }).eq('id', seleccion.id)
+    setGuardando(false)
+    if (error) { setError(error.message); return }
+    await supabase.from('solicitudes_historial').insert({ solicitud_id: seleccion.id, accion: 'reactivado', usuario_id: session!.user.id, detalle: { estado: nuevoEstado } })
+    cerrar()
     cargar()
   }
 
@@ -311,7 +325,7 @@ export default function Solicitudes() {
                         <button
                           title="Consultar GoMedisys"
                           disabled={f.estado === 'procesado' || consultando === f.id}
-                          onClick={() => consultarApi(f)}
+                          onClick={() => abrir(f, 'consultar')}
                           className="text-slate-500 hover:text-[#0D2D6B] disabled:opacity-30"
                         >
                           {consultando === f.id ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />}
@@ -330,7 +344,7 @@ export default function Solicitudes() {
                           <button title="Cancelar" onClick={() => abrir(f, 'cancelar')} className="text-slate-500 hover:text-red-600"><Ban size={15} /></button>
                         )}
                         {f.estado === 'cancelado' && (
-                          <button title="Quitar cancelación" onClick={() => reactivarCancelacion(f)} className="text-slate-500 hover:text-emerald-600"><Undo2 size={15} /></button>
+                          <button title="Quitar cancelación" onClick={() => abrir(f, 'reactivar')} className="text-slate-500 hover:text-emerald-600"><Undo2 size={15} /></button>
                         )}
                       </div>
                     </td>
@@ -343,9 +357,9 @@ export default function Solicitudes() {
       </div>
 
       {/* VER */}
-      <Modal open={modal === 'ver'} onClose={cerrar} cerrableFuera={false} titulo={`Solicitud SC-${String(seleccion?.id).padStart(6, '0')}`} ancho="max-w-2xl">
+      <Modal open={modal === 'ver'} onClose={cerrar} cerrableFuera={false} titulo={`Solicitud SC-${String(seleccion?.id).padStart(6, '0')}`} ancho="max-w-4xl">
         {seleccion && (
-          <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+          <div className="grid grid-cols-3 gap-x-5 gap-y-3 text-sm">
             <Campo label="# Ingreso" valor={seleccion.numero_ingreso} />
             <Campo label="Documento" valor={seleccion.documento_paciente} />
             <Campo label="Paciente" valor={seleccion.nombre_paciente} />
@@ -354,16 +368,56 @@ export default function Solicitudes() {
             <Campo label="Unidad / Cama" valor={[seleccion.unidades?.nombre, seleccion.cama].filter(Boolean).join(' - ')} />
             <Campo label="Especialidad" valor={[seleccion.especialidades?.nombre].filter(Boolean).join(' ')} />
             <Campo label="Reportado por" valor={seleccion.perfiles?.nombre} />
+            <Campo label="Tiempo estimado" valor={seleccion.tiempo_estimado_minutos ? `${seleccion.tiempo_estimado_minutos} min` : null} />
             <Campo label="Procedimiento" valor={seleccion.procedimiento} full />
             <Campo label="Valoración preanestésica" valor={seleccion.valoracion_preanestesica} />
             <Campo label="Boleta quirúrgica" valor={seleccion.boleta_quirurgica} />
-            <Campo label="Tiempo estimado" valor={seleccion.tiempo_estimado_minutos ? `${seleccion.tiempo_estimado_minutos} min` : null} />
             <Campo label="Autorización aseguradora" valor={seleccion.autorizacion_aseguradora} />
-            <Campo label="Observaciones programación" valor={seleccion.observaciones_programacion} full />
             <Campo label="Estado material osteosíntesis" valor={seleccion.estado_material_osteosintesis} />
             <Campo label="Casa médica" valor={seleccion.casa_medica_material} />
+            <Campo label="Observaciones programación" valor={seleccion.observaciones_programacion} full />
             {seleccion.estado === 'fallido' && <Campo label="Resultado de la consulta" valor={seleccion.gomedisys_resultado} full />}
             {seleccion.estado === 'cancelado' && <Campo label="Motivo cancelación" valor={seleccion.motivo_cancelacion} full />}
+          </div>
+        )}
+      </Modal>
+
+      {/* CONSULTAR GOMEDISYS */}
+      <Modal open={modal === 'consultar'} onClose={cerrar} titulo="Consultar GoMedisys" ancho="max-w-md">
+        {seleccion && (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">
+              ¿Consultar GoMedisys para la solicitud <strong>SC-{String(seleccion.id).padStart(6, '0')}</strong>
+              {' '}del paciente <strong>{seleccion.nombre_paciente ?? seleccion.documento_paciente}</strong>? Se traerán
+              los datos oficiales (nombre, edad, EPS, procedimiento, etc.) y quedarán marcados como no editables.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <Boton variante="secundario" onClick={cerrar}>Cancelar</Boton>
+              <Boton disabled={consultando === seleccion.id} className="flex items-center gap-1.5" onClick={confirmarConsultarApi}>
+                {consultando === seleccion.id ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+                {consultando === seleccion.id ? 'Consultando…' : 'Consultar'}
+              </Boton>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* QUITAR CANCELACIÓN */}
+      <Modal open={modal === 'reactivar'} onClose={cerrar} titulo="Quitar cancelación" ancho="max-w-md">
+        {seleccion && (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">
+              ¿Quitar la cancelación de la solicitud <strong>SC-{String(seleccion.id).padStart(6, '0')}</strong>
+              {' '}del paciente <strong>{seleccion.nombre_paciente ?? seleccion.documento_paciente}</strong>? Quedará de
+              nuevo en estado <strong>{ESTADOS_LABEL[proximoEstadoAlReactivar(seleccion)]}</strong>.
+            </p>
+            {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+            <div className="flex justify-end gap-2 pt-2">
+              <Boton variante="secundario" onClick={cerrar}>Cancelar</Boton>
+              <Boton disabled={guardando} className="flex items-center gap-1.5" onClick={reactivarCancelacion}>
+                <Undo2 size={14} /> {guardando ? 'Guardando…' : 'Quitar cancelación'}
+              </Boton>
+            </div>
           </div>
         )}
       </Modal>
@@ -401,9 +455,9 @@ export default function Solicitudes() {
 
 function Campo({ label, valor, full }: { label: string; valor: string | number | null | undefined; full?: boolean }) {
   return (
-    <div className={full ? 'col-span-2' : ''}>
-      <div className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</div>
-      <div className="text-slate-700">{valor || valor === 0 ? valor : '—'}</div>
+    <div className={full ? 'col-span-full' : ''}>
+      <div className="text-[11px] font-bold uppercase tracking-wide text-[#0D2D6B]">{label}</div>
+      <div className="text-sm font-semibold text-slate-900">{valor || valor === 0 ? valor : '—'}</div>
     </div>
   )
 }
@@ -432,12 +486,12 @@ function ModalEditar({ open, seleccion, error, guardando, onClose, onGuardar }: 
   }, [seleccion])
 
   return (
-    <Modal open={open} onClose={onClose} titulo="Editar solicitud" ancho="max-w-xl">
-      <div className="space-y-4">
+    <Modal open={open} onClose={onClose} titulo="Editar solicitud" ancho="max-w-3xl">
+      <div className="space-y-3">
         {seleccion && (
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Datos del paciente (solo lectura)</div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+            <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">Datos del paciente (solo lectura)</div>
+            <div className="grid grid-cols-3 gap-x-4 gap-y-1.5 text-sm">
               <Campo label="# Ingreso" valor={seleccion.numero_ingreso} />
               <Campo label="Documento" valor={seleccion.documento_paciente} />
               <Campo label="Paciente" valor={seleccion.nombre_paciente} />
@@ -449,30 +503,30 @@ function ModalEditar({ open, seleccion, error, guardando, onClose, onGuardar }: 
           </div>
         )}
 
-        <div className="rounded-xl border border-[#0D2D6B]/15 bg-white p-3">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#0D2D6B]">Campos editables por programación</div>
-          <div className="space-y-3">
+        <div className="rounded-xl border border-[#0D2D6B]/15 bg-white p-2.5">
+          <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[#0D2D6B]">Campos editables por programación</div>
+          <div className="grid grid-cols-2 gap-2.5">
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-600">Autorización del asegurador</label>
-              <input value={autorizacion} onChange={(e) => setAutorizacion(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-600">Observaciones de programación</label>
-              <textarea value={obs} onChange={(e) => setObs(e.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-600">Estado material de osteosíntesis</label>
-              <textarea value={material} onChange={(e) => setMaterial(e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              <input value={autorizacion} onChange={(e) => setAutorizacion(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-600">Casa médica que entrega material</label>
-              <textarea value={casa} onChange={(e) => setCasa(e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              <input value={casa} onChange={(e) => setCasa(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+            </div>
+            <div className="col-span-2">
+              <label className="mb-1 block text-sm font-medium text-slate-600">Observaciones de programación</label>
+              <textarea value={obs} onChange={(e) => setObs(e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+            </div>
+            <div className="col-span-2">
+              <label className="mb-1 block text-sm font-medium text-slate-600">Estado material de osteosíntesis</label>
+              <textarea value={material} onChange={(e) => setMaterial(e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
             </div>
           </div>
         </div>
 
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="flex justify-end gap-2 pt-1">
           <Boton variante="secundario" onClick={onClose}>Cancelar</Boton>
           <Boton disabled={guardando} onClick={() => onGuardar({
             autorizacion_aseguradora: autorizacion || null,
@@ -556,17 +610,41 @@ function ModalNotificar({ open, seleccion, recomendaciones, error, guardando, on
   return (
     <Modal open={open} onClose={onClose} titulo="Notificar al paciente" ancho="max-w-xl">
       <div className="space-y-3">
+        {seleccion && (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Datos del paciente</div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              <Campo label="# Ingreso" valor={seleccion.numero_ingreso} />
+              <Campo label="Documento" valor={seleccion.documento_paciente} />
+              <Campo label="Paciente" valor={seleccion.nombre_paciente} />
+              <Campo label="Especialidad" valor={seleccion.especialidades?.nombre} />
+            </div>
+          </div>
+        )}
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">¿Qué se le va a comunicar al paciente? *</label>
-          <select
-            required
-            value={estadoDestino}
-            onChange={(e) => setEstadoDestino(e.target.value as EstadoNotificable)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0D2D6B] focus:outline-none focus:ring-2 focus:ring-[#0D2D6B]/20"
-          >
-            <option value="">Seleccionar…</option>
-            {ESTADOS_NOTIFICABLES.map((e) => <option key={e} value={e}>{ESTADOS_LABEL[e]}</option>)}
-          </select>
+          <label className="mb-2 block text-sm font-medium text-slate-600">¿Qué se le va a comunicar al paciente? *</label>
+          <div className="grid grid-cols-2 gap-2">
+            {ESTADOS_NOTIFICABLES.map((e) => (
+              <label
+                key={e}
+                className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${
+                  estadoDestino === e
+                    ? 'border-[#0D2D6B] bg-[#0D2D6B] text-white font-medium'
+                    : 'border-slate-300 text-slate-600 hover:border-[#0D2D6B]/50'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="estadoDestino"
+                  value={e}
+                  checked={estadoDestino === e}
+                  onChange={() => setEstadoDestino(e)}
+                  className="accent-[#0D2D6B]"
+                />
+                {ESTADOS_LABEL[e]}
+              </label>
+            ))}
+          </div>
           <p className="mt-1 text-xs text-slate-400">La solicitud quedará marcada con el estado seleccionado.</p>
         </div>
         <div className="grid grid-cols-2 gap-3">
