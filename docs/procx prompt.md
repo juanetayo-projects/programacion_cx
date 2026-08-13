@@ -666,3 +666,83 @@ Se requiere construir una app que permita
 			único parcial anti-doble-programación. Edge functions
 			consulta-gomedisys y notificar-paciente redesplegadas con los
 			cambios de 12.4/12.5.
+
+	13.- AJUSTES RONDA 6 — SCROLL, ENCABEZADO FIJO REAL Y FILTRO DE FECHA (2026-08-13)
+
+		13.1.- Causa raíz encontrada: `main` nunca fue un contenedor de scroll real
+			El layout de Shell.tsx usaba `min-h-screen` en el contenedor raíz. Con
+			`min-height` (no `height`), cuando el contenido excede el alto de
+			pantalla el contenedor simplemente CRECE en vez de recortarse —
+			`main` (con `overflow-y-auto`) nunca llegaba a tener una altura
+			acotada, así que jamás generaba su propio scroll interno; en la
+			práctica el `<body>`/`window` era quien hacía scroll de toda la
+			página (sidebar y header incluidos). Esto invalidaba cualquier
+			`position: sticky` que dependiera de `main` como referencia: un
+			`sticky` necesita que su ancestro de scroll realmente se desplace, y
+			`main.scrollTop` se quedaba siempre en 0.
+			Corrección en Shell.tsx: contenedor raíz `h-screen overflow-hidden`
+			(en vez de `min-h-screen`), y toda la cadena de contenedores flex
+			hasta `main` con `min-h-0` (gotcha clásico de flexbox: un hijo
+			`flex-1` no se encoge por debajo del tamaño de su contenido a menos
+			que también tenga `min-height: 0`). Con esto `main` pasó a ser un
+			verdadero "app shell": sidebar y header fijos, y `main` como única
+			zona que hace scroll cuando hace falta.
+
+		13.2.- `position: sticky` en `<thead>` no funciona — hay que ponerlo en cada `<th>`
+			Aún con `main` corregido, poner `sticky` directamente en `<thead>`
+			no funcionó: es una limitación conocida de los navegadores con
+			`display: table-header-group` (el grupo de fila de tabla no
+			establece correctamente el comportamiento sticky en el layout de
+			tablas). La solución es aplicar `position: sticky` a cada `<th>`
+			individualmente (con su propio `background`, ya que un `th` sticky
+			necesita pintar su propio fondo para tapar las filas que pasan
+			debajo).
+
+		13.3.- Patrón final: bloque de filtros fijo + tabla con scroll propio
+			En vez de que la página completa (filtros + tabla) comparta el
+			scroll de `main` con un offset calculado a mano (frágil, requería
+			medir con `ResizeObserver` la altura del bloque de filtros), se
+			adoptó un patrón más robusto de "shell interno" por página:
+			- La página raíz usa `flex h-full flex-col`.
+			- El bloque de PageHeader + cards + FilterBar es `shrink-0` (no
+			  necesita `sticky`: como nunca se desplaza dentro de `main`, ya
+			  queda siempre visible de forma natural).
+			- La tarjeta de la tabla (`neu-card`) es `flex min-h-0 flex-1
+			  flex-col overflow-hidden`, y dentro un div interno
+			  `min-h-0 flex-1 overflow-auto` es el que realmente hace scroll
+			  (vertical y horizontal) del `<table>`. Cada `<th>` usa
+			  `sticky top-0` relativo a ESE div (no a `main`), así que no hace
+			  falta medir ninguna altura — siempre se ancla en top:0 de su
+			  propio contenedor.
+			Aplicado en Gestión de solicitudes y Cirugías realizadas. Este es
+			el patrón a reutilizar en cualquier página nueva de este proyecto
+			(o de otros proyectos del mismo cliente) que combine filtros fijos
+			con una tabla larga y encabezado de columnas fijo.
+
+		13.4.- Dashboard y modal Notificar — compactados para no necesitar scroll
+			Se redujeron paddings/márgenes en Dashboard.tsx y en los
+			componentes compartidos `MetricCard`, `PageHeader` y `FilterBar`
+			(src/components/ui.tsx) — cambio aplicado globalmente, se nota en
+			todas las páginas como una UI ligeramente más compacta. La lista
+			"Por estado" del Dashboard pasó de una columna de 9 filas a una
+			grilla de 2 columnas. El modal de Notificar se reorganizó: la
+			tarjeta de datos del paciente se redujo a una sola línea, los
+			botones de estado a comunicar pasaron de una grilla 2×2 a una fila
+			de 4, y el editor de texto enriquecido bajó su alto mínimo por
+			defecto a 80px en este modal. Verificado con
+			`scrollHeight === clientHeight` (sin necesidad de scroll) tanto en
+			Dashboard como en el modal.
+
+		13.5.- Bug real: el filtro de fecha en Gestión de solicitudes filtraba por la fecha equivocada
+			"Reportado desde/hasta" filtraba `fecha_reporte` (cuándo el médico
+			reportó el caso), pero el filtro de "Hora" ya filtraba
+			`hora_programada` (la hora de la cirugía programada) — inconsistencia
+			que hacía que, por ejemplo, filtrar por estado "Programado" + una
+			fecha de cirugía no devolviera nada (porque esa fecha rara vez
+			coincide con la fecha en que se reportó el caso). Se corrigió para
+			que ambos filtros usen `fecha_programada`, y se renombraron las
+			etiquetas a "Programado desde/hasta". El ícono "Marcar como
+			realizada" (que el usuario reportó como "no lo veo") en realidad sí
+			existía en el código — simplemente no había ningún registro visible
+			para mostrarlo porque el filtro de fecha no encontraba resultados;
+			quedó confirmado funcionando una vez corregido el filtro.

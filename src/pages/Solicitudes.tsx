@@ -108,8 +108,8 @@ export default function Solicitudes() {
       .order('fecha_reporte', { ascending: false })
     if (filtroEstado) q = q.eq('estado', filtroEstado)
     if (filtroEspecialidad) q = q.eq('especialidad_id', Number(filtroEspecialidad))
-    if (filtroDesde) q = q.gte('fecha_reporte', filtroDesde)
-    if (filtroHasta) q = q.lte('fecha_reporte', `${filtroHasta}T23:59:59`)
+    if (filtroDesde) q = q.gte('fecha_programada', filtroDesde)
+    if (filtroHasta) q = q.lte('fecha_programada', filtroHasta)
     if (filtroQuirofano) q = q.eq('quirofano_id', Number(filtroQuirofano))
     if (filtroHora) q = q.eq('hora_programada', filtroHora)
     const { data, error } = await q
@@ -184,8 +184,8 @@ export default function Solicitudes() {
     filtroMedico && `Médico: ${filtroMedico}`,
     filtroQuirofano && `Quirófano: ${quirofanos.find((q) => String(q.id) === filtroQuirofano)?.nombre}`,
     filtroHora && `Hora: ${filtroHora}`,
-    filtroDesde && `Reportado desde: ${filtroDesde}`,
-    filtroHasta && `Reportado hasta: ${filtroHasta}`,
+    filtroDesde && `Programado desde: ${filtroDesde}`,
+    filtroHasta && `Programado hasta: ${filtroHasta}`,
     busqueda && `Buscar: ${busqueda}`,
   ].filter(Boolean).join(' · ') || 'Sin filtros aplicados'
 
@@ -389,8 +389,8 @@ export default function Solicitudes() {
   }
 
   return (
-    <div>
-      <div className="sticky top-0 z-10 -mx-6 -mt-6 bg-[#dbe1ec] px-6 pt-6 pb-3">
+    <div className="flex h-full flex-col">
+      <div className="shrink-0">
         <PageHeader
           titulo="Gestión de solicitudes"
           subtitulo="Solicitudes ya procesadas en GoMedisys, pendientes de programar / notificar"
@@ -453,11 +453,11 @@ export default function Solicitudes() {
             <input type="time" value={filtroHora} onChange={(e) => setFiltroHora(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
           </div>
           <div>
-            <label className="mb-0.5 block text-xs font-medium text-slate-500">Reportado desde</label>
+            <label className="mb-0.5 block text-xs font-medium text-slate-500">Programado desde</label>
             <input type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
           </div>
           <div>
-            <label className="mb-0.5 block text-xs font-medium text-slate-500">Reportado hasta</label>
+            <label className="mb-0.5 block text-xs font-medium text-slate-500">Programado hasta</label>
             <input type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
           </div>
           <div className="flex-1">
@@ -467,18 +467,18 @@ export default function Solicitudes() {
         </FilterBar>
       </div>
 
-      <div className="neu-card overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="neu-card flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-auto">
           <table className="tabla-cac w-full text-sm">
-            <thead className="bg-[#0D2D6B] text-left text-xs font-semibold uppercase text-white">
+            <thead className="text-left text-xs font-semibold uppercase text-white">
               <tr>
-                <th className="px-4 py-2.5">ID</th>
-                <th className="px-4 py-2.5">Fecha</th>
-                <th className="px-4 py-2.5">Paciente</th>
-                <th className="px-4 py-2.5 w-56">Especialidad</th>
-                <th className="px-4 py-2.5">Estado</th>
-                <th className="px-4 py-2.5 w-56">Programación</th>
-                <th className="px-4 py-2.5 text-right">Acciones</th>
+                <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">ID</th>
+                <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Fecha</th>
+                <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Paciente</th>
+                <th className="sticky top-0 z-10 w-56 bg-[#0D2D6B] px-4 py-2.5">Especialidad</th>
+                <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Estado</th>
+                <th className="sticky top-0 z-10 w-56 bg-[#0D2D6B] px-4 py-2.5">Programación</th>
+                <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -884,25 +884,20 @@ function ModalNotificar({ open, seleccion, recomendaciones, error, guardando, on
 
   return (
     <Modal open={open} onClose={onClose} titulo="Notificar al paciente" ancho="max-w-xl">
-      <div className="space-y-3">
+      <div className="space-y-2">
         {seleccion && (
-          <div className="rounded-xl border border-[#0D2D6B]/20 bg-[#EAF0FA] p-3">
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#0D2D6B]/70">Datos del paciente</div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-              <Campo label="# Ingreso" valor={seleccion.numero_ingreso} />
-              <Campo label="Documento" valor={seleccion.documento_paciente} />
-              <Campo label="Paciente" valor={seleccion.nombre_paciente} />
-              <Campo label="Especialidad" valor={seleccion.especialidades?.nombre} />
-            </div>
+          <div className="rounded-xl border border-[#0D2D6B]/20 bg-[#EAF0FA] px-3 py-2 text-sm">
+            <span className="font-semibold text-slate-900">{seleccion.nombre_paciente ?? seleccion.documento_paciente}</span>
+            <span className="text-slate-500"> · SC-{String(seleccion.id).padStart(6, '0')} · {seleccion.especialidades?.nombre}</span>
           </div>
         )}
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-600">¿Qué se le va a comunicar al paciente? *</label>
-          <div className="grid grid-cols-2 gap-2">
+          <label className="mb-1 block text-sm font-medium text-slate-600">¿Qué se le va a comunicar al paciente? *</label>
+          <div className="grid grid-cols-4 gap-1.5">
             {ESTADOS_NOTIFICABLES.map((e) => (
               <label
                 key={e}
-                className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${
+                className={`flex cursor-pointer items-center justify-center rounded-lg border px-2 py-1.5 text-center text-xs transition ${
                   estadoDestino === e
                     ? 'border-[#0D2D6B] bg-[#0D2D6B] text-white font-medium'
                     : 'border-slate-300 text-slate-600 hover:border-[#0D2D6B]/50'
@@ -914,41 +909,37 @@ function ModalNotificar({ open, seleccion, recomendaciones, error, guardando, on
                   value={e}
                   checked={estadoDestino === e}
                   onChange={() => setEstadoDestino(e)}
-                  className="accent-[#0D2D6B]"
+                  className="sr-only"
                 />
                 {ESTADOS_LABEL[e]}
               </label>
             ))}
           </div>
-          <p className="mt-1 text-xs text-slate-400">La solicitud quedará marcada con el estado seleccionado.</p>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Teléfono</label>
-            <input value={telefono} onChange={(e) => setTelefono(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+            <label className="mb-0.5 block text-sm font-medium text-slate-600">Teléfono</label>
+            <input value={telefono} onChange={(e) => setTelefono(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Correo</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+            <label className="mb-0.5 block text-sm font-medium text-slate-600">Correo</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
           </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <label className="text-sm font-medium text-slate-600">Canales:</label>
+          {CANALES_NOTIFICACION.map((c) => (
+            <label key={c} className="flex items-center gap-1.5 text-sm capitalize">
+              <input type="checkbox" checked={canales.includes(c)} onChange={() => toggleCanal(c)} /> {c}
+            </label>
+          ))}
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">Canales de envío</label>
-          <div className="flex gap-3">
-            {CANALES_NOTIFICACION.map((c) => (
-              <label key={c} className="flex items-center gap-1.5 text-sm capitalize">
-                <input type="checkbox" checked={canales.includes(c)} onChange={() => toggleCanal(c)} /> {c}
-              </label>
-            ))}
-          </div>
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">Recomendaciones a enviar</label>
-          <RichTextEditor value={contenido} onChange={setContenido} placeholder="Recomendaciones pre-quirúrgicas e indicaciones para el paciente…" />
-          <p className="mt-1 text-xs text-slate-400">Prellenado según la especialidad — puedes editar el texto antes de enviarlo.</p>
+          <label className="mb-0.5 block text-sm font-medium text-slate-600">Recomendaciones a enviar</label>
+          <RichTextEditor value={contenido} onChange={setContenido} placeholder="Recomendaciones pre-quirúrgicas e indicaciones para el paciente…" minHeight="80px" />
         </div>
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="flex justify-end gap-2 pt-1">
           <Boton variante="secundario" onClick={onClose}>Cancelar</Boton>
           <Boton
             disabled={guardando || !estadoDestino}

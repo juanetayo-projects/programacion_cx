@@ -206,8 +206,8 @@ export default function CirugiasRealizadas() {
   }
 
   return (
-    <div>
-      <div className="sticky top-0 z-10 -mx-6 -mt-6 bg-[#dbe1ec] px-6 pt-6 pb-3">
+    <div className="flex h-full flex-col">
+      <div className="shrink-0">
         <PageHeader
           titulo="Cirugías realizadas"
           subtitulo="Historial de cirugías ya efectuadas"
@@ -290,17 +290,17 @@ export default function CirugiasRealizadas() {
         </FilterBar>
       </div>
 
-      <div className="neu-card overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="neu-card flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-auto">
           <table className="tabla-cac w-full text-sm">
-            <thead className="bg-[#0D2D6B] text-left text-xs font-semibold uppercase text-white">
+            <thead className="text-left text-xs font-semibold uppercase text-white">
               <tr>
-                <th className="px-4 py-2.5">ID</th>
-                <th className="px-4 py-2.5">Realizada el</th>
-                <th className="px-4 py-2.5">Paciente</th>
-                <th className="px-4 py-2.5">Especialidad</th>
-                <th className="px-4 py-2.5">Programación</th>
-                <th className="px-4 py-2.5 text-right">Acciones</th>
+                <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">ID</th>
+                <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Realizada el</th>
+                <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Paciente</th>
+                <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Especialidad</th>
+                <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Programación</th>
+                <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody>

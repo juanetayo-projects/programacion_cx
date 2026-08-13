@@ -37,8 +37,8 @@ export default function Shell({ children }: { children: ReactNode }) {
     }`
 
   return (
-    <div className="flex min-h-screen bg-[#dbe1ec]">
-      <aside className="flex w-64 shrink-0 flex-col bg-gradient-to-b from-[#0D2D6B] to-[#16468E] text-white">
+    <div className="flex h-screen overflow-hidden bg-[#dbe1ec]">
+      <aside className="flex w-64 shrink-0 flex-col overflow-y-auto bg-gradient-to-b from-[#0D2D6B] to-[#16468E] text-white">
         <div className="flex flex-col items-center gap-2 px-5 py-6 text-center">
           <img src={`${import.meta.env.BASE_URL}images/logo_cacsb_blanc.png`} alt="CAC" className="h-10" />
           <div className="text-sm font-semibold leading-tight">Programación<br />de Cirugías</div>
@@ -67,8 +67,8 @@ export default function Shell({ children }: { children: ReactNode }) {
         <div className="px-5 py-4 text-[10px] text-white/40">Clínica CAC Santa Bárbara</div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex justify-end border-b border-white/10 bg-gradient-to-r from-[#0D2D6B] to-[#16468E] px-6 py-3">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <header className="flex shrink-0 justify-end border-b border-white/10 bg-gradient-to-r from-[#0D2D6B] to-[#16468E] px-6 py-3">
           <div className="relative">
             <button onClick={() => setMenuAbierto((v) => !v)} className="flex items-center gap-2 rounded-lg px-2 py-1 text-right hover:bg-white/10">
               <div className="min-w-0">
@@ -93,7 +93,7 @@ export default function Shell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <main className="min-h-0 flex-1 overflow-y-auto p-6">{children}</main>
       </div>
     </div>
   )

@@ -112,7 +112,7 @@ export default function Dashboard() {
         </Boton>
       </FilterBar>
 
-      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <MetricCard titulo="Total solicitudes" valor={m?.total ?? '—'} icono={<ClipboardList size={18} />} />
         <MetricCard titulo="Programadas" valor={m?.programado ?? '—'} icono={<CalendarCheck size={18} />} />
         <MetricCard titulo="Realizadas" valor={m?.realizado ?? '—'} icono={<Stethoscope size={18} />} />
@@ -120,12 +120,12 @@ export default function Dashboard() {
         <MetricCard titulo="Consultas fallidas" valor={m?.fallido ?? '—'} icono={<AlertTriangle size={18} />} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="neu-card p-5">
-          <h2 className="mb-3 font-semibold text-[#0D2D6B]">Por estado</h2>
-          <div className="space-y-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <div className="neu-card p-4">
+          <h2 className="mb-2 font-semibold text-[#0D2D6B]">Por estado</h2>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
             {m && ESTADOS.map((e) => (
-              <div key={e} className="flex items-center justify-between text-sm">
+              <div key={e} className="flex items-center justify-between gap-2 text-sm">
                 <Badge className={ESTADOS_COLOR[e]}>{ESTADOS_LABEL[e]}</Badge>
                 <span className="font-semibold text-slate-600">{m[e]}</span>
               </div>
@@ -133,9 +133,9 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="neu-card p-5">
-          <h2 className="mb-3 font-semibold text-[#0D2D6B]">Por especialidad</h2>
-          <div className="space-y-2">
+        <div className="neu-card p-4">
+          <h2 className="mb-2 font-semibold text-[#0D2D6B]">Por especialidad</h2>
+          <div className="space-y-1.5">
             {porEspecialidad.map((e) => {
               const max = Math.max(...porEspecialidad.map((x) => x.total), 1)
               return (
@@ -156,7 +156,7 @@ export default function Dashboard() {
               )
             })}
           </div>
-          <div className="mt-4 flex flex-wrap gap-4 border-t border-slate-100 pt-3 text-xs text-slate-500">
+          <div className="mt-2 flex flex-wrap gap-4 border-t border-slate-100 pt-2 text-xs text-slate-500">
             <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-gradient-to-r from-[#0D2D6B] to-[#16468E]" /> Programadas / en curso</span>
             <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Realizadas</span>
             <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-red-400" /> Canceladas</span>

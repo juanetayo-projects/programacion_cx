@@ -14,12 +14,12 @@ export function MetricCard({
   sub?: string
 }) {
   return (
-    <div className="rounded-2xl p-5 text-white shadow-lg bg-gradient-to-br from-[#0D2D6B] to-[#16468E]">
+    <div className="rounded-2xl p-4 text-white shadow-lg bg-gradient-to-br from-[#0D2D6B] to-[#16468E]">
       <div className="flex items-center justify-between">
         <span className="text-sm/5 opacity-80">{titulo}</span>
         {icono}
       </div>
-      <div className="mt-2 text-3xl font-bold">{valor}</div>
+      <div className="mt-1 text-2xl font-bold">{valor}</div>
       {sub && <div className="mt-1 text-xs opacity-75">{sub}</div>}
     </div>
   )
@@ -28,7 +28,7 @@ export function MetricCard({
 // --- Encabezado de página ---
 export function PageHeader({ titulo, subtitulo, acciones }: { titulo: string; subtitulo?: string; acciones?: ReactNode }) {
   return (
-    <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
       <div>
         <h1 className="text-xl font-semibold text-[#0D2D6B]">{titulo}</h1>
         {subtitulo && <p className="text-sm text-slate-500">{subtitulo}</p>}
@@ -41,7 +41,7 @@ export function PageHeader({ titulo, subtitulo, acciones }: { titulo: string; su
 // --- Barra de filtros reutilizable ---
 export function FilterBar({ children }: { children: ReactNode }) {
   return (
-    <div className="neu-card mb-4 flex flex-wrap items-end gap-3 p-4">{children}</div>
+    <div className="neu-card mb-3 flex flex-wrap items-end gap-3 p-3">{children}</div>
   )
 }
 
