@@ -23,21 +23,14 @@ Deno.serve(async (req) => {
     .eq('id', solicitudId).single()
   if (!solicitud) return json(404, { error: 'Solicitud no encontrada' })
 
-  const { data: recomendaciones } = await admin
-    .from('recomendaciones_cirugia')
-    .select('titulo, contenido')
-    .eq('especialidad_id', solicitud.especialidad_id)
-    .eq('activo', true)
-
   const { data: apiKey } = await admin.rpc('get_secret', { secret_name: 'RESEND_API_KEY' })
   if (!apiKey) {
     return json(400, { error: 'RESEND_API_KEY no configurada en Supabase Vault. Configúrala desde Administración > Secrets antes de notificar por correo.' })
   }
 
-  const listaRecomendaciones = (recomendaciones ?? [])
-    .map((r: { titulo: string; contenido: string }) => `<h3 style="color:#0D2D6B;margin:16px 0 4px">${r.titulo}</h3><p style="margin:0;color:#334155">${r.contenido}</p>`)
-    .join('')
-
+  // "notas" contiene el HTML de recomendaciones ya editado por el usuario en el
+  // modal de notificación (prellenado desde recomendaciones_cirugia, editable con
+  // el editor de texto enriquecido) — se envía tal cual, sin reconstruirlo aquí.
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
       <div style="background:linear-gradient(135deg,#0D2D6B,#16468E);padding:20px;border-radius:12px 12px 0 0">
@@ -46,8 +39,7 @@ Deno.serve(async (req) => {
       <div style="padding:20px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px">
         <p>Hola ${solicitud.nombre_paciente ?? ''},</p>
         <p>Tu cirugía de <strong>${solicitud.especialidades?.nombre ?? ''}</strong> ha sido programada${solicitud.fecha_programada ? ` para el <strong>${solicitud.fecha_programada}</strong> a las <strong>${solicitud.hora_programada ?? ''}</strong>` : ''}.</p>
-        ${listaRecomendaciones}
-        ${notas ? `<h3 style="color:#0D2D6B;margin:16px 0 4px">Indicaciones adicionales</h3><p>${notas}</p>` : ''}
+        ${notas ? `<div style="margin-top:12px;color:#334155">${notas}</div>` : ''}
         <p style="margin-top:24px;font-size:12px;color:#94a3b8">Clínica CAC Santa Bárbara</p>
       </div>
     </div>`

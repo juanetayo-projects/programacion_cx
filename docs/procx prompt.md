@@ -556,3 +556,113 @@ Se requiere construir una app que permita
 			flotante al pasar el mouse sobre cada celda día×hora, con una
 			tabla mini (Quirófano / Paciente / Especialidad) de los registros
 			de esa celda — cumple el requisito sin necesidad de cambios.
+
+	12.- AJUSTES RONDA 5 — CONFLICTOS, ENCABEZADO, CIRUGÍAS REALIZADAS (2026-08-13)
+
+		12.1.- Dashboard: desglose numérico junto a la barra por especialidad
+			La barra apilada "Por especialidad" ahora muestra, además del total,
+			los tres valores individuales (programadas/en curso, realizadas,
+			canceladas) como números de color junto a la barra — antes solo se
+			veía el total agregado a la derecha.
+
+		12.2.- Bloqueo de doble programación de quirófano
+			Antes de guardar una programación/reprogramación, la app consulta si
+			ya existe otra solicitud activa (estado ≠ cancelado) con el mismo
+			quirofano_id + fecha_programada + hora_programada. Si existe, se
+			muestra un modal "Quirófano ocupado" con los datos de la
+			programación existente (paciente, documento, especialidad, estado,
+			procedimiento) y un botón "Elegir otro horario" que reabre el modal
+			de programación. Como respaldo ante condiciones de carrera (dos
+			usuarios guardando casi al mismo tiempo), se agregó también un
+			índice único parcial en Postgres:
+			`solicitudes_cirugia_quirofano_horario_uniq` (excluye cancelados y
+			filas sin quirófano/fecha/hora) — si igual se cuela una violación,
+			el error 23505 se traduce a un mensaje claro en vez del error crudo
+			de Postgres.
+
+		12.3.- Encabezado de "Gestión de solicitudes" — compacto, sticky y con Excel
+			- Se eliminaron los `<select>` de Estado y Especialidad del
+			  FilterBar: las cards de métricas clicables (agregadas en la ronda
+			  3) ya cumplen esa función, así que mantener el dropdown era
+			  redundante y ocupaba espacio. El FilterBar quedó con: Médico,
+			  Quirófano, Hora, Reportado desde/hasta y Buscar.
+			- El botón "Limpiar filtros" se movió a la fila de cards "Estados",
+			  alineado a la derecha.
+			- El bloque completo (PageHeader + cards + FilterBar) quedó dentro
+			  de un contenedor `sticky top-0 z-10` con márgenes negativos que
+			  cancelan el padding de `<main>` (`-mx-6 -mt-6` + `px-6 pt-6`) —
+			  patrón reutilizable para fijar encabezados dentro de un
+			  `overflow-y-auto` con padding sin que se corte visualmente al
+			  hacer scroll. Este patrón se replicó también en "Cirugías
+			  realizadas".
+			- Botón "Excel" (ícono `FileSpreadsheet`, mismo usado en Reportes)
+			  en el PageHeader: exporta `filtradas` (respeta todos los filtros
+			  vigentes) con logo, título, subtítulo de filtros aplicados, y
+			  color de fondo por fila según el estado
+			  (`ESTADOS_COLOR_HEX` en constantes.ts, ARGB paralelo a
+			  `ESTADOS_COLOR`). Para soportar esto, `exportarExcel()` en
+			  src/lib/exportar.ts ahora acepta un parámetro opcional
+			  `coloresFila` que sobreescribe el rayado par/impar por fila
+			  cuando se provee.
+
+		12.4.- Editor de texto enriquecido en el modal de Notificar
+			Nuevo componente reutilizable `src/components/RichTextEditor.tsx`
+			(contentEditable + `document.execCommand`, sin librería externa —
+			decisión deliberada para no sumar peso al bundle solo por
+			negrita/cursiva/listas). El modal de Notificar ahora prellena este
+			editor con las recomendaciones de la especialidad
+			(`<h3>título</h3><p>contenido</p>` por cada una) y el usuario puede
+			editar el texto antes de enviarlo; ese HTML editado reemplaza el
+			campo "notas_notificacion" y se envía tal cual al edge function
+			notificar-paciente (que dejó de reconstruir las recomendaciones
+			desde la base de datos — ahora solo agrega el saludo y los datos de
+			la cirugía alrededor del HTML recibido). El modal "Ver" de Gestión
+			de solicitudes ahora renderiza ese HTML con `dangerouslySetInnerHTML`
+			(aceptable aquí porque el contenido siempre se origina en este
+			mismo editor, escrito por personal interno autenticado con permisos
+			de programador/admin — nunca por un paciente ni por texto externo).
+
+		12.5.- Bloqueo atómico contra doble ejecución de la consulta GoMedisys
+			El edge function `consulta-gomedisys` ahora "reclama" la solicitud
+			con un UPDATE atómico (`WHERE estado IN ('reportado','fallido')`)
+			antes de llamar a GoMedisys, en vez de solo leerla. Postgres
+			serializa los UPDATE concurrentes sobre la misma fila, así que si
+			dos clics (o dos usuarios) disparan la consulta casi al mismo
+			tiempo, solo uno logra reclamarla — el otro recibe de inmediato
+			`{ok:false, error:"..."}` sin llegar a golpear GoMedisys dos veces.
+			El reintento manual tras un estado "fallido" sigue permitido (es
+			el comportamiento esperado), lo que cambia es que ya no puede
+			dispararse dos veces en paralelo para el mismo registro.
+
+		12.6.- Mapa de quirófanos: tooltip flotante propio (reemplaza el nativo)
+			El tooltip de las vistas semana/mes pasó de `title` (nativo del
+			navegador) a un panel flotante propio, con el mismo lenguaje visual
+			que ya usaba `HeatmapDiaHora` en Mapa de calor: header azul
+			institucional con fecha y conteo, tabla mini con Hora/Paciente
+			(y Quirófano en la vista mes, que agrupa todas las salas). Se agregó
+			un `contRef` + estado `hover` con posición calculada igual que en
+			`HeatmapDiaHora` (`getBoundingClientRect` relativo al contenedor).
+
+		12.7.- Nueva vista "Cirugías realizadas"
+			Ícono nuevo en la tabla de "Gestión de solicitudes" (`Stethoscope`,
+			junto a Notificar/Reprogramar) para marcar una cirugía programada
+			como realizada — pide confirmación en un modal, actualiza
+			`estado='realizado'` y `realizado_en`. Al marcarla, el registro
+			desaparece de "Gestión de solicitudes" (que ahora excluye también
+			`realizado` de su consulta, sumado a reportado/fallido de la ronda
+			3) y aparece en la nueva página independiente
+			src/pages/CirugiasRealizadas.tsx (ruta /cirugias-realizadas, módulo
+			`cirugias_realizadas` en rol_permisos, mismo patrón de acceso que
+			"solicitudes"). Esta vista tiene cards de métricas por especialidad
+			y por quirófano (clicables como filtro, igual que en Gestión),
+			filtros completos, modal "Ver" de 4 secciones, exportar a Excel con
+			color por estado, y una acción "Quitar marca de realizada" que
+			revierte a estado "Programado" (mismo patrón que "Quitar
+			cancelación").
+
+		12.8.- Migración aplicada
+			supabase/migrations/0014_ajustes_ago2026_realizadas_y_conflictos.sql
+			— agrega el módulo cirugias_realizadas en rol_permisos y el índice
+			único parcial anti-doble-programación. Edge functions
+			consulta-gomedisys y notificar-paciente redesplegadas con los
+			cambios de 12.4/12.5.

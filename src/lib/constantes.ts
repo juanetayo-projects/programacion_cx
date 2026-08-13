@@ -46,6 +46,20 @@ export const ESTADOS_COLOR: Record<Estado, string> = {
   cancelado: 'bg-neutral-200 text-neutral-600 border-neutral-400 line-through',
 }
 
+// Mismos colores de ESTADOS_COLOR pero en ARGB para exportar a Excel (exceljs no
+// interpreta clases de Tailwind, necesita el hex del fondo "100" de cada badge)
+export const ESTADOS_COLOR_HEX: Record<Estado, string> = {
+  reportado: 'FFF1F5F9',
+  procesado: 'FFE0F2FE',
+  fallido: 'FFFEE2E2',
+  programado: 'FFFEF3C7',
+  notificado: 'FFEDE9FE',
+  aplazado: 'FFFFEDD5',
+  suspendido: 'FFFFE4E6',
+  realizado: 'FFD1FAE5',
+  cancelado: 'FFE5E5E5',
+}
+
 // Estados que se pueden comunicar al paciente desde el modal de notificación
 export const ESTADOS_NOTIFICABLES = ['programado', 'cancelado', 'aplazado', 'suspendido'] as const
 export type EstadoNotificable = (typeof ESTADOS_NOTIFICABLES)[number]
@@ -80,7 +94,7 @@ export type CanalNotificacion = (typeof CANALES_NOTIFICACION)[number]
 
 // Módulos de la app — usados por Roles y Permisos para controlar el acceso por rol
 export const MODULOS = [
-  'dashboard', 'reportar', 'solicitudes_reportadas', 'solicitudes', 'quirofanos', 'calor', 'reportes',
+  'dashboard', 'reportar', 'solicitudes_reportadas', 'solicitudes', 'cirugias_realizadas', 'quirofanos', 'calor', 'reportes',
   'admin_usuarios', 'admin_catalogos', 'admin_roles',
 ] as const
 export type Modulo = (typeof MODULOS)[number]
@@ -90,6 +104,7 @@ export const MODULOS_LABEL: Record<Modulo, string> = {
   reportar: 'Reportar cirugía',
   solicitudes_reportadas: 'Solicitudes reportadas',
   solicitudes: 'Gestión de solicitudes',
+  cirugias_realizadas: 'Cirugías realizadas',
   quirofanos: 'Mapa de quirófanos',
   calor: 'Mapa de calor',
   reportes: 'Reportes',

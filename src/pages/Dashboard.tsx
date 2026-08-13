@@ -142,11 +142,16 @@ export default function Dashboard() {
                 <div key={e.nombre} className="flex items-center gap-3 text-sm">
                   <div className="w-40 shrink-0 truncate text-slate-600">{e.nombre}</div>
                   <div className="flex h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
-                    <div className="h-full bg-gradient-to-r from-[#0D2D6B] to-[#16468E]" style={{ width: `${(e.programadas / max) * 100}%` }} />
-                    <div className="h-full bg-emerald-500" style={{ width: `${(e.realizadas / max) * 100}%` }} />
-                    <div className="h-full bg-red-400" style={{ width: `${(e.canceladas / max) * 100}%` }} />
+                    <div className="h-full bg-gradient-to-r from-[#0D2D6B] to-[#16468E]" style={{ width: `${(e.programadas / max) * 100}%` }} title={`Programadas / en curso: ${e.programadas}`} />
+                    <div className="h-full bg-emerald-500" style={{ width: `${(e.realizadas / max) * 100}%` }} title={`Realizadas: ${e.realizadas}`} />
+                    <div className="h-full bg-red-400" style={{ width: `${(e.canceladas / max) * 100}%` }} title={`Canceladas: ${e.canceladas}`} />
                   </div>
-                  <div className="w-8 text-right font-semibold text-slate-600">{e.total}</div>
+                  <div className="flex w-28 shrink-0 items-center justify-end gap-2 text-xs font-semibold tabular-nums">
+                    <span className="text-[#0D2D6B]" title="Programadas / en curso">{e.programadas}</span>
+                    <span className="text-emerald-600" title="Realizadas">{e.realizadas}</span>
+                    <span className="text-red-500" title="Canceladas">{e.canceladas}</span>
+                    <span className="ml-1 w-7 text-right text-slate-600">{e.total}</span>
+                  </div>
                 </div>
               )
             })}

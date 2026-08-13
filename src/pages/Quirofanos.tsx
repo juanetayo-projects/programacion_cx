@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { PageHeader, Boton, Modal } from '../components/ui'
 import { ChevronLeft, ChevronRight, Clock, User, Stethoscope } from 'lucide-react'
@@ -51,6 +51,12 @@ function formatDiaCorto(fecha: string) {
   const d = new Date(fecha + 'T00:00:00')
   return `${DIAS_SEMANA[(d.getDay() + 6) % 7]} ${d.getDate()}`
 }
+function formatFechaLarga(fecha: string) {
+  const d = new Date(fecha + 'T00:00:00')
+  return d.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })
+}
+
+type Hover = { x: number; y: number; fecha: string; quirofanoId?: number; quirofanoNombre?: string }
 
 export default function Quirofanos() {
   const [vista, setVista] = useState<Vista>('dia')
@@ -59,6 +65,8 @@ export default function Quirofanos() {
   const [cirugias, setCirugias] = useState<Cirugia[]>([])
   const [detalle, setDetalle] = useState<Cirugia | null>(null)
   const [cargando, setCargando] = useState(true)
+  const contRef = useRef<HTMLDivElement>(null)
+  const [hover, setHover] = useState<Hover | null>(null)
 
   useEffect(() => {
     supabase.from('quirofanos').select('id, numero, nombre, color_calendario, estado').order('numero').then(({ data }) => setQuirofanos(data ?? []))
@@ -96,11 +104,18 @@ export default function Quirofanos() {
     return cirugias.filter((c) => c.fecha_programada === f && (quirofanoId === undefined || c.quirofano_id === quirofanoId))
   }
 
-  function tooltipDia(f: string, quirofanoId?: number) {
-    return cirugiasDelDia(f, quirofanoId)
-      .slice().sort((a, b) => (a.hora_programada ?? '').localeCompare(b.hora_programada ?? ''))
-      .map((c) => `${c.hora_programada?.slice(0, 5) ?? ''} · ${c.nombre_paciente ?? c.documento_paciente}${quirofanoId === undefined ? ` (${c.quirofanos?.nombre ?? ''})` : ''}`)
-      .join('\n')
+  function cirugiasOrdenadas(f: string, quirofanoId?: number) {
+    return cirugiasDelDia(f, quirofanoId).slice().sort((a, b) => (a.hora_programada ?? '').localeCompare(b.hora_programada ?? ''))
+  }
+
+  function mostrarTooltip(fecha: string, quirofanoId: number | undefined, quirofanoNombre: string | undefined, el: HTMLElement) {
+    if (!contRef.current || cirugiasDelDia(fecha, quirofanoId).length === 0) return
+    const cb = contRef.current.getBoundingClientRect()
+    const eb = el.getBoundingClientRect()
+    let x = eb.left - cb.left
+    const y = eb.top - cb.top + eb.height + 6
+    if (x + 300 > cb.width) x = Math.max(0, cb.width - 300)
+    setHover({ x, y, fecha, quirofanoId, quirofanoNombre })
   }
 
   function cambiarPeriodo(delta: number) {
@@ -163,6 +178,7 @@ export default function Quirofanos() {
 
       <div className="mb-4 text-sm text-slate-500">{totalPeriodo} cirugía(s) programada(s) {etiquetaPeriodo}</div>
 
+      <div ref={contRef} className="relative">
       {vista === 'dia' && (
         <div className="neu-card overflow-x-auto p-4">
           <div className="grid" style={{ gridTemplateColumns: `70px repeat(${quirofanos.length}, minmax(150px, 1fr))` }}>
@@ -224,7 +240,8 @@ export default function Quirofanos() {
                       return (
                         <td
                           key={d}
-                          title={items.length ? tooltipDia(d, q.id) : undefined}
+                          onMouseEnter={(e) => mostrarTooltip(d, q.id, q.nombre, e.currentTarget)}
+                          onMouseLeave={() => setHover(null)}
                           className={`px-3 py-2.5 text-center ${items.length ? 'cursor-help font-semibold text-[#0D2D6B]' : 'text-slate-300'}`}
                           style={items.length ? { backgroundColor: `${q.color_calendario}22` } : undefined}
                         >
@@ -256,7 +273,8 @@ export default function Quirofanos() {
                       return (
                         <td
                           key={d}
-                          title={items.length ? tooltipDia(d) : undefined}
+                          onMouseEnter={(e) => mostrarTooltip(d, undefined, undefined, e.currentTarget)}
+                          onMouseLeave={() => setHover(null)}
                           className={`h-16 w-[14%] px-2 py-1.5 align-top ${items.length ? 'cursor-help' : ''} ${enMes ? '' : 'bg-slate-50 text-slate-300'}`}
                         >
                           <div className={`text-xs ${enMes ? 'text-slate-500' : 'text-slate-300'}`}>{Number(d.slice(8, 10))}</div>
@@ -275,6 +293,36 @@ export default function Quirofanos() {
           </div>
         </div>
       )}
+
+      {hover && (
+        <div
+          className="pointer-events-none absolute z-30 w-72 overflow-hidden rounded-xl border border-[#0D2D6B]/15 bg-white shadow-2xl"
+          style={{ left: hover.x, top: hover.y }}
+        >
+          <div className="border-b border-[#0D2D6B]/10 bg-[#0D2D6B] px-3 py-2 text-xs font-semibold capitalize text-white">
+            {formatFechaLarga(hover.fecha)}{hover.quirofanoNombre ? ` · ${hover.quirofanoNombre}` : ''} — {cirugiasDelDia(hover.fecha, hover.quirofanoId).length} cirugía(s)
+          </div>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-[10px] uppercase text-slate-400">
+                <th className="px-3 py-1.5">Hora</th>
+                <th className="px-3 py-1.5">Paciente</th>
+                {hover.quirofanoId === undefined && <th className="px-3 py-1.5">Quirófano</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {cirugiasOrdenadas(hover.fecha, hover.quirofanoId).slice(0, 8).map((c) => (
+                <tr key={c.id} className="border-t border-slate-100">
+                  <td className="px-3 py-1.5 text-slate-500">{c.hora_programada?.slice(0, 5)}</td>
+                  <td className="max-w-[120px] truncate px-3 py-1.5 text-slate-700">{c.nombre_paciente ?? c.documento_paciente}</td>
+                  {hover.quirofanoId === undefined && <td className="px-3 py-1.5 text-slate-500">{c.quirofanos?.nombre}</td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      </div>
 
       <Modal open={!!detalle} onClose={() => setDetalle(null)} titulo="Detalle de la cirugía">
         {detalle && (

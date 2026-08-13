@@ -3,13 +3,14 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import type { Json } from '../lib/database.types'
 import { PageHeader, Boton, Modal, Badge, FilterBar, EstadoVacio, Spinner } from '../components/ui'
+import RichTextEditor from '../components/RichTextEditor'
 import {
-  ESTADOS, ESTADOS_LABEL, ESTADOS_COLOR, ESTADOS_NOTIFICABLES, CANALES_NOTIFICACION,
+  ESTADOS, ESTADOS_LABEL, ESTADOS_COLOR, ESTADOS_COLOR_HEX, ESTADOS_NOTIFICABLES, CANALES_NOTIFICACION,
   type Estado, type EstadoNotificable,
 } from '../lib/constantes'
 import {
-  Eye, Pencil, CalendarClock, BellRing, RefreshCw, Ban, Undo2,
-  CheckCircle2, Clock, Send, Repeat, PauseCircle, CircleSlash, X,
+  Eye, Pencil, CalendarClock, BellRing, RefreshCw, Ban, Undo2, Stethoscope,
+  CheckCircle2, Clock, Send, Repeat, PauseCircle, CircleSlash, X, FileSpreadsheet, AlertTriangle,
 } from 'lucide-react'
 
 type Solicitud = {
@@ -47,9 +48,19 @@ type Solicitud = {
   perfiles: { nombre: string } | null
 }
 
-// Estados que ya pasaron por la consulta GoMedisys — este módulo solo gestiona
-// registros a partir de ahí; los recién reportados viven en "Solicitudes reportadas".
-const ESTADOS_GESTION = ESTADOS.filter((e) => e !== 'reportado' && e !== 'fallido')
+type ConflictoInfo = {
+  id: number
+  documento_paciente: string
+  nombre_paciente: string | null
+  procedimiento: string | null
+  estado: Estado
+  especialidades: { nombre: string } | null
+}
+
+// Estados que ya pasaron por la consulta GoMedisys y aún no han sido realizados
+// — este módulo solo gestiona registros a partir de ahí; los recién reportados
+// viven en "Solicitudes reportadas" y los ya realizados en "Cirugías realizadas".
+const ESTADOS_GESTION = ESTADOS.filter((e) => !['reportado', 'fallido', 'realizado'].includes(e))
 
 const ICONO_ESTADO: Partial<Record<Estado, React.ReactNode>> = {
   procesado: <CheckCircle2 size={13} />,
@@ -61,13 +72,14 @@ const ICONO_ESTADO: Partial<Record<Estado, React.ReactNode>> = {
   cancelado: <Ban size={13} />,
 }
 
-// Estados que ya pasaron por una programación y por eso admiten notificar/reprogramar
+// Estados que ya pasaron por una programación y por eso admiten notificar/reprogramar/realizar
 const ESTADOS_PROGRAMADOS: Estado[] = ['programado', 'notificado', 'aplazado', 'suspendido']
 
 export default function Solicitudes() {
   const { session } = useAuth()
   const [filas, setFilas] = useState<Solicitud[]>([])
   const [cargando, setCargando] = useState(true)
+  const [exportando, setExportando] = useState(false)
   const [filtroEstado, setFiltroEstado] = useState('')
   const [filtroEspecialidad, setFiltroEspecialidad] = useState('')
   const [filtroDesde, setFiltroDesde] = useState('')
@@ -81,7 +93,9 @@ export default function Solicitudes() {
   const [recomendaciones, setRecomendaciones] = useState<{ especialidad_id: number; titulo: string; contenido: string }[]>([])
 
   const [seleccion, setSeleccion] = useState<Solicitud | null>(null)
-  const [modal, setModal] = useState<'' | 'ver' | 'editar' | 'programar' | 'notificar' | 'reprogramar' | 'cancelar' | 'reactivar'>('')
+  const [modal, setModal] = useState<'' | 'ver' | 'editar' | 'programar' | 'notificar' | 'reprogramar' | 'cancelar' | 'reactivar' | 'realizada' | 'conflicto'>('')
+  const [origenProgramacion, setOrigenProgramacion] = useState<'programar' | 'reprogramar'>('programar')
+  const [conflicto, setConflicto] = useState<{ registro: ConflictoInfo; quirofanoNombre: string; fecha: string; hora: string } | null>(null)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
 
@@ -90,7 +104,7 @@ export default function Solicitudes() {
     let q = supabase
       .from('solicitudes_cirugia')
       .select('*, especialidades(nombre), eps(nombre), unidades(nombre), quirofanos(nombre), perfiles!solicitudes_cirugia_reportado_por_fkey(nombre)')
-      .not('estado', 'in', '(reportado,fallido)')
+      .not('estado', 'in', '(reportado,fallido,realizado)')
       .order('fecha_reporte', { ascending: false })
     if (filtroEstado) q = q.eq('estado', filtroEstado)
     if (filtroEspecialidad) q = q.eq('especialidad_id', Number(filtroEspecialidad))
@@ -164,6 +178,62 @@ export default function Solicitudes() {
 
   const hayFiltrosActivos = !!(filtroEstado || filtroEspecialidad || filtroDesde || filtroHasta || filtroQuirofano || filtroHora || filtroMedico || busqueda)
 
+  const filtrosTexto = [
+    filtroEstado && `Estado: ${ESTADOS_LABEL[filtroEstado as Estado]}`,
+    filtroEspecialidad && `Especialidad: ${especialidades.find((e) => String(e.id) === filtroEspecialidad)?.nombre}`,
+    filtroMedico && `Médico: ${filtroMedico}`,
+    filtroQuirofano && `Quirófano: ${quirofanos.find((q) => String(q.id) === filtroQuirofano)?.nombre}`,
+    filtroHora && `Hora: ${filtroHora}`,
+    filtroDesde && `Reportado desde: ${filtroDesde}`,
+    filtroHasta && `Reportado hasta: ${filtroHasta}`,
+    busqueda && `Buscar: ${busqueda}`,
+  ].filter(Boolean).join(' · ') || 'Sin filtros aplicados'
+
+  async function exportarXlsx() {
+    setExportando(true)
+    try {
+      const { exportarExcel } = await import('../lib/exportar')
+      await exportarExcel(
+        'gestion_solicitudes',
+        'Gestión de Solicitudes de Cirugía',
+        filtrosTexto,
+        [
+          { header: 'ID', key: 'id', width: 12 },
+          { header: 'Fecha reporte', key: 'fecha_reporte', width: 14 },
+          { header: '# Ingreso', key: 'numero_ingreso', width: 14 },
+          { header: 'Documento', key: 'documento_paciente', width: 14 },
+          { header: 'Paciente', key: 'paciente', width: 26 },
+          { header: 'Especialidad', key: 'especialidad', width: 18 },
+          { header: 'Médico', key: 'medico', width: 22 },
+          { header: 'Estado', key: 'estado', width: 14 },
+          { header: 'Quirófano', key: 'quirofano', width: 12 },
+          { header: 'Fecha programada', key: 'fecha_programada', width: 14 },
+          { header: 'Hora', key: 'hora_programada', width: 10 },
+          { header: 'Autorización aseguradora', key: 'autorizacion', width: 22 },
+          { header: 'Observaciones', key: 'observaciones', width: 28 },
+        ],
+        filtradas.map((f) => ({
+          id: f.id,
+          fecha_reporte: new Date(f.fecha_reporte).toLocaleDateString('es-CO'),
+          numero_ingreso: f.numero_ingreso,
+          documento_paciente: f.documento_paciente,
+          paciente: f.nombre_paciente ?? '',
+          especialidad: f.especialidades?.nombre ?? '',
+          medico: medicoDe(f),
+          estado: ESTADOS_LABEL[f.estado],
+          quirofano: f.quirofanos?.nombre ?? '',
+          fecha_programada: f.fecha_programada ?? '',
+          hora_programada: f.hora_programada?.slice(0, 5) ?? '',
+          autorizacion: f.autorizacion_aseguradora ?? '',
+          observaciones: f.observaciones_programacion ?? '',
+        })),
+        filtradas.map((f) => ESTADOS_COLOR_HEX[f.estado]),
+      )
+    } finally {
+      setExportando(false)
+    }
+  }
+
   function abrir(fila: Solicitud, m: typeof modal) {
     setSeleccion(fila)
     setModal(m)
@@ -196,13 +266,38 @@ export default function Solicitudes() {
     if (!seleccion) return
     setGuardando(true)
     setError('')
+
+    const { data: choques } = await supabase
+      .from('solicitudes_cirugia')
+      .select('id, documento_paciente, nombre_paciente, procedimiento, estado, especialidades(nombre)')
+      .eq('quirofano_id', quirofanoId)
+      .eq('fecha_programada', fecha)
+      .eq('hora_programada', hora)
+      .neq('estado', 'cancelado')
+      .neq('id', seleccion.id)
+      .limit(1)
+    if (choques && choques.length > 0) {
+      setGuardando(false)
+      setOrigenProgramacion(esReprogramacion ? 'reprogramar' : 'programar')
+      setConflicto({
+        registro: choques[0] as unknown as ConflictoInfo,
+        quirofanoNombre: quirofanos.find((q) => q.id === quirofanoId)?.nombre ?? '',
+        fecha, hora,
+      })
+      setModal('conflicto')
+      return
+    }
+
     const { error } = await supabase.from('solicitudes_cirugia').update({
       quirofano_id: quirofanoId, fecha_programada: fecha, hora_programada: hora,
       programado_por: session!.user.id, programado_en: new Date().toISOString(),
       estado: 'programado',
     }).eq('id', seleccion.id)
     setGuardando(false)
-    if (error) { setError(error.message); return }
+    if (error) {
+      setError(error.code === '23505' ? 'Ese quirófano ya quedó ocupado en esa fecha y hora — actualiza e intenta con otro horario.' : error.message)
+      return
+    }
     await supabase.from('solicitudes_historial').insert({
       solicitud_id: seleccion.id, accion: esReprogramacion ? 'reprogramado' : 'programado', usuario_id: session!.user.id,
       detalle: { quirofano_id: quirofanoId, fecha, hora },
@@ -279,86 +374,98 @@ export default function Solicitudes() {
     cargar()
   }
 
+  async function marcarRealizada() {
+    if (!seleccion) return
+    setGuardando(true)
+    setError('')
+    const { error } = await supabase.from('solicitudes_cirugia').update({
+      estado: 'realizado', realizado_en: new Date().toISOString(),
+    }).eq('id', seleccion.id)
+    setGuardando(false)
+    if (error) { setError(error.message); return }
+    await supabase.from('solicitudes_historial').insert({ solicitud_id: seleccion.id, accion: 'realizado', usuario_id: session!.user.id, detalle: {} })
+    cerrar()
+    cargar()
+  }
+
   return (
     <div>
-      <PageHeader titulo="Gestión de solicitudes" subtitulo="Solicitudes ya procesadas en GoMedisys, pendientes de programar / notificar" />
+      <div className="sticky top-0 z-10 -mx-6 -mt-6 bg-[#dbe1ec] px-6 pt-6 pb-3">
+        <PageHeader
+          titulo="Gestión de solicitudes"
+          subtitulo="Solicitudes ya procesadas en GoMedisys, pendientes de programar / notificar"
+          acciones={
+            <Boton variante="secundario" disabled={exportando || filtradas.length === 0} onClick={exportarXlsx} className="flex items-center gap-1.5">
+              <FileSpreadsheet size={15} /> {exportando ? 'Exportando…' : 'Excel'}
+            </Boton>
+          }
+        />
 
-      <div className="mb-3">
-        <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">Especialidades</div>
-        <div className="flex flex-wrap gap-2">
-          {porEspecialidad.map((e) => (
-            <MiniCard
-              key={e.id}
-              label={e.nombre}
-              valor={e.total}
-              activo={filtroEspecialidad === String(e.id)}
-              onClick={() => setFiltroEspecialidad((prev) => (prev === String(e.id) ? '' : String(e.id)))}
-            />
-          ))}
+        <div className="mb-2">
+          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Especialidades</div>
+          <div className="flex flex-wrap gap-1.5">
+            {porEspecialidad.map((e) => (
+              <MiniCard
+                key={e.id}
+                label={e.nombre}
+                valor={e.total}
+                activo={filtroEspecialidad === String(e.id)}
+                onClick={() => setFiltroEspecialidad((prev) => (prev === String(e.id) ? '' : String(e.id)))}
+              />
+            ))}
+          </div>
         </div>
-      </div>
-      <div className="mb-4">
-        <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">Estados</div>
-        <div className="flex flex-wrap gap-2">
-          {porEstado.map(([e, total]) => (
-            <MiniCard
-              key={e}
-              label={ESTADOS_LABEL[e]}
-              valor={total}
-              className={ESTADOS_COLOR[e]}
-              activo={filtroEstado === e}
-              onClick={() => setFiltroEstado((prev) => (prev === e ? '' : e))}
-            />
-          ))}
+        <div className="mb-2 flex items-start justify-between gap-3">
+          <div>
+            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Estados</div>
+            <div className="flex flex-wrap gap-1.5">
+              {porEstado.map(([e, total]) => (
+                <MiniCard
+                  key={e}
+                  label={ESTADOS_LABEL[e]}
+                  valor={total}
+                  className={ESTADOS_COLOR[e]}
+                  activo={filtroEstado === e}
+                  onClick={() => setFiltroEstado((prev) => (prev === e ? '' : e))}
+                />
+              ))}
+            </div>
+          </div>
+          <Boton variante="fantasma" disabled={!hayFiltrosActivos} onClick={limpiarFiltros} className="mt-4 flex shrink-0 items-center gap-1.5">
+            <X size={14} /> Limpiar filtros
+          </Boton>
         </div>
-      </div>
 
-      <FilterBar>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500">Estado</label>
-          <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
-            <option value="">Todos</option>
-            {ESTADOS_GESTION.map((e) => <option key={e} value={e}>{ESTADOS_LABEL[e]}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500">Especialidad</label>
-          <select value={filtroEspecialidad} onChange={(e) => setFiltroEspecialidad(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
-            <option value="">Todas</option>
-            {especialidades.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500">Médico</label>
-          <input value={filtroMedico} onChange={(e) => setFiltroMedico(e.target.value)} placeholder="Nombre del médico…" className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500">Quirófano</label>
-          <select value={filtroQuirofano} onChange={(e) => setFiltroQuirofano(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
-            <option value="">Todos</option>
-            {quirofanos.map((q) => <option key={q.id} value={q.id}>{q.nombre}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500">Hora</label>
-          <input type="time" value={filtroHora} onChange={(e) => setFiltroHora(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500">Reportado desde</label>
-          <input type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500">Reportado hasta</label>
-          <input type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
-        </div>
-        <div className="flex-1">
-          <label className="mb-1 block text-xs font-medium text-slate-500">Buscar</label>
-          <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Documento, nombre o # de ingreso…" className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
-        </div>
-        <Boton variante="fantasma" disabled={!hayFiltrosActivos} onClick={limpiarFiltros} className="flex items-center gap-1.5">
-          <X size={14} /> Limpiar filtros
-        </Boton>
-      </FilterBar>
+        <FilterBar>
+          <div>
+            <label className="mb-0.5 block text-xs font-medium text-slate-500">Médico</label>
+            <input value={filtroMedico} onChange={(e) => setFiltroMedico(e.target.value)} placeholder="Nombre del médico…" className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+          </div>
+          <div>
+            <label className="mb-0.5 block text-xs font-medium text-slate-500">Quirófano</label>
+            <select value={filtroQuirofano} onChange={(e) => setFiltroQuirofano(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
+              <option value="">Todos</option>
+              {quirofanos.map((q) => <option key={q.id} value={q.id}>{q.nombre}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="mb-0.5 block text-xs font-medium text-slate-500">Hora</label>
+            <input type="time" value={filtroHora} onChange={(e) => setFiltroHora(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+          </div>
+          <div>
+            <label className="mb-0.5 block text-xs font-medium text-slate-500">Reportado desde</label>
+            <input type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+          </div>
+          <div>
+            <label className="mb-0.5 block text-xs font-medium text-slate-500">Reportado hasta</label>
+            <input type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+          </div>
+          <div className="flex-1">
+            <label className="mb-0.5 block text-xs font-medium text-slate-500">Buscar</label>
+            <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Documento, nombre o # de ingreso…" className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+          </div>
+        </FilterBar>
+      </div>
 
       <div className="neu-card overflow-hidden">
         <div className="overflow-x-auto">
@@ -412,6 +519,7 @@ export default function Solicitudes() {
                         )}
                         {ESTADOS_PROGRAMADOS.includes(f.estado) && (
                           <>
+                            <button title="Marcar como realizada" onClick={() => abrir(f, 'realizada')} className="text-slate-500 hover:text-emerald-600"><Stethoscope size={15} /></button>
                             <button title="Notificar" onClick={() => abrir(f, 'notificar')} className="text-slate-500 hover:text-[#0D2D6B]"><BellRing size={15} /></button>
                             <button title="Reprogramar" onClick={() => abrir(f, 'reprogramar')} className="text-slate-500 hover:text-[#0D2D6B]"><RefreshCw size={15} /></button>
                           </>
@@ -473,7 +581,20 @@ export default function Solicitudes() {
               <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-sm">
                 <Campo label="Estado" valor={ESTADOS_LABEL[seleccion.estado]} />
                 <Campo label="Programación" valor={seleccion.fecha_programada ? `${seleccion.quirofanos?.nombre ?? ''} · ${seleccion.fecha_programada} ${seleccion.hora_programada ?? ''}` : null} />
-                <Campo label="Notificación" valor={seleccion.notas_notificacion || seleccion.canales_notificacion?.length ? `${seleccion.canales_notificacion?.join(', ') || ''} ${seleccion.notas_notificacion ?? ''}`.trim() : null} full />
+                <div className="col-span-full">
+                  <div className="text-[11px] font-bold uppercase tracking-wide text-[#0D2D6B]">Notificación</div>
+                  {seleccion.canales_notificacion?.length ? (
+                    <div className="text-sm text-slate-700">Canales: {seleccion.canales_notificacion.join(', ')}</div>
+                  ) : null}
+                  {seleccion.notas_notificacion ? (
+                    <div
+                      className="mt-1 rounded-lg bg-white p-2 text-sm text-slate-700 [&_h3]:font-semibold [&_h3]:text-[#0D2D6B] [&_ul]:list-disc [&_ul]:pl-5"
+                      dangerouslySetInnerHTML={{ __html: seleccion.notas_notificacion }}
+                    />
+                  ) : !seleccion.canales_notificacion?.length ? (
+                    <div className="text-sm font-semibold text-slate-900">—</div>
+                  ) : null}
+                </div>
                 <Campo label="Observaciones programación" valor={seleccion.observaciones_programacion} full />
                 {seleccion.estado === 'cancelado' && <Campo label="Motivo cancelación" valor={seleccion.motivo_cancelacion} full />}
               </div>
@@ -496,6 +617,57 @@ export default function Solicitudes() {
               <Boton variante="secundario" onClick={cerrar}>Cancelar</Boton>
               <Boton disabled={guardando} className="flex items-center gap-1.5" onClick={reactivarCancelacion}>
                 <Undo2 size={14} /> {guardando ? 'Guardando…' : 'Quitar cancelación'}
+              </Boton>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* MARCAR COMO REALIZADA */}
+      <Modal open={modal === 'realizada'} onClose={cerrar} titulo="Marcar cirugía como realizada" ancho="max-w-md">
+        {seleccion && (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">
+              ¿Confirmas que la cirugía <strong>SC-{String(seleccion.id).padStart(6, '0')}</strong> del paciente{' '}
+              <strong>{seleccion.nombre_paciente ?? seleccion.documento_paciente}</strong> ya se realizó? El registro
+              pasará a la vista <strong>Cirugías realizadas</strong>.
+            </p>
+            {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+            <div className="flex justify-end gap-2 pt-2">
+              <Boton variante="secundario" onClick={cerrar}>Cancelar</Boton>
+              <Boton disabled={guardando} className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700" onClick={marcarRealizada}>
+                <Stethoscope size={14} /> {guardando ? 'Guardando…' : 'Confirmar realizada'}
+              </Boton>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* CONFLICTO DE PROGRAMACIÓN */}
+      <Modal open={modal === 'conflicto'} onClose={cerrar} titulo="Quirófano ocupado" ancho="max-w-lg">
+        {conflicto && (
+          <div className="space-y-3">
+            <div className="flex items-start gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+              <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+              <div>
+                <strong>{conflicto.quirofanoNombre}</strong> ya tiene una cirugía programada el{' '}
+                <strong>{conflicto.fecha}</strong> a las <strong>{conflicto.hora}</strong>. Elige otra fecha, hora o quirófano.
+              </div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+              <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">Programación existente</div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                <Campo label="Paciente" valor={conflicto.registro.nombre_paciente ?? conflicto.registro.documento_paciente} />
+                <Campo label="Documento" valor={conflicto.registro.documento_paciente} />
+                <Campo label="Especialidad" valor={conflicto.registro.especialidades?.nombre} />
+                <Campo label="Estado" valor={ESTADOS_LABEL[conflicto.registro.estado]} />
+                <Campo label="Procedimiento" valor={conflicto.registro.procedimiento} full />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Boton variante="secundario" onClick={cerrar}>Cerrar</Boton>
+              <Boton className="flex items-center gap-1.5" onClick={() => setModal(origenProgramacion)}>
+                <CalendarClock size={14} /> Elegir otro horario
               </Boton>
             </div>
           </div>
@@ -540,7 +712,7 @@ function MiniCard({ label, valor, className, activo, onClick }: {
     <button
       type="button"
       onClick={onClick}
-      className={`flex items-center gap-2 rounded-lg border bg-white px-2.5 py-1.5 text-xs shadow-sm transition ${className ?? 'border-slate-200 text-slate-600'} ${
+      className={`flex items-center gap-1.5 rounded-lg border bg-white px-2 py-1 text-xs shadow-sm transition ${className ?? 'border-slate-200 text-slate-600'} ${
         activo ? 'ring-2 ring-[#0D2D6B] ring-offset-1' : ''
       } ${onClick ? 'cursor-pointer hover:brightness-95' : ''}`}
     >
@@ -686,7 +858,7 @@ function ModalNotificar({ open, seleccion, recomendaciones, error, guardando, on
   onGuardar: (canales: string[], notas: string, telefono: string, email: string, estadoDestino: EstadoNotificable) => void
 }) {
   const [canales, setCanales] = useState<string[]>(['email'])
-  const [notas, setNotas] = useState('')
+  const [contenido, setContenido] = useState('')
   const [telefono, setTelefono] = useState('')
   const [email, setEmail] = useState('')
   const [estadoDestino, setEstadoDestino] = useState<EstadoNotificable | ''>('')
@@ -695,9 +867,15 @@ function ModalNotificar({ open, seleccion, recomendaciones, error, guardando, on
     if (seleccion) {
       setTelefono(seleccion.telefono_paciente ?? '')
       setEmail(seleccion.email_paciente ?? '')
-      setNotas(seleccion.notas_notificacion ?? '')
       setEstadoDestino('')
+      if (seleccion.notas_notificacion) {
+        setContenido(seleccion.notas_notificacion)
+      } else {
+        const recsEspecialidad = recomendaciones.filter((r) => r.especialidad_id === seleccion.especialidad_id)
+        setContenido(recsEspecialidad.map((r) => `<h3>${r.titulo}</h3><p>${r.contenido}</p>`).join(''))
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seleccion])
 
   function toggleCanal(c: string) {
@@ -764,16 +942,10 @@ function ModalNotificar({ open, seleccion, recomendaciones, error, guardando, on
             ))}
           </div>
         </div>
-        <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-500">
-          {recomendaciones.filter((r) => r.especialidad_id === seleccion?.especialidad_id).length > 0 ? (
-            <p>Se incluirán las recomendaciones pre-quirúrgicas configuradas para la especialidad.</p>
-          ) : (
-            <p>Esta especialidad aún no tiene recomendaciones configuradas — solo se enviará la información adicional.</p>
-          )}
-        </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">Información adicional</label>
-          <textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Indicaciones específicas para este paciente…" />
+          <label className="mb-1 block text-sm font-medium text-slate-600">Recomendaciones a enviar</label>
+          <RichTextEditor value={contenido} onChange={setContenido} placeholder="Recomendaciones pre-quirúrgicas e indicaciones para el paciente…" />
+          <p className="mt-1 text-xs text-slate-400">Prellenado según la especialidad — puedes editar el texto antes de enviarlo.</p>
         </div>
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
@@ -781,7 +953,7 @@ function ModalNotificar({ open, seleccion, recomendaciones, error, guardando, on
           <Boton
             disabled={guardando || !estadoDestino}
             className="flex items-center gap-1.5"
-            onClick={() => estadoDestino && onGuardar(canales, notas, telefono, email, estadoDestino)}
+            onClick={() => estadoDestino && onGuardar(canales, contenido, telefono, email, estadoDestino)}
           >
             <Send size={14} /> {guardando ? 'Enviando…' : 'Notificar'}
           </Boton>

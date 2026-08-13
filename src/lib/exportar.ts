@@ -22,6 +22,7 @@ export async function exportarExcel(
   filtrosTexto: string,
   columnas: { header: string; key: string; width?: number }[],
   filas: Record<string, unknown>[],
+  coloresFila?: (string | undefined)[],
 ) {
   const ExcelJS = (await import('exceljs')).default
   const wb = new ExcelJS.Workbook()
@@ -54,7 +55,12 @@ export async function exportarExcel(
 
   filas.forEach((f, i) => {
     const row = ws.addRow(columnas.map((c) => f[c.key] ?? ''))
-    if (i % 2 === 1) {
+    const color = coloresFila?.[i]
+    if (color) {
+      row.eachCell((cell) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: color } }
+      })
+    } else if (i % 2 === 1) {
       row.eachCell((cell) => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } }
       })

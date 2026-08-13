@@ -52,9 +52,22 @@ Deno.serve(async (req) => {
   }
 
   const { solicitudId } = await req.json()
+
+  // Reclama la solicitud de forma atómica: solo tiene éxito si sigue en estado
+  // reportado/fallido. Esto evita que dos clics (o dos usuarios) disparen la
+  // consulta a GoMedisys al mismo tiempo para el mismo registro — la fila queda
+  // bloqueada por Postgres durante el UPDATE, así que solo una de las llamadas
+  // concurrentes puede reclamarla.
   const { data: solicitud, error: solError } = await admin
-    .from('solicitudes_cirugia').select('*').eq('id', solicitudId).single()
-  if (solError || !solicitud) return json(404, { error: 'Solicitud no encontrada' })
+    .from('solicitudes_cirugia')
+    .update({ gomedisys_consultado_en: new Date().toISOString() })
+    .eq('id', solicitudId)
+    .in('estado', ['reportado', 'fallido'])
+    .select('*')
+    .single()
+  if (solError || !solicitud) {
+    return json(200, { ok: false, error: 'Esta solicitud ya fue procesada o está siendo consultada en este momento por otro usuario. Actualiza la página para ver el estado actual.' })
+  }
 
   try {
     const datos = await consultarGoMedisys(solicitud.numero_ingreso)

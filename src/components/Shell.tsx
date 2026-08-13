@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
-  LayoutDashboard, ClipboardPlus, Inbox, ListChecks, CalendarRange, Flame,
+  LayoutDashboard, ClipboardPlus, Inbox, ListChecks, Stethoscope, CalendarRange, Flame,
   BarChart3, Settings, ShieldCheck, ChevronDown, LogOut, User,
 } from 'lucide-react'
 import { useAuth } from '../lib/auth'
@@ -13,6 +13,7 @@ const NAV = [
   { to: '/reportar', label: 'Reportar cirugía', icon: ClipboardPlus, modulo: 'reportar' as Modulo },
   { to: '/solicitudes-reportadas', label: 'Solicitudes reportadas', icon: Inbox, modulo: 'solicitudes_reportadas' as Modulo },
   { to: '/solicitudes', label: 'Gestión de solicitudes', icon: ListChecks, modulo: 'solicitudes' as Modulo },
+  { to: '/cirugias-realizadas', label: 'Cirugías realizadas', icon: Stethoscope, modulo: 'cirugias_realizadas' as Modulo },
   { to: '/quirofanos', label: 'Mapa de quirófanos', icon: CalendarRange, modulo: 'quirofanos' as Modulo },
   { to: '/calor', label: 'Mapa de calor', icon: Flame, modulo: 'calor' as Modulo },
   { to: '/reportes', label: 'Reportes', icon: BarChart3, modulo: 'reportes' as Modulo },
