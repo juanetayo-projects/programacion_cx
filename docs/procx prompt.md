@@ -323,3 +323,95 @@ Se requiere construir una app que permita
 		- Bundle grande por exceljs/pdfmake (import dinámico ya aplicado;
 		  se cargan solo al exportar, no en la carga inicial)
 
+
+9.- AJUSTES DE UI/UX Y ROLES (2026-08-13) — patrones para reusar en nuevos proyectos
+
+	Ronda de feedback tras la primera entrega. Estos ajustes se dejan documentados
+	aquí porque este archivo es la base para nuevos proyectos del mismo patrón
+	(cac-fullstack-app): son convenciones a aplicar desde el scaffold, no solo
+	parches puntuales de esta app.
+
+	9.1.- Branding y contraste
+		- La cinta superior (header) debe usar el mismo degradado azul institucional
+		  que el sidebar (from-#0D2D6B to-#16468E), no fondo blanco — refuerza marca
+		  y evita que el header "flote" desconectado del sidebar.
+		- El fondo general de la app debe ser notoriamente más oscuro que las
+		  tarjetas/tablas/formularios (ej. #dbe1ec de fondo vs. blanco de las
+		  tarjetas). Un fondo demasiado cercano al blanco (como el #eef1f6 inicial)
+		  hace que los formularios se confundan visualmente con el fondo.
+
+	9.2.- Modales (componente Modal genérico)
+		- Todo modal con título debe incluir un botón de cerrar (X) visible en el
+		  header, sin depender solo del clic-afuera o de un botón "Cancelar" al
+		  final del formulario.
+		- Agregar prop `cerrableFuera` (default true): en modales de solo lectura
+		  o que muestran información clínica sensible ("Ver detalle"), desactivarla
+		  para que un clic accidental fuera no pierda el contexto de lo que se
+		  estaba revisando.
+		- En modales de edición que combinan datos de solo lectura (contexto) con
+		  campos editables, separar visualmente ambos bloques (ej. bloque gris
+		  "solo lectura" arriba, bloque con borde institucional "editable" abajo)
+		  en vez de mezclarlos en una sola lista de campos.
+		- Si una acción de modal representa una decisión de negocio (p.ej. "qué
+		  estado se le comunica al paciente"), esa decisión debe pedirse explícita
+		  y obligatoriamente dentro del mismo modal (select requerido) y el botón
+		  de envío debe permanecer deshabilitado hasta que se elija.
+		- El modal de CRUD genérico (CrudTable) debe usar grilla de 2 columnas y
+		  un ancho mayor (max-w-2xl) cuando el catálogo tiene muchos campos, para
+		  evitar scroll vertical; los campos `textarea` ocupan el ancho completo
+		  (col-span-2).
+
+	9.3.- Filtros
+		- Toda vista de listado/gestión debe incluir filtro por rango de fechas
+		  (desde/hasta), además de los filtros de categoría/estado que ya tenga.
+		- El Dashboard principal debe exponer todos los filtros relevantes del
+		  dominio (fecha, estado, categoría, recurso/ubicación) — no debe ser una
+		  vista estática de solo cards y gráficos sin poder acotar el periodo o
+		  segmento.
+		- Las vistas de mapa de calor / ocupación de un recurso compartido (salas,
+		  quirófanos, vehículos, etc.) deben incluir filtro por el recurso mismo,
+		  no solo por rango de fechas.
+
+	9.4.- Estados con reversa
+		- Cualquier estado terminal reversible por naturaleza del negocio (p.ej.
+		  "cancelado") debe poder revertirse desde la misma tabla de gestión
+		  (acción "Quitar cancelación"), en vez de dejar el registro sin salida.
+
+	9.5.- Contraseñas (alta y reseteo de usuarios)
+		- Todo formulario de administración que crea o resetea la contraseña de
+		  un usuario debe pedir confirmación de la contraseña y mostrar un
+		  medidor de fortaleza (débil/aceptable/fuerte/muy fuerte), deshabilitando
+		  el botón de guardar si no coincide o es débil. Componente reutilizable
+		  ya extraído: `src/components/PasswordStrength.tsx` (portado del patrón
+		  usado en el proyecto `sst`).
+
+	9.6.- Roles y permisos configurables
+		- No hardcodear en el código qué rol ve qué módulo (arrays `roles` en la
+		  navegación y en los guards de rutas). En su lugar:
+		  a) Modelar una tabla `rol_permisos (rol, modulo, permitido)` con RLS
+		     (lectura autenticados, escritura solo admin) y semilla que replique
+		     el comportamiento inicial esperado.
+		  b) `AuthProvider` carga el set de módulos permitidos junto con el
+		     perfil al iniciar sesión.
+		  c) La navegación (Shell) y el guard de rutas (App.tsx) consultan ese
+		     set en vez de una lista de roles fija.
+		  d) El rol "administrador" siempre tiene acceso completo e inmodificable
+		     en la UI (checkbox deshabilitado) — evita que el propio admin se
+		     bloquee el acceso por error.
+		  e) Pantalla de administración dedicada ("Roles y permisos") con una
+		     matriz módulo × rol y toggles que escriben de inmediato (sin botón
+		     "guardar" aparte).
+		- Este patrón (antes ausente) se puede replicar tal cual en proyectos
+		  nuevos que pidan "roles configurables" o "que el administrador decida
+		  los permisos".
+
+	9.7.- Gotcha de auth encontrado durante la verificación
+		- Si `Login.tsx` no navega explícitamente tras un `signInWithPassword`
+		  exitoso, y la ruta `/login` no tiene guard, el usuario queda "atascado"
+		  visualmente en el formulario de login aunque la sesión ya se haya
+		  establecido (el estado cambia, pero nada redirige). Solución aplicada:
+		  envolver la ruta `/login` en un guard `SoloInvitados` que redirige a
+		  "/" si ya hay sesión activa. Verificar este patrón en el scaffold base
+		  de login (ver también `references/gotchas.md` del skill
+		  cac-fullstack-app) para no repetirlo en próximas apps.
+
