@@ -21,28 +21,35 @@ export default function Calor() {
   const hoy = new Date().toISOString().slice(0, 10)
   const [desde, setDesde] = useState(hace90)
   const [hasta, setHasta] = useState(hoy)
+  const [filtroQuirofano, setFiltroQuirofano] = useState('')
+  const [quirofanos, setQuirofanos] = useState<{ id: number; nombre: string }[]>([])
   const [registros, setRegistros] = useState<Registro[]>([])
   const [porQuirofano, setPorQuirofano] = useState<{ nombre: string; total: number }[]>([])
 
   useEffect(() => {
-    supabase
+    supabase.from('quirofanos').select('id, nombre').order('numero').then(({ data }) => setQuirofanos(data ?? []))
+  }, [])
+
+  useEffect(() => {
+    let q = supabase
       .from('solicitudes_cirugia')
-      .select('id, fecha_programada, hora_programada, nombre_paciente, documento_paciente, procedimiento, quirofanos(nombre), especialidades(nombre)')
+      .select('id, fecha_programada, hora_programada, nombre_paciente, documento_paciente, procedimiento, quirofano_id, quirofanos(nombre), especialidades(nombre)')
       .not('fecha_programada', 'is', null)
       .not('hora_programada', 'is', null)
       .gte('fecha_programada', desde)
       .lte('fecha_programada', hasta)
-      .then(({ data }) => {
-        const filas = (data ?? []) as unknown as Registro[]
-        setRegistros(filas)
-        const conteo: Record<string, number> = {}
-        for (const r of filas) {
-          const nombre = r.quirofanos?.nombre ?? 'Sin asignar'
-          conteo[nombre] = (conteo[nombre] ?? 0) + 1
-        }
-        setPorQuirofano(Object.entries(conteo).map(([nombre, total]) => ({ nombre, total })).sort((a, b) => b.total - a.total))
-      })
-  }, [desde, hasta])
+    if (filtroQuirofano) q = q.eq('quirofano_id', Number(filtroQuirofano))
+    q.then(({ data }) => {
+      const filas = (data ?? []) as unknown as Registro[]
+      setRegistros(filas)
+      const conteo: Record<string, number> = {}
+      for (const r of filas) {
+        const nombre = r.quirofanos?.nombre ?? 'Sin asignar'
+        conteo[nombre] = (conteo[nombre] ?? 0) + 1
+      }
+      setPorQuirofano(Object.entries(conteo).map(([nombre, total]) => ({ nombre, total })).sort((a, b) => b.total - a.total))
+    })
+  }, [desde, hasta, filtroQuirofano])
 
   return (
     <div>
@@ -56,6 +63,13 @@ export default function Calor() {
         <div>
           <label className="mb-1 block text-xs font-medium text-slate-500">Hasta</label>
           <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-500">Quirófano</label>
+          <select value={filtroQuirofano} onChange={(e) => setFiltroQuirofano(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
+            <option value="">Todos</option>
+            {quirofanos.map((q) => <option key={q.id} value={q.id}>{q.nombre}</option>)}
+          </select>
         </div>
       </FilterBar>
 

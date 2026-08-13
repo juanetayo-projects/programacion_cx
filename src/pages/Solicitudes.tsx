@@ -3,10 +3,13 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import type { Json } from '../lib/database.types'
 import { PageHeader, Boton, Modal, Badge, FilterBar, EstadoVacio, Spinner } from '../components/ui'
-import { ESTADOS, ESTADOS_LABEL, ESTADOS_COLOR, CANALES_NOTIFICACION, type Estado } from '../lib/constantes'
 import {
-  Eye, Zap, Pencil, CalendarClock, BellRing, RefreshCw, Ban,
-  CheckCircle2, XCircle, Clock, Send, Repeat, FileWarning, Loader2,
+  ESTADOS, ESTADOS_LABEL, ESTADOS_COLOR, ESTADOS_NOTIFICABLES, CANALES_NOTIFICACION,
+  type Estado, type EstadoNotificable,
+} from '../lib/constantes'
+import {
+  Eye, Zap, Pencil, CalendarClock, BellRing, RefreshCw, Ban, Undo2,
+  CheckCircle2, XCircle, Clock, Send, Repeat, FileWarning, Loader2, PauseCircle, CircleSlash,
 } from 'lucide-react'
 
 type Solicitud = {
@@ -31,6 +34,7 @@ type Solicitud = {
   fecha_programada: string | null
   hora_programada: string | null
   motivo_cancelacion: string | null
+  cancelado_por: string | null
   telefono_paciente: string | null
   email_paciente: string | null
   notas_notificacion: string | null
@@ -48,9 +52,14 @@ const ICONO_ESTADO: Record<Estado, React.ReactNode> = {
   fallido: <XCircle size={13} />,
   programado: <Clock size={13} />,
   notificado: <BellRing size={13} />,
+  aplazado: <PauseCircle size={13} />,
+  suspendido: <CircleSlash size={13} />,
   realizado: <CheckCircle2 size={13} />,
   cancelado: <Ban size={13} />,
 }
+
+// Estados que ya pasaron por una programación y por eso admiten notificar/reprogramar
+const ESTADOS_PROGRAMADOS: Estado[] = ['programado', 'notificado', 'aplazado', 'suspendido']
 
 export default function Solicitudes() {
   const { session } = useAuth()
@@ -58,6 +67,8 @@ export default function Solicitudes() {
   const [cargando, setCargando] = useState(true)
   const [filtroEstado, setFiltroEstado] = useState('')
   const [filtroEspecialidad, setFiltroEspecialidad] = useState('')
+  const [filtroDesde, setFiltroDesde] = useState('')
+  const [filtroHasta, setFiltroHasta] = useState('')
   const [busqueda, setBusqueda] = useState('')
   const [especialidades, setEspecialidades] = useState<{ id: number; nombre: string }[]>([])
   const [quirofanos, setQuirofanos] = useState<{ id: number; nombre: string; numero: number }[]>([])
@@ -77,6 +88,8 @@ export default function Solicitudes() {
       .order('fecha_reporte', { ascending: false })
     if (filtroEstado) q = q.eq('estado', filtroEstado)
     if (filtroEspecialidad) q = q.eq('especialidad_id', Number(filtroEspecialidad))
+    if (filtroDesde) q = q.gte('fecha_reporte', filtroDesde)
+    if (filtroHasta) q = q.lte('fecha_reporte', `${filtroHasta}T23:59:59`)
     const { data, error } = await q
     if (!error) setFilas((data ?? []) as unknown as Solicitud[])
     setCargando(false)
@@ -84,7 +97,7 @@ export default function Solicitudes() {
 
   useEffect(() => {
     cargar()
-  }, [filtroEstado, filtroEspecialidad])
+  }, [filtroEstado, filtroEspecialidad, filtroDesde, filtroHasta])
 
   useEffect(() => {
     supabase.from('especialidades').select('id, nombre').order('nombre').then(({ data }) => setEspecialidades(data ?? []))
@@ -180,7 +193,7 @@ export default function Solicitudes() {
     cargar()
   }
 
-  async function notificar(canales: string[], notas: string, telefono: string, email: string) {
+  async function notificar(canales: string[], notas: string, telefono: string, email: string, estadoDestino: EstadoNotificable) {
     if (!seleccion) return
     setGuardando(true)
     setError('')
@@ -191,13 +204,20 @@ export default function Solicitudes() {
         })
         if (fnError) throw new Error(fnError.message)
       }
+      const esCancelacion = estadoDestino === 'cancelado'
       const { error } = await supabase.from('solicitudes_cirugia').update({
-        estado: 'notificado', notificado_en: new Date().toISOString(),
+        estado: estadoDestino, notificado_en: new Date().toISOString(),
         canales_notificacion: canales, notas_notificacion: notas,
         telefono_paciente: telefono || null, email_paciente: email || null,
+        cancelado: esCancelacion,
+        motivo_cancelacion: esCancelacion ? (notas || 'Cancelado al notificar al paciente') : seleccion.motivo_cancelacion,
+        cancelado_por: esCancelacion ? session!.user.id : seleccion.cancelado_por ? seleccion.cancelado_por : null,
+        cancelado_en: esCancelacion ? new Date().toISOString() : null,
       }).eq('id', seleccion.id)
       if (error) throw error
-      await supabase.from('solicitudes_historial').insert({ solicitud_id: seleccion.id, accion: 'notificado', usuario_id: session!.user.id, detalle: { canales } })
+      await supabase.from('solicitudes_historial').insert({
+        solicitud_id: seleccion.id, accion: 'notificado', usuario_id: session!.user.id, detalle: { canales, estado: estadoDestino },
+      })
       cerrar()
       cargar()
     } catch (e) {
@@ -205,6 +225,17 @@ export default function Solicitudes() {
     } finally {
       setGuardando(false)
     }
+  }
+
+  async function reactivarCancelacion(fila: Solicitud) {
+    if (!confirm(`¿Quitar la cancelación de la solicitud SC-${String(fila.id).padStart(6, '0')}?`)) return
+    const nuevoEstado: Estado = fila.fecha_programada ? 'programado' : fila.gomedisys_resultado ? 'procesado' : 'reportado'
+    const { error } = await supabase.from('solicitudes_cirugia').update({
+      estado: nuevoEstado, cancelado: false, motivo_cancelacion: null, cancelado_por: null, cancelado_en: null,
+    }).eq('id', fila.id)
+    if (error) { alert(error.message); return }
+    await supabase.from('solicitudes_historial').insert({ solicitud_id: fila.id, accion: 'reactivado', usuario_id: session!.user.id, detalle: { estado: nuevoEstado } })
+    cargar()
   }
 
   return (
@@ -225,6 +256,14 @@ export default function Solicitudes() {
             <option value="">Todas</option>
             {especialidades.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
           </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-500">Reportado desde</label>
+          <input type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-500">Reportado hasta</label>
+          <input type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
         </div>
         <div className="flex-1">
           <label className="mb-1 block text-xs font-medium text-slate-500">Buscar</label>
@@ -278,10 +317,10 @@ export default function Solicitudes() {
                           {consultando === f.id ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />}
                         </button>
                         <button title="Editar" onClick={() => abrir(f, 'editar')} className="text-slate-500 hover:text-[#0D2D6B]"><Pencil size={15} /></button>
-                        {f.estado !== 'programado' && f.estado !== 'notificado' && f.estado !== 'realizado' && f.estado !== 'cancelado' && (
+                        {!ESTADOS_PROGRAMADOS.includes(f.estado) && f.estado !== 'realizado' && f.estado !== 'cancelado' && (
                           <button title="Programar" onClick={() => abrir(f, 'programar')} className="text-slate-500 hover:text-[#0D2D6B]"><CalendarClock size={15} /></button>
                         )}
-                        {(f.estado === 'programado' || f.estado === 'notificado') && (
+                        {ESTADOS_PROGRAMADOS.includes(f.estado) && (
                           <>
                             <button title="Notificar" onClick={() => abrir(f, 'notificar')} className="text-slate-500 hover:text-[#0D2D6B]"><BellRing size={15} /></button>
                             <button title="Reprogramar" onClick={() => abrir(f, 'reprogramar')} className="text-slate-500 hover:text-[#0D2D6B]"><RefreshCw size={15} /></button>
@@ -289,6 +328,9 @@ export default function Solicitudes() {
                         )}
                         {f.estado !== 'cancelado' && f.estado !== 'realizado' && (
                           <button title="Cancelar" onClick={() => abrir(f, 'cancelar')} className="text-slate-500 hover:text-red-600"><Ban size={15} /></button>
+                        )}
+                        {f.estado === 'cancelado' && (
+                          <button title="Quitar cancelación" onClick={() => reactivarCancelacion(f)} className="text-slate-500 hover:text-emerald-600"><Undo2 size={15} /></button>
                         )}
                       </div>
                     </td>
@@ -301,7 +343,7 @@ export default function Solicitudes() {
       </div>
 
       {/* VER */}
-      <Modal open={modal === 'ver'} onClose={cerrar} titulo={`Solicitud SC-${String(seleccion?.id).padStart(6, '0')}`} ancho="max-w-2xl">
+      <Modal open={modal === 'ver'} onClose={cerrar} cerrableFuera={false} titulo={`Solicitud SC-${String(seleccion?.id).padStart(6, '0')}`} ancho="max-w-2xl">
         {seleccion && (
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
             <Campo label="# Ingreso" valor={seleccion.numero_ingreso} />
@@ -390,24 +432,45 @@ function ModalEditar({ open, seleccion, error, guardando, onClose, onGuardar }: 
   }, [seleccion])
 
   return (
-    <Modal open={open} onClose={onClose} titulo="Editar solicitud">
-      <div className="space-y-3">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">Autorización del asegurador</label>
-          <input value={autorizacion} onChange={(e) => setAutorizacion(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+    <Modal open={open} onClose={onClose} titulo="Editar solicitud" ancho="max-w-xl">
+      <div className="space-y-4">
+        {seleccion && (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Datos del paciente (solo lectura)</div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              <Campo label="# Ingreso" valor={seleccion.numero_ingreso} />
+              <Campo label="Documento" valor={seleccion.documento_paciente} />
+              <Campo label="Paciente" valor={seleccion.nombre_paciente} />
+              <Campo label="Edad" valor={seleccion.edad} />
+              <Campo label="EPS" valor={seleccion.eps?.nombre} />
+              <Campo label="Unidad / Cama" valor={[seleccion.unidades?.nombre, seleccion.cama].filter(Boolean).join(' - ')} />
+              <Campo label="Procedimiento" valor={seleccion.procedimiento} full />
+            </div>
+          </div>
+        )}
+
+        <div className="rounded-xl border border-[#0D2D6B]/15 bg-white p-3">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#0D2D6B]">Campos editables por programación</div>
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-600">Autorización del asegurador</label>
+              <input value={autorizacion} onChange={(e) => setAutorizacion(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-600">Observaciones de programación</label>
+              <textarea value={obs} onChange={(e) => setObs(e.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-600">Estado material de osteosíntesis</label>
+              <textarea value={material} onChange={(e) => setMaterial(e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-600">Casa médica que entrega material</label>
+              <textarea value={casa} onChange={(e) => setCasa(e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+            </div>
+          </div>
         </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">Observaciones de programación</label>
-          <textarea value={obs} onChange={(e) => setObs(e.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">Estado material de osteosíntesis</label>
-          <textarea value={material} onChange={(e) => setMaterial(e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">Casa médica que entrega material</label>
-          <textarea value={casa} onChange={(e) => setCasa(e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-        </div>
+
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <Boton variante="secundario" onClick={onClose}>Cancelar</Boton>
@@ -469,18 +532,20 @@ function ModalNotificar({ open, seleccion, recomendaciones, error, guardando, on
   open: boolean; seleccion: Solicitud | null
   recomendaciones: { especialidad_id: number; titulo: string; contenido: string }[]
   error: string; guardando: boolean; onClose: () => void
-  onGuardar: (canales: string[], notas: string, telefono: string, email: string) => void
+  onGuardar: (canales: string[], notas: string, telefono: string, email: string, estadoDestino: EstadoNotificable) => void
 }) {
   const [canales, setCanales] = useState<string[]>(['email'])
   const [notas, setNotas] = useState('')
   const [telefono, setTelefono] = useState('')
   const [email, setEmail] = useState('')
+  const [estadoDestino, setEstadoDestino] = useState<EstadoNotificable | ''>('')
 
   useEffect(() => {
     if (seleccion) {
       setTelefono(seleccion.telefono_paciente ?? '')
       setEmail(seleccion.email_paciente ?? '')
       setNotas(seleccion.notas_notificacion ?? '')
+      setEstadoDestino('')
     }
   }, [seleccion])
 
@@ -491,6 +556,19 @@ function ModalNotificar({ open, seleccion, recomendaciones, error, guardando, on
   return (
     <Modal open={open} onClose={onClose} titulo="Notificar al paciente" ancho="max-w-xl">
       <div className="space-y-3">
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-600">¿Qué se le va a comunicar al paciente? *</label>
+          <select
+            required
+            value={estadoDestino}
+            onChange={(e) => setEstadoDestino(e.target.value as EstadoNotificable)}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0D2D6B] focus:outline-none focus:ring-2 focus:ring-[#0D2D6B]/20"
+          >
+            <option value="">Seleccionar…</option>
+            {ESTADOS_NOTIFICABLES.map((e) => <option key={e} value={e}>{ESTADOS_LABEL[e]}</option>)}
+          </select>
+          <p className="mt-1 text-xs text-slate-400">La solicitud quedará marcada con el estado seleccionado.</p>
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-600">Teléfono</label>
@@ -525,7 +603,11 @@ function ModalNotificar({ open, seleccion, recomendaciones, error, guardando, on
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <Boton variante="secundario" onClick={onClose}>Cancelar</Boton>
-          <Boton disabled={guardando} className="flex items-center gap-1.5" onClick={() => onGuardar(canales, notas, telefono, email)}>
+          <Boton
+            disabled={guardando || !estadoDestino}
+            className="flex items-center gap-1.5"
+            onClick={() => estadoDestino && onGuardar(canales, notas, telefono, email, estadoDestino)}
+          >
             <Send size={14} /> {guardando ? 'Enviando…' : 'Notificar'}
           </Boton>
         </div>

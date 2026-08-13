@@ -12,20 +12,20 @@
 }
 
 body {
-  background-color: #eef1f6;
+  background-color: #dbe1ec;
 }
 
 /* Neumorfismo institucional */
 .neu {
-  background: #eef1f6;
+  background: #dbe1ec;
   border-radius: 1rem;
-  box-shadow: 8px 8px 16px #cdd2db, -8px -8px 16px #ffffff;
+  box-shadow: 8px 8px 16px #bfc7d6, -8px -8px 16px #f7f9fc;
 }
 
 .neu-inset {
-  background: #eef1f6;
+  background: #dbe1ec;
   border-radius: 1rem;
-  box-shadow: inset 4px 4px 8px #cdd2db, inset -4px -4px 8px #ffffff;
+  box-shadow: inset 4px 4px 8px #bfc7d6, inset -4px -4px 8px #f7f9fc;
 }
 
 .neu-card {

@@ -182,10 +182,10 @@ export function CrudTable({
         </table>
       </div>
 
-      <Modal open={modalAbierto} onClose={() => setModalAbierto(false)} titulo={editando ? 'Editar registro' : 'Nuevo registro'}>
-        <div className="space-y-3">
+      <Modal open={modalAbierto} onClose={() => setModalAbierto(false)} titulo={editando ? 'Editar registro' : 'Nuevo registro'} ancho="max-w-2xl">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {columnas.map((c) => (
-            <div key={c.key}>
+            <div key={c.key} className={c.tipo === 'textarea' ? 'sm:col-span-2' : ''}>
               <label className="mb-1 block text-sm font-medium text-slate-600">{c.label}</label>
               {c.tipo === 'boolean' ? (
                 <select
@@ -236,8 +236,8 @@ export function CrudTable({
               )}
             </div>
           ))}
-          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
-          <div className="flex justify-end gap-2 pt-2">
+          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 sm:col-span-2">{error}</p>}
+          <div className="flex justify-end gap-2 pt-2 sm:col-span-2">
             <Boton variante="secundario" onClick={() => setModalAbierto(false)}>Cancelar</Boton>
             <Boton onClick={guardar}>Guardar</Boton>
           </div>

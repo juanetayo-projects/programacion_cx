@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import { X } from 'lucide-react'
 
 // --- Card de métrica con degradado institucional ---
 export function MetricCard({
@@ -52,6 +53,7 @@ export function Modal({
   children,
   ancho = 'max-w-lg',
   fondo = 'bg-white',
+  cerrableFuera = true,
 }: {
   open: boolean
   onClose: () => void
@@ -59,14 +61,26 @@ export function Modal({
   children: ReactNode
   ancho?: string
   fondo?: string
+  /** Si es false, hacer clic fuera del modal (o Escape) no lo cierra — solo el botón de cerrar o las acciones internas. */
+  cerrableFuera?: boolean
 }) {
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={cerrableFuera ? onClose : undefined}
+    >
       <div className={`w-full ${ancho} max-h-[90vh] overflow-y-auto rounded-2xl ${fondo} shadow-2xl`} onClick={(e) => e.stopPropagation()}>
         {titulo && (
-          <div className="sticky top-0 rounded-t-2xl bg-gradient-to-r from-[#0D2D6B] to-[#16468E] px-5 py-3 font-medium text-white">
-            {titulo}
+          <div className="sticky top-0 flex items-center justify-between gap-3 rounded-t-2xl bg-gradient-to-r from-[#0D2D6B] to-[#16468E] px-5 py-3 font-medium text-white">
+            <span>{titulo}</span>
+            <button
+              onClick={onClose}
+              aria-label="Cerrar"
+              className="rounded-full p-1 text-white/80 transition hover:bg-white/15 hover:text-white"
+            >
+              <X size={18} />
+            </button>
           </div>
         )}
         <div className="p-5">{children}</div>

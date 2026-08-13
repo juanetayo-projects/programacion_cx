@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { PageHeader, Boton, Modal, EstadoVacio, Badge } from '../../components/ui'
 import { ROLES, ROLES_LABEL, ESPECIALIDADES, type Rol } from '../../lib/constantes'
+import { PasswordStrengthMeter, MensajeConfirmarPassword, passwordEsValida } from '../../components/PasswordStrength'
 import { Plus, KeyRound, UserX, UserCheck } from 'lucide-react'
 
 type Perfil = {
@@ -24,9 +25,11 @@ export default function Usuarios() {
   const [nombre, setNombre] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [passwordConfirm, setPasswordConfirm] = useState('')
   const [rol, setRol] = useState<Rol>('visualizador')
   const [especialidad, setEspecialidad] = useState('')
   const [nuevaPassword, setNuevaPassword] = useState('')
+  const [nuevaPasswordConfirm, setNuevaPasswordConfirm] = useState('')
 
   async function cargar() {
     setCargando(true)
@@ -52,7 +55,7 @@ export default function Usuarios() {
     try {
       await invocar({ accion: 'crear', email, password, nombre, rol, especialidad: rol === 'medico' ? especialidad : null })
       setModalCrear(false)
-      setNombre(''); setEmail(''); setPassword(''); setRol('visualizador'); setEspecialidad('')
+      setNombre(''); setEmail(''); setPassword(''); setPasswordConfirm(''); setRol('visualizador'); setEspecialidad('')
       cargar()
     } catch (e) {
       setError((e as Error).message)
@@ -68,7 +71,7 @@ export default function Usuarios() {
     try {
       await invocar({ accion: 'reset', id: modalReset.id, password: nuevaPassword })
       setModalReset(null)
-      setNuevaPassword('')
+      setNuevaPassword(''); setNuevaPasswordConfirm('')
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -154,6 +157,12 @@ export default function Usuarios() {
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-600">Contraseña inicial</label>
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+            <PasswordStrengthMeter password={password} />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-600">Confirmar contraseña</label>
+            <input type="password" value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+            <MensajeConfirmarPassword password={password} confirmar={passwordConfirm} />
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-600">Rol</label>
@@ -173,18 +182,31 @@ export default function Usuarios() {
           {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
           <div className="flex justify-end gap-2 pt-2">
             <Boton variante="secundario" onClick={() => setModalCrear(false)}>Cancelar</Boton>
-            <Boton onClick={crear} disabled={guardando}>{guardando ? 'Creando…' : 'Crear usuario'}</Boton>
+            <Boton onClick={crear} disabled={guardando || !passwordEsValida(password) || password !== passwordConfirm}>
+              {guardando ? 'Creando…' : 'Crear usuario'}
+            </Boton>
           </div>
         </div>
       </Modal>
 
       <Modal open={!!modalReset} onClose={() => setModalReset(null)} titulo={`Restablecer contraseña — ${modalReset?.nombre}`}>
         <div className="space-y-3">
-          <input type="password" value={nuevaPassword} onChange={(e) => setNuevaPassword(e.target.value)} placeholder="Nueva contraseña" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-600">Nueva contraseña</label>
+            <input type="password" value={nuevaPassword} onChange={(e) => setNuevaPassword(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+            <PasswordStrengthMeter password={nuevaPassword} />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-600">Confirmar nueva contraseña</label>
+            <input type="password" value={nuevaPasswordConfirm} onChange={(e) => setNuevaPasswordConfirm(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+            <MensajeConfirmarPassword password={nuevaPassword} confirmar={nuevaPasswordConfirm} />
+          </div>
           {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
           <div className="flex justify-end gap-2 pt-2">
             <Boton variante="secundario" onClick={() => setModalReset(null)}>Cancelar</Boton>
-            <Boton onClick={resetear} disabled={guardando}>{guardando ? 'Guardando…' : 'Restablecer'}</Boton>
+            <Boton onClick={resetear} disabled={guardando || !passwordEsValida(nuevaPassword) || nuevaPassword !== nuevaPasswordConfirm}>
+              {guardando ? 'Guardando…' : 'Restablecer'}
+            </Boton>
           </div>
         </div>
       </Modal>

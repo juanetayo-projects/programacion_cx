@@ -199,6 +199,24 @@ export type Database = {
           },
         ]
       }
+      rol_permisos: {
+        Row: {
+          modulo: string
+          permitido: boolean
+          rol: string
+        }
+        Insert: {
+          modulo: string
+          permitido?: boolean
+          rol: string
+        }
+        Update: {
+          modulo?: string
+          permitido?: boolean
+          rol?: string
+        }
+        Relationships: []
+      }
       solicitudes_cirugia: {
         Row: {
           autorizacion_aseguradora: string | null
