@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { PageHeader, MetricCard, Badge, FilterBar } from '../components/ui'
+import { PageHeader, MetricCard, Badge, FilterBar, Boton } from '../components/ui'
 import { ESTADOS, ESTADOS_LABEL, ESTADOS_COLOR, type Estado } from '../lib/constantes'
-import { ClipboardList, CalendarCheck, Ban, AlertTriangle, Stethoscope } from 'lucide-react'
+import { ClipboardList, CalendarCheck, Ban, AlertTriangle, Stethoscope, X } from 'lucide-react'
 
 type Metricas = Record<Estado, number> & { total: number }
 
@@ -63,6 +63,16 @@ export default function Dashboard() {
     })
   }, [filtroDesde, filtroHasta, filtroEstado, filtroEspecialidad, filtroQuirofano])
 
+  function limpiarFiltros() {
+    setFiltroDesde('')
+    setFiltroHasta('')
+    setFiltroEstado('')
+    setFiltroEspecialidad('')
+    setFiltroQuirofano('')
+  }
+
+  const hayFiltrosActivos = !!(filtroDesde || filtroHasta || filtroEstado || filtroEspecialidad || filtroQuirofano)
+
   return (
     <div>
       <PageHeader titulo="Dashboard" subtitulo="Resumen general de programación de cirugías" />
@@ -97,6 +107,9 @@ export default function Dashboard() {
             {quirofanos.map((q) => <option key={q.id} value={q.id}>{q.nombre}</option>)}
           </select>
         </div>
+        <Boton variante="fantasma" disabled={!hayFiltrosActivos} onClick={limpiarFiltros} className="flex items-center gap-1.5">
+          <X size={14} /> Limpiar filtros
+        </Boton>
       </FilterBar>
 
       <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">

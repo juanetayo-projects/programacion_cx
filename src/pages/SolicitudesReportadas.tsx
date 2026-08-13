@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { PageHeader, Boton, Modal, Badge, FilterBar, EstadoVacio, Spinner } from '../components/ui'
 import { ESTADOS_LABEL, ESTADOS_COLOR } from '../lib/constantes'
-import { Eye, Zap, Ban, FileWarning, XCircle, Loader2 } from 'lucide-react'
+import { Eye, Zap, Ban, FileWarning, XCircle, Loader2, X } from 'lucide-react'
 
 type SolicitudReportada = {
   id: number
@@ -89,6 +89,17 @@ export default function SolicitudesReportadas() {
     return r
   }, [filas, busqueda, filtroMedico])
 
+  function limpiarFiltros() {
+    setFiltroEstado('')
+    setFiltroEspecialidad('')
+    setFiltroDesde('')
+    setFiltroHasta('')
+    setFiltroMedico('')
+    setBusqueda('')
+  }
+
+  const hayFiltrosActivos = !!(filtroEstado || filtroEspecialidad || filtroDesde || filtroHasta || filtroMedico || busqueda)
+
   function abrir(fila: SolicitudReportada, m: typeof modal) {
     setSeleccion(fila)
     setModal(m)
@@ -173,6 +184,9 @@ export default function SolicitudesReportadas() {
           <label className="mb-1 block text-xs font-medium text-slate-500">Buscar</label>
           <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Documento, nombre o # de ingreso…" className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
         </div>
+        <Boton variante="fantasma" disabled={!hayFiltrosActivos} onClick={limpiarFiltros} className="flex items-center gap-1.5">
+          <X size={14} /> Limpiar filtros
+        </Boton>
       </FilterBar>
 
       <div className="neu-card overflow-hidden">

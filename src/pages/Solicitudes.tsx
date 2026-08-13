@@ -9,7 +9,7 @@ import {
 } from '../lib/constantes'
 import {
   Eye, Pencil, CalendarClock, BellRing, RefreshCw, Ban, Undo2,
-  CheckCircle2, Clock, Send, Repeat, PauseCircle, CircleSlash,
+  CheckCircle2, Clock, Send, Repeat, PauseCircle, CircleSlash, X,
 } from 'lucide-react'
 
 type Solicitud = {
@@ -136,12 +136,13 @@ export default function Solicitudes() {
 
   // Cards de métricas — reflejan siempre los filtros/búsqueda vigentes
   const porEspecialidad = useMemo(() => {
-    const conteo: Record<string, number> = {}
+    const conteo: Record<number, { id: number; nombre: string; total: number }> = {}
     for (const f of filtradas) {
       const nombre = f.especialidades?.nombre ?? 'Sin especialidad'
-      conteo[nombre] = (conteo[nombre] ?? 0) + 1
+      if (!conteo[f.especialidad_id]) conteo[f.especialidad_id] = { id: f.especialidad_id, nombre, total: 0 }
+      conteo[f.especialidad_id].total++
     }
-    return Object.entries(conteo).sort((a, b) => b[1] - a[1])
+    return Object.values(conteo).sort((a, b) => b.total - a.total)
   }, [filtradas])
 
   const porEstado = useMemo(() => {
@@ -149,6 +150,19 @@ export default function Solicitudes() {
     for (const f of filtradas) conteo[f.estado] = (conteo[f.estado] ?? 0) + 1
     return ESTADOS_GESTION.map((e) => [e, conteo[e] ?? 0] as const)
   }, [filtradas])
+
+  function limpiarFiltros() {
+    setFiltroEstado('')
+    setFiltroEspecialidad('')
+    setFiltroDesde('')
+    setFiltroHasta('')
+    setFiltroQuirofano('')
+    setFiltroHora('')
+    setFiltroMedico('')
+    setBusqueda('')
+  }
+
+  const hayFiltrosActivos = !!(filtroEstado || filtroEspecialidad || filtroDesde || filtroHasta || filtroQuirofano || filtroHora || filtroMedico || busqueda)
 
   function abrir(fila: Solicitud, m: typeof modal) {
     setSeleccion(fila)
@@ -269,15 +283,34 @@ export default function Solicitudes() {
     <div>
       <PageHeader titulo="Gestión de solicitudes" subtitulo="Solicitudes ya procesadas en GoMedisys, pendientes de programar / notificar" />
 
-      <div className="mb-3 flex flex-wrap gap-2">
-        {porEspecialidad.map(([nombre, total]) => (
-          <MiniCard key={nombre} label={nombre} valor={total} />
-        ))}
+      <div className="mb-3">
+        <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">Especialidades</div>
+        <div className="flex flex-wrap gap-2">
+          {porEspecialidad.map((e) => (
+            <MiniCard
+              key={e.id}
+              label={e.nombre}
+              valor={e.total}
+              activo={filtroEspecialidad === String(e.id)}
+              onClick={() => setFiltroEspecialidad((prev) => (prev === String(e.id) ? '' : String(e.id)))}
+            />
+          ))}
+        </div>
       </div>
-      <div className="mb-4 flex flex-wrap gap-2">
-        {porEstado.map(([e, total]) => (
-          <MiniCard key={e} label={ESTADOS_LABEL[e]} valor={total} className={ESTADOS_COLOR[e]} />
-        ))}
+      <div className="mb-4">
+        <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">Estados</div>
+        <div className="flex flex-wrap gap-2">
+          {porEstado.map(([e, total]) => (
+            <MiniCard
+              key={e}
+              label={ESTADOS_LABEL[e]}
+              valor={total}
+              className={ESTADOS_COLOR[e]}
+              activo={filtroEstado === e}
+              onClick={() => setFiltroEstado((prev) => (prev === e ? '' : e))}
+            />
+          ))}
+        </div>
       </div>
 
       <FilterBar>
@@ -322,6 +355,9 @@ export default function Solicitudes() {
           <label className="mb-1 block text-xs font-medium text-slate-500">Buscar</label>
           <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Documento, nombre o # de ingreso…" className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
         </div>
+        <Boton variante="fantasma" disabled={!hayFiltrosActivos} onClick={limpiarFiltros} className="flex items-center gap-1.5">
+          <X size={14} /> Limpiar filtros
+        </Boton>
       </FilterBar>
 
       <div className="neu-card overflow-hidden">
@@ -331,28 +367,27 @@ export default function Solicitudes() {
               <tr>
                 <th className="px-4 py-2.5">ID</th>
                 <th className="px-4 py-2.5">Fecha</th>
-                <th className="px-4 py-2.5"># Ingreso</th>
-                <th className="px-4 py-2.5">Documento</th>
                 <th className="px-4 py-2.5">Paciente</th>
-                <th className="px-4 py-2.5">Especialidad</th>
+                <th className="px-4 py-2.5 w-56">Especialidad</th>
                 <th className="px-4 py-2.5">Estado</th>
-                <th className="px-4 py-2.5">Programación</th>
+                <th className="px-4 py-2.5 w-56">Programación</th>
                 <th className="px-4 py-2.5 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
               {cargando ? (
-                <tr><td colSpan={9} className="p-10 text-center"><Spinner className="mx-auto" /></td></tr>
+                <tr><td colSpan={7} className="p-10 text-center"><Spinner className="mx-auto" /></td></tr>
               ) : filtradas.length === 0 ? (
-                <tr><td colSpan={9}><EstadoVacio titulo="Sin solicitudes" descripcion="Ajusta los filtros o espera nuevos registros procesados" /></td></tr>
+                <tr><td colSpan={7}><EstadoVacio titulo="Sin solicitudes" descripcion="Ajusta los filtros o espera nuevos registros procesados" /></td></tr>
               ) : (
                 filtradas.map((f) => (
                   <tr key={f.id} className="border-t border-slate-100">
                     <td className="px-4 py-2.5 font-mono text-xs text-slate-500">SC-{String(f.id).padStart(6, '0')}</td>
                     <td className="px-4 py-2.5 text-slate-500">{new Date(f.fecha_reporte).toLocaleDateString('es-CO')}</td>
-                    <td className="px-4 py-2.5 text-slate-500">{f.numero_ingreso}</td>
-                    <td className="px-4 py-2.5">{f.documento_paciente}</td>
-                    <td className="px-4 py-2.5">{f.nombre_paciente ?? '—'}</td>
+                    <td className="px-4 py-2.5">
+                      <div className="font-medium text-slate-800">{f.nombre_paciente ?? '—'}</div>
+                      <div className="text-xs text-slate-400">Doc: {f.documento_paciente} · Ingreso: {f.numero_ingreso}</div>
+                    </td>
                     <td className="px-4 py-2.5">
                       <div>{f.especialidades?.nombre}</div>
                       <div className="text-xs text-slate-400">Dr(a). {medicoDe(f)}</div>
@@ -360,11 +395,11 @@ export default function Solicitudes() {
                     <td className="px-4 py-2.5">
                       <Badge className={ESTADOS_COLOR[f.estado]}>{ICONO_ESTADO[f.estado]} {ESTADOS_LABEL[f.estado]}</Badge>
                     </td>
-                    <td className="px-4 py-2.5 text-slate-500">
+                    <td className="px-4 py-2.5 whitespace-nowrap text-slate-500">
                       {f.fecha_programada ? (
                         <>
-                          <div className="font-medium text-slate-700">{f.quirofanos?.nombre ?? '—'}</div>
-                          <div className="text-xs">{f.fecha_programada} {f.hora_programada ?? ''}</div>
+                          <span className="font-medium text-slate-700">{f.quirofanos?.nombre ?? '—'}</span>
+                          {' · '}{f.fecha_programada} {f.hora_programada?.slice(0, 5) ?? ''}
                         </>
                       ) : '—'}
                     </td>
@@ -498,12 +533,20 @@ export default function Solicitudes() {
   )
 }
 
-function MiniCard({ label, valor, className }: { label: string; valor: number; className?: string }) {
+function MiniCard({ label, valor, className, activo, onClick }: {
+  label: string; valor: number; className?: string; activo?: boolean; onClick?: () => void
+}) {
   return (
-    <div className={`flex items-center gap-2 rounded-lg border bg-white px-2.5 py-1.5 text-xs shadow-sm ${className ?? 'border-slate-200 text-slate-600'}`}>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-2 rounded-lg border bg-white px-2.5 py-1.5 text-xs shadow-sm transition ${className ?? 'border-slate-200 text-slate-600'} ${
+        activo ? 'ring-2 ring-[#0D2D6B] ring-offset-1' : ''
+      } ${onClick ? 'cursor-pointer hover:brightness-95' : ''}`}
+    >
       <span className="font-semibold">{valor}</span>
       <span className="opacity-80">{label}</span>
-    </div>
+    </button>
   )
 }
 

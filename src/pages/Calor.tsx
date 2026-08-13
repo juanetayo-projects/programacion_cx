@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../lib/supabase'
-import { PageHeader, FilterBar, MetricCard } from '../components/ui'
+import { PageHeader, FilterBar, MetricCard, Boton } from '../components/ui'
 import HeatmapDiaHora from '../components/HeatmapDiaHora'
-import { CalendarRange, Building2, TrendingUp } from 'lucide-react'
+import { CalendarRange, Building2, TrendingUp, X } from 'lucide-react'
 
 type Registro = {
   id: number
@@ -51,6 +51,14 @@ export default function Calor() {
     })
   }, [desde, hasta, filtroQuirofano])
 
+  function limpiarFiltros() {
+    setDesde(hace90)
+    setHasta(hoy)
+    setFiltroQuirofano('')
+  }
+
+  const hayFiltrosActivos = desde !== hace90 || hasta !== hoy || !!filtroQuirofano
+
   return (
     <div>
       <PageHeader titulo="Mapa de calor" subtitulo="Comportamiento de uso de los quirófanos por día y hora" />
@@ -71,6 +79,9 @@ export default function Calor() {
             {quirofanos.map((q) => <option key={q.id} value={q.id}>{q.nombre}</option>)}
           </select>
         </div>
+        <Boton variante="fantasma" disabled={!hayFiltrosActivos} onClick={limpiarFiltros} className="flex items-center gap-1.5">
+          <X size={14} /> Limpiar filtros
+        </Boton>
       </FilterBar>
 
       <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">

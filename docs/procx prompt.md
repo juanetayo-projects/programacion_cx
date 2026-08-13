@@ -491,3 +491,68 @@ Se requiere construir una app que permita
 			columna nombre_medico_reporta y el módulo solicitudes_reportadas
 			en rol_permisos (constraint + semilla). Tipos regenerados en
 			src/lib/database.types.ts vía MCP de Supabase.
+
+	11.- AJUSTES RONDA 4 — FILTROS, CARDS CLICABLES Y VISTAS DE CALENDARIO (2026-08-13)
+
+		11.1.- Botón "Limpiar filtros"
+			Se agregó un botón "Limpiar filtros" (ghost, con ícono X, deshabilitado
+			si no hay ningún filtro activo) al final de la barra de filtros en
+			todas las páginas con FilterBar: Dashboard, Gestión de solicitudes,
+			Solicitudes reportadas, Mapa de calor y Reportes. En Mapa de calor,
+			"limpiar" no vacía las fechas sino que las regresa al rango por
+			defecto (últimos 90 días), ya que un rango vacío no tiene sentido en
+			ese módulo. Patrón reutilizable: cada página define su propio
+			`limpiarFiltros()` y un booleano `hayFiltrosActivos` para habilitar
+			el botón.
+
+		11.2.- Gestión de solicitudes — cards de métricas con título y clic-filtro
+			- Las dos filas de cards ahora llevan un título pequeño encima:
+			  "Especialidades" y "Estados".
+			- Cada card es ahora un `<button>`: al hacer clic selecciona ese
+			  valor como filtro (Especialidad o Estado); un segundo clic sobre
+			  la misma card lo deselecciona. La card activa se resalta con un
+			  anillo azul institucional (`ring-2 ring-[#0D2D6B]`). Esto convierte
+			  las cards de métricas en atajos de filtrado, además de indicadores.
+			- La agregación de "por especialidad" pasó a agrupar por
+			  `especialidad_id` (no solo por nombre) para poder setear el filtro
+			  con el id correcto al hacer clic.
+
+		11.3.- Gestión de solicitudes — reordenar columnas de la tabla
+			Se fusionaron las columnas "# Ingreso" y "Documento" dentro de la
+			columna "Paciente" (nombre en la primera línea, "Doc: … · Ingreso: …"
+			debajo en texto pequeño gris), inmediatamente después de "Fecha".
+			Esto libera ancho para "Especialidad" y "Programación", que ahora
+			usan `w-56` y `whitespace-nowrap` — la columna Programación quedó en
+			una sola línea ("Quirófano · fecha hora", hora recortada a HH:MM en
+			vez de HH:MM:SS). Columnas finales: ID, Fecha, Paciente, Especialidad,
+			Estado, Programación, Acciones (7, antes 9).
+
+		11.4.- Mapa de quirófanos — selector de vista día / semana / mes
+			Se agregó un selector segmentado (botones "dia" / "semana" / "mes")
+			junto a la navegación de fecha. El rango de la consulta a
+			`solicitudes_cirugia` cambia según la vista (día exacto, semana
+			lunes-domingo, o mes calendario completo vía helpers
+			`inicioSemana/finSemana/inicioMes/finMes`).
+			- Vista día: sin cambios (grilla hora × quirófano existente, clic
+			  en un bloque abre el modal de detalle).
+			- Vista semana: tabla real (quirófano × día de la semana) con
+			  encabezado oscuro (`bg-[#0D2D6B]`) y letra blanca — cada celda
+			  muestra el conteo de cirugías de ese quirófano ese día, y un
+			  tooltip nativo (`title`, con saltos de línea) al pasar el mouse
+			  lista hora + paciente de cada una.
+			- Vista mes: tabla-calendario (7 columnas Lun-Dom, encabezado
+			  oscuro) con los días fuera del mes atenuados; cada día con
+			  cirugías muestra un badge con el conteo y el mismo tooltip nativo
+			  (agregando el quirófano entre paréntesis, ya que agrupa todas las
+			  salas).
+			- Este patrón (tooltip vía atributo `title` con saltos de línea) es
+			  intencionalmente simple y consistente con el que ya usaban los
+			  bloques de la vista día — se evitó introducir un tooltip flotante
+			  a medida para no añadir complejidad no solicitada.
+
+		11.5.- Mapa de calor — tooltip ya existente, sin cambios de código
+			Se verificó que el componente reutilizable `HeatmapDiaHora`
+			(src/components/HeatmapDiaHora.tsx) ya implementa un tooltip
+			flotante al pasar el mouse sobre cada celda día×hora, con una
+			tabla mini (Quirófano / Paciente / Especialidad) de los registros
+			de esa celda — cumple el requisito sin necesidad de cambios.

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { PageHeader, Boton, FilterBar, Badge, Spinner, EstadoVacio } from '../components/ui'
 import { ESTADOS, ESTADOS_LABEL, ESTADOS_COLOR, type Estado } from '../lib/constantes'
-import { FileSpreadsheet, FileText } from 'lucide-react'
+import { FileSpreadsheet, FileText, X } from 'lucide-react'
 
 type Fila = {
   id: number
@@ -50,6 +50,15 @@ export default function Reportes() {
   useEffect(() => {
     cargar()
   }, [desde, hasta, estado, especialidadId])
+
+  function limpiarFiltros() {
+    setDesde('')
+    setHasta('')
+    setEstado('')
+    setEspecialidadId('')
+  }
+
+  const hayFiltrosActivos = !!(desde || hasta || estado || especialidadId)
 
   const filtrosTexto = [
     desde && `Desde: ${desde}`,
@@ -163,6 +172,9 @@ export default function Reportes() {
             {especialidades.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
           </select>
         </div>
+        <Boton variante="fantasma" disabled={!hayFiltrosActivos} onClick={limpiarFiltros} className="flex items-center gap-1.5">
+          <X size={14} /> Limpiar filtros
+        </Boton>
       </FilterBar>
 
       <div className="mb-2 text-sm text-slate-500">{filas.length} registro(s)</div>
