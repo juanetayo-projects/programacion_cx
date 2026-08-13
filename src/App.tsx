@@ -31,12 +31,18 @@ function Guard({ modulo, children }: { modulo?: Modulo; children: ReactElement }
   return <Shell>{children}</Shell>
 }
 
+function SoloInvitados({ children }: { children: ReactElement }) {
+  const { session, loading } = useAuth()
+  if (!loading && session) return <Navigate to="/" replace />
+  return children
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <HashRouter>
         <Routes>
-          <Route path="/login" element={<Login />} />
+          <Route path="/login" element={<SoloInvitados><Login /></SoloInvitados>} />
           <Route path="/reset" element={<Reset />} />
 
           <Route path="/" element={<Guard modulo="dashboard"><Dashboard /></Guard>} />
