@@ -4,10 +4,12 @@ import { AuthProvider, useAuth } from './lib/auth'
 import Shell from './components/Shell'
 import Login from './pages/Login'
 import Reset from './pages/Reset'
-import Placeholder from './pages/Placeholder'
 import Dashboard from './pages/Dashboard'
 import ReportarCirugia from './pages/ReportarCirugia'
 import Solicitudes from './pages/Solicitudes'
+import Quirofanos from './pages/Quirofanos'
+import Calor from './pages/Calor'
+import Reportes from './pages/Reportes'
 import Usuarios from './pages/admin/Usuarios'
 import Catalogos from './pages/admin/Catalogos'
 import type { Rol } from './lib/constantes'
@@ -38,9 +40,9 @@ export default function App() {
           <Route path="/" element={<Guard><Dashboard /></Guard>} />
           <Route path="/reportar" element={<Guard roles={['medico', 'administrador']}><ReportarCirugia /></Guard>} />
           <Route path="/solicitudes" element={<Guard roles={['administrador', 'programador']}><Solicitudes /></Guard>} />
-          <Route path="/quirofanos" element={<Guard><Placeholder titulo="Mapa de quirófanos" /></Guard>} />
-          <Route path="/calor" element={<Guard><Placeholder titulo="Mapa de calor" /></Guard>} />
-          <Route path="/reportes" element={<Guard><Placeholder titulo="Reportes" /></Guard>} />
+          <Route path="/quirofanos" element={<Guard><Quirofanos /></Guard>} />
+          <Route path="/calor" element={<Guard><Calor /></Guard>} />
+          <Route path="/reportes" element={<Guard><Reportes /></Guard>} />
           <Route path="/admin/usuarios" element={<Guard roles={['administrador']}><Usuarios /></Guard>} />
           <Route path="/admin/catalogos" element={<Guard roles={['administrador']}><Catalogos /></Guard>} />
 
