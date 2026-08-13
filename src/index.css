@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@theme {
+  --color-azul: #0D2D6B;
+  --color-azul2: #16468E;
+}
+
+:root {
+  --azul: #0D2D6B;
+  --azul-2: #16468E;
+  color-scheme: light;
+}
+
+body {
+  background-color: #eef1f6;
+}
+
+/* Neumorfismo institucional */
+.neu {
+  background: #eef1f6;
+  border-radius: 1rem;
+  box-shadow: 8px 8px 16px #cdd2db, -8px -8px 16px #ffffff;
+}
+
+.neu-inset {
+  background: #eef1f6;
+  border-radius: 1rem;
+  box-shadow: inset 4px 4px 8px #cdd2db, inset -4px -4px 8px #ffffff;
+}
+
+.neu-card {
+  background: #ffffff;
+  border-radius: 1rem;
+  box-shadow: 6px 6px 14px rgba(13, 45, 107, 0.08), -6px -6px 14px #ffffff;
+  border: 1px solid rgba(13, 45, 107, 0.06);
+}
+
+table.tabla-cac tbody tr:nth-child(even) {
+  background-color: #f4f6fb;
+}
+
+table.tabla-cac tbody tr:hover {
+  background-color: #e7ecf7;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #b9c2d4;
+  border-radius: 8px;
+}
