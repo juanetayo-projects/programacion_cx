@@ -9,6 +9,7 @@ type Registro = {
   id: number
   fecha_programada: string
   hora_programada: string
+  estado: string
   nombre_paciente: string | null
   documento_paciente: string
   procedimiento: string | null
@@ -16,12 +17,19 @@ type Registro = {
   especialidades: { nombre: string } | null
 }
 
+const OPCIONES_ESTADO = [
+  { value: '', label: 'Todas (sin canceladas)' },
+  { value: 'programado', label: 'Programadas' },
+  { value: 'realizado', label: 'Realizadas' },
+] as const
+
 export default function Calor() {
   const hace90 = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10)
-  const hoy = new Date().toISOString().slice(0, 10)
+  const en90 = new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10)
   const [desde, setDesde] = useState(hace90)
-  const [hasta, setHasta] = useState(hoy)
+  const [hasta, setHasta] = useState(en90)
   const [filtroQuirofano, setFiltroQuirofano] = useState('')
+  const [filtroEstado, setFiltroEstado] = useState('')
   const [quirofanos, setQuirofanos] = useState<{ id: number; nombre: string }[]>([])
   const [registros, setRegistros] = useState<Registro[]>([])
   const [porQuirofano, setPorQuirofano] = useState<{ nombre: string; total: number }[]>([])
@@ -33,12 +41,14 @@ export default function Calor() {
   useEffect(() => {
     let q = supabase
       .from('solicitudes_cirugia')
-      .select('id, fecha_programada, hora_programada, nombre_paciente, documento_paciente, procedimiento, quirofano_id, quirofanos(nombre), especialidades(nombre)')
+      .select('id, fecha_programada, hora_programada, estado, nombre_paciente, documento_paciente, procedimiento, quirofano_id, quirofanos(nombre), especialidades(nombre)')
       .not('fecha_programada', 'is', null)
       .not('hora_programada', 'is', null)
+      .neq('estado', 'cancelado')
       .gte('fecha_programada', desde)
       .lte('fecha_programada', hasta)
     if (filtroQuirofano) q = q.eq('quirofano_id', Number(filtroQuirofano))
+    if (filtroEstado) q = q.eq('estado', filtroEstado)
     q.then(({ data }) => {
       const filas = (data ?? []) as unknown as Registro[]
       setRegistros(filas)
@@ -49,15 +59,16 @@ export default function Calor() {
       }
       setPorQuirofano(Object.entries(conteo).map(([nombre, total]) => ({ nombre, total })).sort((a, b) => b.total - a.total))
     })
-  }, [desde, hasta, filtroQuirofano])
+  }, [desde, hasta, filtroQuirofano, filtroEstado])
 
   function limpiarFiltros() {
     setDesde(hace90)
-    setHasta(hoy)
+    setHasta(en90)
     setFiltroQuirofano('')
+    setFiltroEstado('')
   }
 
-  const hayFiltrosActivos = desde !== hace90 || hasta !== hoy || !!filtroQuirofano
+  const hayFiltrosActivos = desde !== hace90 || hasta !== en90 || !!filtroQuirofano || !!filtroEstado
 
   return (
     <div>
@@ -73,6 +84,12 @@ export default function Calor() {
           <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
         </div>
         <div>
+          <label className="mb-1 block text-xs font-medium text-slate-500">Estado</label>
+          <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
+            {OPCIONES_ESTADO.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+        <div>
           <label className="mb-1 block text-xs font-medium text-slate-500">Quirófano</label>
           <select value={filtroQuirofano} onChange={(e) => setFiltroQuirofano(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
             <option value="">Todos</option>
@@ -85,7 +102,7 @@ export default function Calor() {
       </FilterBar>
 
       <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <MetricCard titulo="Cirugías programadas" valor={registros.length} icono={<CalendarRange size={18} />} />
+        <MetricCard titulo="Cirugías en el rango" valor={registros.length} icono={<CalendarRange size={18} />} />
         <MetricCard titulo="Quirófano más usado" valor={porQuirofano[0]?.nombre ?? '—'} icono={<Building2 size={18} />} />
         <MetricCard titulo="Promedio diario" valor={registros.length ? (registros.length / Math.max(1, diasEntre(desde, hasta))).toFixed(1) : '0'} icono={<TrendingUp size={18} />} />
       </div>
@@ -106,15 +123,19 @@ export default function Calor() {
 
       <div className="neu-card p-5">
         <h2 className="mb-3 font-semibold text-[#0D2D6B]">Cirugías por quirófano</h2>
-        <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={porQuirofano}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#eef1f6" />
-            <XAxis dataKey="nombre" tick={{ fontSize: 12 }} />
-            <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-            <Tooltip />
-            <Bar dataKey="total" fill="#16468E" radius={[6, 6, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+        {porQuirofano.length === 0 ? (
+          <p className="py-10 text-center text-sm text-slate-400">Sin cirugías programadas en el rango y filtros seleccionados.</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={porQuirofano}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eef1f6" />
+              <XAxis dataKey="nombre" tick={{ fontSize: 12 }} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+              <Tooltip />
+              <Bar dataKey="total" fill="#16468E" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
       </div>
     </div>
   )

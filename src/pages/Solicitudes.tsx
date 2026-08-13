@@ -5,7 +5,7 @@ import type { Json } from '../lib/database.types'
 import { PageHeader, Boton, Modal, Badge, FilterBar, EstadoVacio, Spinner } from '../components/ui'
 import RichTextEditor from '../components/RichTextEditor'
 import {
-  ESTADOS, ESTADOS_LABEL, ESTADOS_COLOR, ESTADOS_COLOR_HEX, ESTADOS_NOTIFICABLES, CANALES_NOTIFICACION,
+  ESTADOS, ESTADOS_LABEL, ESTADOS_COLOR, ESTADOS_COLOR_HEX, ESTADOS_COLOR_SOLIDO, ESTADOS_NOTIFICABLES, CANALES_NOTIFICACION,
   type Estado, type EstadoNotificable,
 } from '../lib/constantes'
 import {
@@ -899,8 +899,8 @@ function ModalNotificar({ open, seleccion, recomendaciones, error, guardando, on
                 key={e}
                 className={`flex cursor-pointer items-center justify-center rounded-lg border px-2 py-1.5 text-center text-xs transition ${
                   estadoDestino === e
-                    ? 'border-[#0D2D6B] bg-[#0D2D6B] text-white font-medium'
-                    : 'border-slate-300 text-slate-600 hover:border-[#0D2D6B]/50'
+                    ? `${ESTADOS_COLOR_SOLIDO[e]} font-medium`
+                    : `${ESTADOS_COLOR[e]} opacity-70 hover:opacity-100`
                 }`}
               >
                 <input

@@ -746,3 +746,52 @@ Se requiere construir una app que permita
 			existía en el código — simplemente no había ningún registro visible
 			para mostrarlo porque el filtro de fecha no encontraba resultados;
 			quedó confirmado funcionando una vez corregido el filtro.
+
+	14.- AJUSTES RONDA 7 — COLORES, MAPA DE CALOR Y LOGS DE INTEGRACIÓN (2026-08-13)
+
+		14.1.- Modal de Notificar — colores por estado en los botones de motivo
+			Los botones "¿Qué se le va a comunicar al paciente?" usaban un azul
+			genérico para el estado seleccionado. Ahora usan los colores ya
+			definidos por estado: sin seleccionar, el mismo tono suave de
+			`ESTADOS_COLOR` (badge institucional de cada estado); al
+			seleccionar, una versión "sólida" nueva —`ESTADOS_COLOR_SOLIDO` en
+			constantes.ts— con fondo de color pleno y texto blanco. Este mapa
+			de colores sólidos es reutilizable en cualquier otro lugar de la
+			app que necesite resaltar un estado seleccionado sin inventar un
+			color nuevo.
+
+		14.2.- Mapa de calor — causa raíz de "no muestra información"
+			El rango de fechas por defecto era `hoy - 90 días` hasta `hoy`. El
+			histórico de la app mezcla datos migrados (fechas pasadas) con
+			cirugías recién programadas a futuro (p. ej. 2026-08-14/15) — estas
+			últimas quedaban SIEMPRE fuera del rango porque el límite superior
+			nunca pasaba de "hoy". Se cambió el límite superior por defecto a
+			`hoy + 90 días`. Mismo patrón a vigilar en cualquier vista nueva que
+			filtre por `fecha_programada`: el rango por defecto debe cubrir
+			también el futuro cercano, no solo el pasado.
+			Adicionalmente:
+			- Se excluyen las solicitudes canceladas por defecto (antes se
+			  contaban aunque su reserva ya no fuera real).
+			- Nuevo filtro "Estado": Todas (sin canceladas) / Programadas /
+			  Realizadas.
+			- El gráfico "Cirugías por quirófano" ahora muestra un mensaje de
+			  estado vacío en vez de un `BarChart` en blanco cuando no hay
+			  datos con los filtros vigentes.
+
+		14.3.- Nueva vista "Logs de integración"
+			src/pages/Logs.tsx, ruta /logs, módulo `logs` en rol_permisos
+			(mismo acceso que "solicitudes": admin y programador sí, médico y
+			visualizador no). Consulta `solicitudes_historial` filtrando
+			`accion = 'consulta_api'` (cada intento de consulta a GoMedisys
+			queda ahí, éxito o fallo, gracias al log ya existente en el edge
+			function `consulta-gomedisys`) con el detalle del resultado
+			(`detalle.resultado` / `detalle.error`), la solicitud asociada y el
+			usuario que la ejecutó. Cards de total/exitosas/fallidas, filtros
+			por resultado/fecha/búsqueda. Esta es la base para diagnosticar
+			fallos de la integración una vez esté conectada a GoMedisys en
+			producción — por ahora aparece vacía porque la integración real
+			todavía no se ha ejecutado ni una vez (ver sección 8.4).
+
+		14.4.- Migración aplicada
+			supabase/migrations/0015_ajustes_ago2026_logs.sql — agrega el
+			módulo `logs` en rol_permisos (constraint + semilla).

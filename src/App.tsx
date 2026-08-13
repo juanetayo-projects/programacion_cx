@@ -12,6 +12,7 @@ import CirugiasRealizadas from './pages/CirugiasRealizadas'
 import Quirofanos from './pages/Quirofanos'
 import Calor from './pages/Calor'
 import Reportes from './pages/Reportes'
+import Logs from './pages/Logs'
 import Usuarios from './pages/admin/Usuarios'
 import Catalogos from './pages/admin/Catalogos'
 import Roles from './pages/admin/Roles'
@@ -55,6 +56,7 @@ export default function App() {
           <Route path="/quirofanos" element={<Guard modulo="quirofanos"><Quirofanos /></Guard>} />
           <Route path="/calor" element={<Guard modulo="calor"><Calor /></Guard>} />
           <Route path="/reportes" element={<Guard modulo="reportes"><Reportes /></Guard>} />
+          <Route path="/logs" element={<Guard modulo="logs"><Logs /></Guard>} />
           <Route path="/admin/usuarios" element={<Guard modulo="admin_usuarios"><Usuarios /></Guard>} />
           <Route path="/admin/catalogos" element={<Guard modulo="admin_catalogos"><Catalogos /></Guard>} />
           <Route path="/admin/roles" element={<Guard modulo="admin_roles"><Roles /></Guard>} />

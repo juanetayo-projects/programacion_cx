@@ -60,6 +60,20 @@ export const ESTADOS_COLOR_HEX: Record<Estado, string> = {
   cancelado: 'FFE5E5E5',
 }
 
+// Versión "sólida" (fondo de color pleno + texto blanco) de ESTADOS_COLOR — para
+// resaltar el estado seleccionado, p.ej. en los botones del modal de notificación
+export const ESTADOS_COLOR_SOLIDO: Record<Estado, string> = {
+  reportado: 'bg-slate-500 border-slate-500 text-white',
+  procesado: 'bg-sky-500 border-sky-500 text-white',
+  fallido: 'bg-red-500 border-red-500 text-white',
+  programado: 'bg-amber-500 border-amber-500 text-white',
+  notificado: 'bg-violet-500 border-violet-500 text-white',
+  aplazado: 'bg-orange-500 border-orange-500 text-white',
+  suspendido: 'bg-rose-500 border-rose-500 text-white',
+  realizado: 'bg-emerald-500 border-emerald-500 text-white',
+  cancelado: 'bg-neutral-500 border-neutral-500 text-white',
+}
+
 // Estados que se pueden comunicar al paciente desde el modal de notificación
 export const ESTADOS_NOTIFICABLES = ['programado', 'cancelado', 'aplazado', 'suspendido'] as const
 export type EstadoNotificable = (typeof ESTADOS_NOTIFICABLES)[number]
@@ -95,7 +109,7 @@ export type CanalNotificacion = (typeof CANALES_NOTIFICACION)[number]
 // Módulos de la app — usados por Roles y Permisos para controlar el acceso por rol
 export const MODULOS = [
   'dashboard', 'reportar', 'solicitudes_reportadas', 'solicitudes', 'cirugias_realizadas', 'quirofanos', 'calor', 'reportes',
-  'admin_usuarios', 'admin_catalogos', 'admin_roles',
+  'logs', 'admin_usuarios', 'admin_catalogos', 'admin_roles',
 ] as const
 export type Modulo = (typeof MODULOS)[number]
 
@@ -108,6 +122,7 @@ export const MODULOS_LABEL: Record<Modulo, string> = {
   quirofanos: 'Mapa de quirófanos',
   calor: 'Mapa de calor',
   reportes: 'Reportes',
+  logs: 'Logs de integración',
   admin_usuarios: 'Administración · Usuarios',
   admin_catalogos: 'Administración · Catálogos',
   admin_roles: 'Administración · Roles y permisos',
