@@ -896,8 +896,7 @@ function ModalNotificar({ open, seleccion, recomendaciones, error, guardando, on
         setContenido(recsEspecialidad.map((r) => `<h3>${r.titulo}</h3><p>${r.contenido}</p>`).join(''))
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seleccion])
+  }, [seleccion, recomendaciones])
 
   function toggleCanal(c: string) {
     setCanales((prev) => prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c])
