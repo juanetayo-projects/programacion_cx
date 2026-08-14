@@ -12,7 +12,7 @@ interface Props {
 // una librería pesada solo para negrita/cursiva/listas en un campo de correo interno.
 export default function RichTextEditor({ value, onChange, placeholder, minHeight = '140px' }: Props) {
   const ref = useRef<HTMLDivElement>(null)
-  const ultimoValor = useRef(value)
+  const ultimoValor = useRef<string | null>(null)
 
   useEffect(() => {
     if (ref.current && value !== ultimoValor.current && document.activeElement !== ref.current) {
