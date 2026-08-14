@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { PageHeader, Boton, Modal } from '../components/ui'
 import { ChevronLeft, ChevronRight, Clock, User, Stethoscope } from 'lucide-react'
@@ -21,7 +21,13 @@ type Cirugia = {
 type Vista = 'dia' | 'semana' | 'mes'
 
 const HORAS = Array.from({ length: 13 }, (_, i) => 6 + i) // 06:00 - 18:00
+const ALTURA_HORA = 64 // px por hora en la vista de día — el alto de cada bloque de cirugía es proporcional al tiempo estimado
 const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+
+function minutosDesdeHora(hora: string) {
+  const [h, m] = hora.split(':').map(Number)
+  return h * 60 + m
+}
 
 function inicioSemana(fecha: string) {
   const d = new Date(fecha + 'T00:00:00')
@@ -91,14 +97,6 @@ export default function Quirofanos() {
         setCargando(false)
       })
   }, [desde, hasta])
-
-  function cirugiasEn(quirofanoId: number, hora: number) {
-    return cirugias.filter((c) => {
-      if (c.quirofano_id !== quirofanoId || !c.hora_programada) return false
-      const h = Number(c.hora_programada.split(':')[0])
-      return h === hora
-    })
-  }
 
   function cirugiasDelDia(f: string, quirofanoId?: number) {
     return cirugias.filter((c) => c.fecha_programada === f && (quirofanoId === undefined || c.quirofano_id === quirofanoId))
@@ -181,38 +179,49 @@ export default function Quirofanos() {
       <div ref={contRef} className="relative">
       {vista === 'dia' && (
         <div className="neu-card overflow-x-auto p-4">
-          <div className="grid" style={{ gridTemplateColumns: `70px repeat(${quirofanos.length}, minmax(150px, 1fr))` }}>
-            <div />
-            {quirofanos.map((q) => (
-              <div key={q.id} className="px-2 pb-2 text-center">
-                <div className="mx-auto mb-1 h-2 w-8 rounded-full" style={{ backgroundColor: q.color_calendario }} />
-                <div className="text-sm font-semibold text-[#0D2D6B]">{q.nombre}</div>
-                <div className="text-[10px] uppercase text-slate-400">{q.estado}</div>
-              </div>
-            ))}
-
-            {HORAS.map((h) => (
-              <Fragment key={h}>
-                <div className="border-t border-slate-100 py-3 text-right pr-2 text-xs text-slate-400">
+          <div className="flex" style={{ minWidth: 70 + quirofanos.length * 150 }}>
+            <div style={{ width: 70 }} className="shrink-0">
+              <div className="pb-2" style={{ height: 52 }} />
+              {HORAS.map((h) => (
+                <div key={h} className="border-t border-slate-100 pr-2 text-right text-xs text-slate-400" style={{ height: ALTURA_HORA }}>
                   {String(h).padStart(2, '0')}:00
                 </div>
-                {quirofanos.map((q) => (
-                  <div key={`${h}-${q.id}`} className="border-t border-l border-slate-100 p-1 min-h-[52px]">
-                    {cargando ? null : cirugiasEn(q.id, h).map((c) => (
+              ))}
+            </div>
+            {quirofanos.map((q) => (
+              <div key={q.id} className="min-w-[150px] flex-1 border-l border-slate-100">
+                <div className="px-2 pb-2 text-center" style={{ height: 52 }}>
+                  <div className="mx-auto mb-1 h-2 w-8 rounded-full" style={{ backgroundColor: q.color_calendario }} />
+                  <div className="text-sm font-semibold text-[#0D2D6B]">{q.nombre}</div>
+                  <div className="text-[10px] uppercase text-slate-400">{q.estado}</div>
+                </div>
+                <div className="relative" style={{ height: ALTURA_HORA * HORAS.length }}>
+                  {HORAS.map((h, i) => (
+                    <div key={h} className="absolute inset-x-0 border-t border-slate-100" style={{ top: i * ALTURA_HORA }} />
+                  ))}
+                  {!cargando && cirugiasDelDia(fecha, q.id).map((c) => {
+                    if (!c.hora_programada) return null
+                    const inicioMin = minutosDesdeHora(c.hora_programada.slice(0, 5)) - HORAS[0] * 60
+                    const duracion = c.tiempo_estimado_minutos ?? 60
+                    const top = (inicioMin / 60) * ALTURA_HORA
+                    const alto = Math.max((duracion / 60) * ALTURA_HORA, 22)
+                    const finMin = minutosDesdeHora(c.hora_programada.slice(0, 5)) + duracion
+                    const horaFin = `${String(Math.floor(finMin / 60)).padStart(2, '0')}:${String(finMin % 60).padStart(2, '0')}`
+                    return (
                       <button
                         key={c.id}
                         onClick={() => setDetalle(c)}
-                        title={`${c.hora_programada} · ${c.nombre_paciente ?? c.documento_paciente}`}
-                        className="w-full rounded-md px-2 py-1 text-left text-xs text-white shadow-sm transition hover:brightness-110"
-                        style={{ backgroundColor: q.color_calendario }}
+                        title={`${c.hora_programada.slice(0, 5)}–${horaFin} (${duracion} min) · ${c.nombre_paciente ?? c.documento_paciente}`}
+                        className="absolute left-1 right-1 overflow-hidden rounded-md px-2 py-1 text-left text-xs text-white shadow-sm transition hover:z-10 hover:brightness-110"
+                        style={{ top, height: alto, backgroundColor: q.color_calendario }}
                       >
-                        <div className="truncate font-medium">{c.hora_programada?.slice(0, 5)} · {c.nombre_paciente ?? c.documento_paciente}</div>
+                        <div className="truncate font-medium">{c.hora_programada.slice(0, 5)}–{horaFin} · {c.nombre_paciente ?? c.documento_paciente}</div>
                         <div className="truncate opacity-80">{c.especialidades?.nombre}</div>
                       </button>
-                    ))}
-                  </div>
-                ))}
-              </Fragment>
+                    )
+                  })}
+                </div>
+              </div>
             ))}
           </div>
         </div>

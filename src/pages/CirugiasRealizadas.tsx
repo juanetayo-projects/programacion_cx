@@ -346,26 +346,26 @@ export default function CirugiasRealizadas() {
       {/* VER */}
       <Modal open={modal === 'ver'} onClose={cerrar} cerrableFuera={false} titulo={`Solicitud SC-${String(seleccion?.id).padStart(6, '0')}`} ancho="max-w-4xl">
         {seleccion && (
-          <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
             <div className="rounded-xl border border-[#0D2D6B]/20 bg-[#EAF0FA] p-3">
               <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[#0D2D6B]/70">Paciente</div>
-              <div className="grid grid-cols-3 gap-x-5 gap-y-2 text-sm">
+              <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-sm">
                 <Campo label="# Ingreso" valor={seleccion.numero_ingreso} />
                 <Campo label="Documento" valor={seleccion.documento_paciente} />
-                <Campo label="Paciente" valor={seleccion.nombre_paciente} />
+                <Campo label="Paciente" valor={seleccion.nombre_paciente} full />
                 <Campo label="Edad" valor={seleccion.edad} />
                 <Campo label="EPS" valor={seleccion.eps?.nombre} />
-                <Campo label="Unidad / Cama" valor={[seleccion.unidades?.nombre, seleccion.cama].filter(Boolean).join(' - ')} />
+                <Campo label="Unidad / Cama" valor={[seleccion.unidades?.nombre, seleccion.cama].filter(Boolean).join(' - ')} full />
               </div>
             </div>
 
             <div className="rounded-xl border border-violet-300/50 bg-violet-50 p-3">
               <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-violet-700/80">Orden Cx</div>
-              <div className="grid grid-cols-3 gap-x-5 gap-y-2 text-sm">
+              <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-sm">
                 <Campo label="Procedimiento" valor={seleccion.procedimiento} full />
                 <Campo label="Especialidad" valor={seleccion.especialidades?.nombre} />
                 <Campo label="Tiempo estimado" valor={seleccion.tiempo_estimado_minutos ? `${seleccion.tiempo_estimado_minutos} min` : null} />
-                <Campo label="Reportado por" valor={medicoDe(seleccion)} />
+                <Campo label="Reportado por" valor={medicoDe(seleccion)} full />
               </div>
             </div>
 

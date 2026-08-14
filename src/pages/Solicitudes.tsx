@@ -54,7 +54,14 @@ type ConflictoInfo = {
   nombre_paciente: string | null
   procedimiento: string | null
   estado: Estado
+  hora_programada: string | null
+  tiempo_estimado_minutos: number | null
   especialidades: { nombre: string } | null
+}
+
+function minutosDesdeHora(hora: string) {
+  const [h, m] = hora.split(':').map(Number)
+  return h * 60 + m
 }
 
 // Estados que ya pasaron por la consulta GoMedisys y aún no han sido realizados
@@ -267,20 +274,29 @@ export default function Solicitudes() {
     setGuardando(true)
     setError('')
 
-    const { data: choques } = await supabase
+    const duracion = seleccion.tiempo_estimado_minutos ?? 60
+    const inicio = minutosDesdeHora(hora)
+    const fin = inicio + duracion
+
+    const { data: delDia } = await supabase
       .from('solicitudes_cirugia')
-      .select('id, documento_paciente, nombre_paciente, procedimiento, estado, especialidades(nombre)')
+      .select('id, documento_paciente, nombre_paciente, procedimiento, estado, hora_programada, tiempo_estimado_minutos, especialidades(nombre)')
       .eq('quirofano_id', quirofanoId)
       .eq('fecha_programada', fecha)
-      .eq('hora_programada', hora)
       .neq('estado', 'cancelado')
       .neq('id', seleccion.id)
-      .limit(1)
-    if (choques && choques.length > 0) {
+
+    const choque = (delDia ?? []).find((c) => {
+      if (!c.hora_programada) return false
+      const cInicio = minutosDesdeHora(c.hora_programada.slice(0, 5))
+      const cFin = cInicio + (c.tiempo_estimado_minutos ?? 60)
+      return inicio < cFin && cInicio < fin
+    })
+    if (choque) {
       setGuardando(false)
       setOrigenProgramacion(esReprogramacion ? 'reprogramar' : 'programar')
       setConflicto({
-        registro: choques[0] as unknown as ConflictoInfo,
+        registro: choque as unknown as ConflictoInfo,
         quirofanoNombre: quirofanos.find((q) => q.id === quirofanoId)?.nombre ?? '',
         fecha, hora,
       })
@@ -543,26 +559,26 @@ export default function Solicitudes() {
       {/* VER */}
       <Modal open={modal === 'ver'} onClose={cerrar} cerrableFuera={false} titulo={`Solicitud SC-${String(seleccion?.id).padStart(6, '0')}`} ancho="max-w-4xl">
         {seleccion && (
-          <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
             <div className="rounded-xl border border-[#0D2D6B]/20 bg-[#EAF0FA] p-3">
               <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[#0D2D6B]/70">Paciente</div>
-              <div className="grid grid-cols-3 gap-x-5 gap-y-2 text-sm">
+              <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-sm">
                 <Campo label="# Ingreso" valor={seleccion.numero_ingreso} />
                 <Campo label="Documento" valor={seleccion.documento_paciente} />
-                <Campo label="Paciente" valor={seleccion.nombre_paciente} />
+                <Campo label="Paciente" valor={seleccion.nombre_paciente} full />
                 <Campo label="Edad" valor={seleccion.edad} />
                 <Campo label="EPS" valor={seleccion.eps?.nombre} />
-                <Campo label="Unidad / Cama" valor={[seleccion.unidades?.nombre, seleccion.cama].filter(Boolean).join(' - ')} />
+                <Campo label="Unidad / Cama" valor={[seleccion.unidades?.nombre, seleccion.cama].filter(Boolean).join(' - ')} full />
               </div>
             </div>
 
             <div className="rounded-xl border border-violet-300/50 bg-violet-50 p-3">
               <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-violet-700/80">Orden Cx</div>
-              <div className="grid grid-cols-3 gap-x-5 gap-y-2 text-sm">
+              <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-sm">
                 <Campo label="Procedimiento" valor={seleccion.procedimiento} full />
                 <Campo label="Especialidad" valor={seleccion.especialidades?.nombre} />
                 <Campo label="Tiempo estimado" valor={seleccion.tiempo_estimado_minutos ? `${seleccion.tiempo_estimado_minutos} min` : null} />
-                <Campo label="Reportado por" valor={medicoDe(seleccion)} />
+                <Campo label="Reportado por" valor={medicoDe(seleccion)} full />
               </div>
             </div>
 
@@ -581,23 +597,24 @@ export default function Solicitudes() {
               <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-sm">
                 <Campo label="Estado" valor={ESTADOS_LABEL[seleccion.estado]} />
                 <Campo label="Programación" valor={seleccion.fecha_programada ? `${seleccion.quirofanos?.nombre ?? ''} · ${seleccion.fecha_programada} ${seleccion.hora_programada ?? ''}` : null} />
-                <div className="col-span-full">
-                  <div className="text-[11px] font-bold uppercase tracking-wide text-[#0D2D6B]">Notificación</div>
-                  {seleccion.canales_notificacion?.length ? (
-                    <div className="text-sm text-slate-700">Canales: {seleccion.canales_notificacion.join(', ')}</div>
-                  ) : null}
-                  {seleccion.notas_notificacion ? (
-                    <div
-                      className="mt-1 rounded-lg bg-white p-2 text-sm text-slate-700 [&_h3]:font-semibold [&_h3]:text-[#0D2D6B] [&_ul]:list-disc [&_ul]:pl-5"
-                      dangerouslySetInnerHTML={{ __html: seleccion.notas_notificacion }}
-                    />
-                  ) : !seleccion.canales_notificacion?.length ? (
-                    <div className="text-sm font-semibold text-slate-900">—</div>
-                  ) : null}
-                </div>
                 <Campo label="Observaciones programación" valor={seleccion.observaciones_programacion} full />
                 {seleccion.estado === 'cancelado' && <Campo label="Motivo cancelación" valor={seleccion.motivo_cancelacion} full />}
               </div>
+            </div>
+
+            <div className="col-span-full rounded-xl border border-slate-200 bg-white p-3">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-[#0D2D6B]">Notificación</div>
+              {seleccion.canales_notificacion?.length ? (
+                <div className="text-sm text-slate-700">Canales: {seleccion.canales_notificacion.join(', ')}</div>
+              ) : null}
+              {seleccion.notas_notificacion ? (
+                <div
+                  className="mt-1 max-h-32 overflow-y-auto rounded-lg bg-slate-50 p-2 text-sm text-slate-700 [&_h3]:font-semibold [&_h3]:text-[#0D2D6B] [&_ul]:list-disc [&_ul]:pl-5"
+                  dangerouslySetInnerHTML={{ __html: seleccion.notas_notificacion }}
+                />
+              ) : !seleccion.canales_notificacion?.length ? (
+                <div className="text-sm font-semibold text-slate-900">—</div>
+              ) : null}
             </div>
           </div>
         )}
@@ -650,8 +667,8 @@ export default function Solicitudes() {
             <div className="flex items-start gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
               <AlertTriangle size={18} className="mt-0.5 shrink-0" />
               <div>
-                <strong>{conflicto.quirofanoNombre}</strong> ya tiene una cirugía programada el{' '}
-                <strong>{conflicto.fecha}</strong> a las <strong>{conflicto.hora}</strong>. Elige otra fecha, hora o quirófano.
+                <strong>{conflicto.quirofanoNombre}</strong> ya tiene ocupado ese espacio de tiempo el{' '}
+                <strong>{conflicto.fecha}</strong> cerca de las <strong>{conflicto.hora}</strong>. Elige otra fecha, hora o quirófano.
               </div>
             </div>
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
@@ -661,6 +678,10 @@ export default function Solicitudes() {
                 <Campo label="Documento" valor={conflicto.registro.documento_paciente} />
                 <Campo label="Especialidad" valor={conflicto.registro.especialidades?.nombre} />
                 <Campo label="Estado" valor={ESTADOS_LABEL[conflicto.registro.estado]} />
+                <Campo
+                  label="Horario ocupado"
+                  valor={conflicto.registro.hora_programada ? `${conflicto.registro.hora_programada.slice(0, 5)} · ${conflicto.registro.tiempo_estimado_minutos ?? 60} min` : null}
+                />
                 <Campo label="Procedimiento" valor={conflicto.registro.procedimiento} full />
               </div>
             </div>

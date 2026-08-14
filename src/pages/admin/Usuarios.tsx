@@ -144,41 +144,43 @@ export default function Usuarios() {
         </table>
       </div>
 
-      <Modal open={modalCrear} onClose={() => setModalCrear(false)} titulo="Nuevo usuario">
+      <Modal open={modalCrear} onClose={() => setModalCrear(false)} titulo="Nuevo usuario" ancho="max-w-xl">
         <div className="space-y-3">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Nombre completo</label>
-            <input value={nombre} onChange={(e) => setNombre(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Correo</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Contraseña inicial</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-            <PasswordStrengthMeter password={password} />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Confirmar contraseña</label>
-            <input type="password" value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-            <MensajeConfirmarPassword password={password} confirmar={passwordConfirm} />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Rol</label>
-            <select value={rol} onChange={(e) => setRol(e.target.value as Rol)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-              {ROLES.map((r) => <option key={r} value={r}>{ROLES_LABEL[r]}</option>)}
-            </select>
-          </div>
-          {rol === 'medico' && (
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-600">Especialidad</label>
-              <select value={especialidad} onChange={(e) => setEspecialidad(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-                <option value="">Seleccionar…</option>
-                {ESPECIALIDADES.map((e) => <option key={e} value={e}>{e}</option>)}
+              <label className="mb-1 block text-sm font-medium text-slate-600">Nombre completo</label>
+              <input value={nombre} onChange={(e) => setNombre(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-600">Correo</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-600">Contraseña inicial</label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              <PasswordStrengthMeter password={password} />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-600">Confirmar contraseña</label>
+              <input type="password" value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              <MensajeConfirmarPassword password={password} confirmar={passwordConfirm} />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-600">Rol</label>
+              <select value={rol} onChange={(e) => setRol(e.target.value as Rol)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                {ROLES.map((r) => <option key={r} value={r}>{ROLES_LABEL[r]}</option>)}
               </select>
             </div>
-          )}
+            {rol === 'medico' && (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-600">Especialidad</label>
+                <select value={especialidad} onChange={(e) => setEspecialidad(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                  <option value="">Seleccionar…</option>
+                  {ESPECIALIDADES.map((e) => <option key={e} value={e}>{e}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
           {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
           <div className="flex justify-end gap-2 pt-2">
             <Boton variante="secundario" onClick={() => setModalCrear(false)}>Cancelar</Boton>
