@@ -32,3 +32,6 @@ scripts/migracion/0006_datos_historicos.sql
 *.njsproj
 *.sln
 *.sw?
+
+# Credenciales GoMedisys (texto plano): nunca al repo
+db/

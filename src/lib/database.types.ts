@@ -217,6 +217,48 @@ export type Database = {
         }
         Relationships: []
       }
+      gomedisys_trabajos: {
+        Row: {
+          creado_en: string
+          error: string | null
+          estado: string
+          id: number
+          iniciado_en: string | null
+          parametros: Json
+          progreso: Json
+          resultado: Json | null
+          solicitado_por: string
+          terminado_en: string | null
+          tipo: string
+        }
+        Insert: {
+          creado_en?: string
+          error?: string | null
+          estado?: string
+          id?: never
+          iniciado_en?: string | null
+          parametros?: Json
+          progreso?: Json
+          resultado?: Json | null
+          solicitado_por: string
+          terminado_en?: string | null
+          tipo: string
+        }
+        Update: {
+          creado_en?: string
+          error?: string | null
+          estado?: string
+          id?: never
+          iniciado_en?: string | null
+          parametros?: Json
+          progreso?: Json
+          resultado?: Json | null
+          solicitado_por?: string
+          terminado_en?: string | null
+          tipo?: string
+        }
+        Relationships: []
+      }
       solicitudes_cirugia: {
         Row: {
           autorizacion_aseguradora: string | null
@@ -262,6 +304,19 @@ export type Database = {
           unidad_id: number | null
           updated_at: string
           valoracion_preanestesica: string | null
+          diagnostico_preoperatorio: string | null
+          eps_gomedisys: string | null
+          especialidad_gomedisys: string | null
+          especialista_opera: string | null
+          especialista_ordena: string | null
+          estado_gomedisys: string | null
+          fecha_programada_gomedisys: string | null
+          gomedisys_id_paciente: number | null
+          gomedisys_id_programacion: number | null
+          origen: string
+          plan_gomedisys: string | null
+          quirofano_gomedisys: string | null
+          tipo_orden: string | null
         }
         Insert: {
           autorizacion_aseguradora?: string | null
@@ -307,6 +362,19 @@ export type Database = {
           unidad_id?: number | null
           updated_at?: string
           valoracion_preanestesica?: string | null
+          diagnostico_preoperatorio?: string | null
+          eps_gomedisys?: string | null
+          especialidad_gomedisys?: string | null
+          especialista_opera?: string | null
+          especialista_ordena?: string | null
+          estado_gomedisys?: string | null
+          fecha_programada_gomedisys?: string | null
+          gomedisys_id_paciente?: number | null
+          gomedisys_id_programacion?: number | null
+          origen?: string
+          plan_gomedisys?: string | null
+          quirofano_gomedisys?: string | null
+          tipo_orden?: string | null
         }
         Update: {
           autorizacion_aseguradora?: string | null
@@ -352,6 +420,19 @@ export type Database = {
           unidad_id?: number | null
           updated_at?: string
           valoracion_preanestesica?: string | null
+          diagnostico_preoperatorio?: string | null
+          eps_gomedisys?: string | null
+          especialidad_gomedisys?: string | null
+          especialista_opera?: string | null
+          especialista_ordena?: string | null
+          estado_gomedisys?: string | null
+          fecha_programada_gomedisys?: string | null
+          gomedisys_id_paciente?: number | null
+          gomedisys_id_programacion?: number | null
+          origen?: string
+          plan_gomedisys?: string | null
+          quirofano_gomedisys?: string | null
+          tipo_orden?: string | null
         }
         Relationships: [
           {
@@ -473,6 +554,23 @@ export type Database = {
       es_programador_o_admin: { Args: never; Returns: boolean }
       get_secret: { Args: { secret_name: string }; Returns: string }
       is_admin: { Args: never; Returns: boolean }
+      marcar_programaciones_gomedisys: {
+        Args: { p_items: Json }
+        Returns: {
+          r_estado: string
+          r_programacion: number
+          r_responsable: string
+          r_solicitud_id: number
+          r_tomada_por_mi: boolean
+        }[]
+      }
+      nombres_perfiles: {
+        Args: { p_ids: string[] }
+        Returns: {
+          id: string
+          nombre: string
+        }[]
+      }
       rol_actual: { Args: never; Returns: string }
     }
     Enums: {

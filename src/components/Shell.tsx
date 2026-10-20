@@ -2,15 +2,23 @@ import { useState, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, ClipboardPlus, Inbox, ListChecks, Stethoscope, CalendarRange, Flame,
-  BarChart3, ScrollText, Settings, ShieldCheck, ChevronDown, LogOut, User,
+  BarChart3, ScrollText, Settings, ShieldCheck, ChevronDown, LogOut, User, FilePlus2, DatabaseZap,
 } from 'lucide-react'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import { ROLES_LABEL, type Modulo } from '../lib/constantes'
 
-const NAV = [
+type ItemNav = { to: string; label: string; icon: typeof LayoutDashboard; modulo: Modulo; hijos?: ItemNav[] }
+
+const NAV: ItemNav[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, modulo: 'dashboard' as Modulo },
-  { to: '/reportar', label: 'Reportar cirugía', icon: ClipboardPlus, modulo: 'reportar' as Modulo },
+  {
+    to: '/reportar', label: 'Reportar cirugía', icon: ClipboardPlus, modulo: 'reportar' as Modulo,
+    hijos: [
+      { to: '/reportar', label: 'Reporte individual', icon: FilePlus2, modulo: 'reportar' as Modulo },
+      { to: '/reportar/masiva', label: 'Consulta masiva', icon: DatabaseZap, modulo: 'reportar_masivo' as Modulo },
+    ],
+  },
   { to: '/solicitudes-reportadas', label: 'Solicitudes reportadas', icon: Inbox, modulo: 'solicitudes_reportadas' as Modulo },
   { to: '/solicitudes', label: 'Gestión de solicitudes', icon: ListChecks, modulo: 'solicitudes' as Modulo },
   { to: '/cirugias-realizadas', label: 'Cirugías realizadas', icon: Stethoscope, modulo: 'cirugias_realizadas' as Modulo },
@@ -46,12 +54,34 @@ export default function Shell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="flex-1 space-y-1 px-3">
-          {NAV.filter((n) => puede(n.modulo)).map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.to === '/'} className={linkClase}>
-              <item.icon size={17} />
-              {item.label}
-            </NavLink>
-          ))}
+          {NAV.filter((n) => puede(n.modulo)).map((item) => {
+            const hijos = item.hijos?.filter((h) => puede(h.modulo)) ?? []
+            // Con una sola sub-opción visible se muestra como enlace simple
+            if (hijos.length < 2) {
+              return (
+                <NavLink key={item.to} to={item.to} end={item.to === '/' || !!item.hijos} className={linkClase}>
+                  <item.icon size={17} />
+                  {item.label}
+                </NavLink>
+              )
+            }
+            return (
+              <div key={item.to}>
+                <div className="flex items-center gap-3 px-3 py-2.5 text-sm text-white/85">
+                  <item.icon size={17} />
+                  {item.label}
+                </div>
+                <div className="ml-5 space-y-1 border-l border-white/15 pl-2">
+                  {hijos.map((h) => (
+                    <NavLink key={h.to} to={h.to} end className={linkClase}>
+                      <h.icon size={15} />
+                      {h.label}
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
 
           {ADMIN_NAV.some((n) => puede(n.modulo)) && (
             <div className="pt-3">

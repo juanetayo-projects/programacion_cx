@@ -108,7 +108,7 @@ export type CanalNotificacion = (typeof CANALES_NOTIFICACION)[number]
 
 // Módulos de la app — usados por Roles y Permisos para controlar el acceso por rol
 export const MODULOS = [
-  'dashboard', 'reportar', 'solicitudes_reportadas', 'solicitudes', 'cirugias_realizadas', 'quirofanos', 'calor', 'reportes',
+  'dashboard', 'reportar', 'reportar_masivo', 'solicitudes_reportadas', 'solicitudes', 'cirugias_realizadas', 'quirofanos', 'calor', 'reportes',
   'logs', 'admin_usuarios', 'admin_catalogos', 'admin_roles',
 ] as const
 export type Modulo = (typeof MODULOS)[number]
@@ -116,6 +116,7 @@ export type Modulo = (typeof MODULOS)[number]
 export const MODULOS_LABEL: Record<Modulo, string> = {
   dashboard: 'Dashboard',
   reportar: 'Reportar cirugía',
+  reportar_masivo: 'Reportar cirugía · Consulta masiva GoMedisys',
   solicitudes_reportadas: 'Solicitudes reportadas',
   solicitudes: 'Gestión de solicitudes',
   cirugias_realizadas: 'Cirugías realizadas',

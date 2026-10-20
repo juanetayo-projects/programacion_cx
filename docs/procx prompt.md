@@ -795,3 +795,140 @@ Se requiere construir una app que permita
 		14.4.- Migración aplicada
 			supabase/migrations/0015_ajustes_ago2026_logs.sql — agrega el
 			módulo `logs` en rol_permisos (constraint + semilla).
+
+	15.- AJUSTES OCTUBRE 2026 — REPORTAR CIRUGÍA: INDIVIDUAL + CONSULTA MASIVA GOMEDISYS (2026-10-20)
+
+		15.1.- Requerimiento
+			"Reportar cirugía" pasa a tener dos sub-opciones (pestañas en la
+			página + sub-menú en el sidebar):
+			a) Reporte individual (/reportar): igual que antes, pero al digitar
+			   el # de ingreso o el documento se consulta GoMedisys
+			   (sql/paciente.sql) y se autocompletan nombre, documento, edad,
+			   fecha de ingreso y EPS. Si el paciente tiene varios ingresos
+			   activos se elige uno. Avisa si el # de ingreso ya tiene una
+			   solicitud abierta (exige confirmar que es otra cirugía).
+			b) Consulta masiva (/reportar/masiva, módulo `reportar_masivo`,
+			   admin y programador): trae todas las cirugías programadas en
+			   GoMedisys en un rango de fechas (por defecto hoy → +7 días), las
+			   muestra en tabla y el usuario marca las que va a gestionar. Al
+			   confirmar se crean las solicitudes YA en estado "procesado"
+			   (con los datos de GoMedisys) y siguen el flujo actual en
+			   "Gestión de solicitudes".
+
+		15.2.- Arquitectura: consultas a GoMedisys vía GitHub Actions
+			Hallazgo: el firewall de la réplica Azure de GoMedisys NO acepta
+			conexiones desde Supabase Edge Functions (AWS, IP dinámicas):
+			`read ECONNRESET` al conectar, tanto con TDS 7 como con TDS 8
+			(strict). Se descartó que fuera Deno: el mismo código en Deno
+			conecta bien desde la red de la clínica. Los runners de GitHub
+			(Azure) sí tienen acceso — es el mismo patrón de mapadecalorurg.
+			Por eso cada consulta es un "trabajo":
+			  1. La app llama a la Edge Function `consulta-gomedisys`
+			     ({ tipo: 'masiva' | 'paciente' | 'detalle', ... }). Valida
+			     rol/permiso, crea la fila en `gomedisys_trabajos` y dispara
+			     `.github/workflows/gomedisys-consulta.yml` (workflow_dispatch
+			     con el id del trabajo).
+			  2. El runner (`scripts/gomedisys/consulta.js`) toma el trabajo,
+			     ejecuta los .sql de la carpeta `sql/` y reporta progreso
+			     (un tramo por día) y resultado con `gm_runner_tomar` /
+			     `gm_runner_actualizar`.
+			  3. La app sigue la fila por Realtime (+ sondeo de respaldo cada
+			     4 s) — src/lib/gomedisys.ts → consultarGoMedisys().
+			Seguridad:
+			  - El runner NO usa la service_role key: se autentica con
+			    GM_RUNNER_KEY (secret de GitHub, aleatoria); en la BD solo se
+			    guarda su hash sha256 (`gomedisys_runner_config`, sin políticas).
+			  - El repositorio es PÚBLICO: el runner solo imprime conteos y
+			    tiempos en el log, nunca datos de pacientes.
+			  - `gomedisys_trabajos` solo la lee quien la pidió (o el admin) y
+			    los resultados se borran a los 2 días (Ley 1581).
+			  - Credenciales de GoMedisys: secrets de GitHub GOMEDISYS_*; el
+			    archivo local db/db_gomedisys.txt quedó en .gitignore.
+			Tiempo de respuesta: el arranque del runner toma ~20-60 s; por eso
+			el indicador muestra las etapas (solicitud enviada → servidor de
+			consulta → consultando GoMedisys → resultados).
+
+		15.3.- Optimización del script masivo (sql/reporte_cirugias_optimizado_6.sql)
+			Medido contra la réplica, mismo rango de 8 días (68 filas):
+			  v5: 679.000 lecturas lógicas · v6: 17.300 (39× menos)
+			  Caché caliente: v5 1,8 s · v6 1,3 s
+			  Caché fría (rangos no consultados, ~300 filas): v5 239 s · v6 64 s
+			Causas en la v5 (subconsultas correlacionadas fila por fila):
+			  - surgReq recorría la tabla completa de solicitudes (27k filas)
+			    por cada programación.
+			  - customAct (respaldo 708) hacía ~54.000 búsquedas, una por cada
+			    evento histórico del paciente.
+			  - ordFecha recorría todas las fórmulas del historial del paciente.
+			  - evt hacía un key lookup de fecha por cada evento del paciente.
+			v6: lote con tablas temporales; primero aísla programaciones y
+			pacientes del rango y luego resuelve cada pieza UNA vez y en bloque
+			por los índices existentes (la réplica no permite crear índices).
+			Las pistas LOOP/HASH JOIN fijan el orden: sin ellas el optimizador
+			llegó a recorrer EHREvents completa (17,7 M filas).
+			Cambios funcionales (validados columna a columna contra la v5: 0
+			diferencias en los datos que la v5 sí traía):
+			  - Completa # de ingreso (45 de 68 filas venían vacías) y
+			    contrato/plan (57 de 68) usando el ingreso de la programación.
+			  - FORMAT() → CONVERT(); rango >= / < (el BETWEEN + 86399999 ms
+			    redondeaba al día siguiente en datetime).
+			  - Respaldo 708: valor del evento más reciente (antes MAX() de
+			    texto, que ordenaba fechas dd/MM/yyyy alfabéticamente).
+			  - Nuevas columnas: idProgramming (llave anti-duplicados),
+			    idPaciente, Quirofano, HoraProgramada, FechaProgramadaISO,
+			    IngresoInferido.
+			sql/paciente.sql: UNION de dos búsquedas por índice en vez de
+			`identifier = @valor OR documentNumber = @valor`, TRY_CAST para
+			documentos alfanuméricos (identifier es numérico) y nuevas
+			columnas idPaciente/Edad/Telefono.
+
+		15.4.- Anti-duplicados entre usuarios concurrentes
+			- Índice único parcial `gomedisys_id_programacion` (excluye
+			  canceladas): la base de datos arbitra la carrera.
+			- `marcar_programaciones_gomedisys(p_items)`: inserta con ON
+			  CONFLICT DO NOTHING y devuelve por fila si quedó para el usuario
+			  o quién la tenía ("ya estaban en gestión por otro usuario, no se
+			  duplicaron").
+			- En pantalla: badge por fila — Disponible / En gestión (SC-xxxx ·
+			  responsable · estado, bloqueada) / Ingreso ya reportado (pide
+			  confirmación) / Cancelada en GoMedisys (bloqueada).
+			- Realtime sobre `solicitudes_cirugia`: si otro usuario marca
+			  mientras se ve la lista, las filas se bloquean en vivo.
+			- Presence: "Fulano también está consultando" y "Fulano lo está
+			  seleccionando" en las filas que otro usuario tiene marcadas.
+			- `nombres_perfiles(uuid[])` (security definer, solo id + nombre):
+			  la RLS de perfiles no deja ver otros perfiles y se necesita el
+			  nombre del responsable.
+
+		15.5.- Indicador de progreso (src/components/ProgresoConsulta.tsx)
+			Overlay con cronómetro (manecilla girando + anillo de avance con
+			%), contador mm:ss, etapas del trabajo, termómetro con franjas en
+			movimiento y un chip por día (pendiente / consultando / listo con
+			# registros / error). También se usa en "Solicitudes reportadas →
+			Consultar GoMedisys"; el reporte individual usa una versión en
+			línea para no bloquear el formulario.
+
+		15.6.- Consulta individual de "Solicitudes reportadas"
+			Antes la hacía la Edge Function (QUERY_PENDIENTE = true). Ahora es
+			el trabajo `detalle` (paciente.sql + programaciones del paciente
+			con la v6) y el mapeo a la solicitud vive en el cliente
+			(procesarSolicitudGoMedisys). Llena nombre, edad, EPS (empareja el
+			contrato con el catálogo), teléfono, procedimiento, boleta,
+			tiempo estimado y los campos *_gomedisys. Bloqueo: marca
+			`gomedisys_resultado = 'CONSULTANDO'` para que dos usuarios no la
+			consulten a la vez (se libera sola a los 10 min).
+
+		15.7.- Migraciones aplicadas
+			- 0016_consulta_masiva_gomedisys.sql: columnas de origen GoMedisys
+			  en solicitudes_cirugia, índice único parcial, módulo
+			  `reportar_masivo`, nombres_perfiles(), marcar_programaciones_gomedisys(),
+			  Realtime de solicitudes_cirugia.
+			- 0017_trabajos_gomedisys.sql: gomedisys_trabajos (+ Realtime),
+			  gomedisys_runner_config, gm_runner_tomar/actualizar.
+
+		15.8.- Configuración pendiente (una sola vez)
+			GITHUB_DISPATCH_TOKEN en Supabase (Edge Functions → Secrets): token
+			fine-grained de GitHub con acceso SOLO al repo
+			juanetayo-projects/programacion_cx y permiso "Actions: Read and
+			write". Sin él la Edge Function responde "Falta configurar
+			GITHUB_DISPATCH_TOKEN". Queda también la función de diagnóstico
+			`gm-ping` (responde 410), que se puede borrar desde el dashboard.

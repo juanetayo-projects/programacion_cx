@@ -1,43 +1,64 @@
-import { createClient } from 'jsr:@supabase/supabase-js@2'
-import sql from 'npm:mssql@10'
+import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2'
 
+// Crea un trabajo de consulta a GoMedisys y dispara el workflow de GitHub
+// Actions que lo ejecuta (.github/workflows/gomedisys-consulta.yml).
+//
+// Por qué no se consulta aquí directamente: el firewall de la réplica Azure de
+// GoMedisys no acepta conexiones desde Supabase (AWS, IP dinámicas); los
+// runners de GitHub (Azure) sí tienen acceso. Ver supabase/migrations/0017.
+//
+// Body: { tipo: 'masiva', desde, hasta } | { tipo: 'paciente', valor } | { tipo: 'detalle', valor, documento }
+// Respuesta: { ok: true, trabajoId } — la app sigue el avance por Realtime
+// sobre gomedisys_trabajos.
+//
+// Secret requerido: GITHUB_DISPATCH_TOKEN (token fine-grained con permiso
+// "Actions: Read and write" sobre el repositorio), como secret de la función
+// o en Supabase Vault.
+
+const REPO = 'juanetayo-projects/programacion_cx'
+const WORKFLOW = 'gomedisys-consulta.yml'
+const RAMA = 'main'
+
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
 const json = (s: number, b: unknown) =>
-  new Response(JSON.stringify(b), { status: s, headers: { 'Content-Type': 'application/json' } })
+  new Response(JSON.stringify(b), { status: s, headers: { ...CORS, 'Content-Type': 'application/json' } })
 
-// TODO: reemplazar por la consulta T-SQL real de GoMedisys que trae nombre,
-// edad, EPS, ubicación, valoración preanestésica, procedimiento, boleta
-// quirúrgica, autorización y tiempo estimado a partir del # de ingreso.
-// Pendiente de credenciales (GOMEDISYS_HOST/PORT/DATABASE/USERNAME/PASSWORD
-// como secrets de Supabase) y del query validado por el cliente.
-const QUERY_PENDIENTE = true
+// Qué módulo debe tener habilitado el rol para cada tipo de consulta
+const MODULO_POR_TIPO: Record<string, string> = {
+  masiva: 'reportar_masivo',
+  paciente: 'reportar',
+  detalle: 'solicitudes_reportadas',
+}
 
-async function consultarGoMedisys(numeroIngreso: string) {
-  if (QUERY_PENDIENTE) {
-    throw new Error('Integración con GoMedisys pendiente de configurar: faltan credenciales y la consulta T-SQL validada.')
+async function tokenGitHub(admin: SupabaseClient) {
+  const env = Deno.env.get('GITHUB_DISPATCH_TOKEN')
+  if (env) return env
+  const { data } = await admin.rpc('get_secret', { secret_name: 'GITHUB_DISPATCH_TOKEN' })
+  return (data as string | null) ?? null
+}
+
+function validarParametros(tipo: string, body: Record<string, unknown>) {
+  const fecha = /^\d{4}-\d{2}-\d{2}$/
+  if (tipo === 'masiva') {
+    const desde = String(body.desde ?? ''), hasta = String(body.hasta ?? '')
+    if (!fecha.test(desde) || !fecha.test(hasta) || hasta < desde) throw new Error('Rango de fechas inválido')
+    const dias = (Date.parse(hasta) - Date.parse(desde)) / 86400000 + 1
+    if (dias > 62) throw new Error('El rango máximo es de 62 días')
+    return { desde, hasta }
   }
-  const cfg = {
-    server: Deno.env.get('GOMEDISYS_HOST')!,
-    port: Number(Deno.env.get('GOMEDISYS_PORT') ?? 1433),
-    database: Deno.env.get('GOMEDISYS_DATABASE')!,
-    user: Deno.env.get('GOMEDISYS_USERNAME')!,
-    password: Deno.env.get('GOMEDISYS_PASSWORD')!,
-    options: { encrypt: true, trustServerCertificate: false },
-  }
-  const pool = await sql.connect(cfg)
-  try {
-    const result = await pool.request()
-      .input('numeroIngreso', sql.VarChar, numeroIngreso)
-      .query('SELECT 1 AS placeholder WHERE 1 = 0') // TODO: query real
-    return result.recordset[0] ?? null
-  } finally {
-    await pool.close()
-  }
+  const valor = String(body.valor ?? '').trim()
+  if (valor.length < 3 || valor.length > 30) throw new Error('Digite entre 3 y 30 caracteres')
+  if (tipo === 'paciente') return { valor }
+  return { valor, documento: String(body.documento ?? '').trim().slice(0, 30) }
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, content-type' } })
-  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+
   const authHeader = req.headers.get('Authorization') ?? ''
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
   const caller = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
@@ -46,69 +67,54 @@ Deno.serve(async (req) => {
   const { data: { user } } = await caller.auth.getUser()
   if (!user) return json(401, { error: 'No autenticado' })
 
-  const { data: perfil } = await admin.from('perfiles').select('rol').eq('id', user.id).single()
-  if (!perfil || !['administrador', 'programador'].includes(perfil.rol)) {
-    return json(403, { error: 'Solo programadores o administradores' })
+  const { data: perfil } = await admin.from('perfiles').select('rol, activo').eq('id', user.id).single()
+  if (!perfil || perfil.activo === false) return json(403, { error: 'Usuario inactivo' })
+
+  const body = await req.json().catch(() => ({})) as Record<string, unknown>
+  const tipo = String(body.tipo ?? '')
+  const modulo = MODULO_POR_TIPO[tipo]
+  if (!modulo) return json(400, { error: 'Tipo de consulta inválido' })
+
+  if (perfil.rol !== 'administrador') {
+    const { data: permiso } = await admin.from('rol_permisos').select('permitido').eq('rol', perfil.rol).eq('modulo', modulo).maybeSingle()
+    if (permiso?.permitido !== true) return json(403, { error: 'Sin permiso para esta consulta' })
   }
 
-  const { solicitudId } = await req.json()
+  let parametros: Record<string, string>
+  try { parametros = validarParametros(tipo, body) } catch (e) { return json(400, { error: (e as Error).message }) }
 
-  // Reclama la solicitud de forma atómica: solo tiene éxito si sigue en estado
-  // reportado/fallido. Esto evita que dos clics (o dos usuarios) disparen la
-  // consulta a GoMedisys al mismo tiempo para el mismo registro — la fila queda
-  // bloqueada por Postgres durante el UPDATE, así que solo una de las llamadas
-  // concurrentes puede reclamarla.
-  const { data: solicitud, error: solError } = await admin
-    .from('solicitudes_cirugia')
-    .update({ gomedisys_consultado_en: new Date().toISOString() })
-    .eq('id', solicitudId)
-    .in('estado', ['reportado', 'fallido'])
-    .select('*')
-    .single()
-  if (solError || !solicitud) {
-    return json(200, { ok: false, error: 'Esta solicitud ya fue procesada o está siendo consultada en este momento por otro usuario. Actualiza la página para ver el estado actual.' })
+  // Doble clic / reintento: si ya hay un trabajo igual de este usuario en curso, se reutiliza
+  const hace3min = new Date(Date.now() - 3 * 60000).toISOString()
+  const { data: enCurso } = await admin.from('gomedisys_trabajos').select('id')
+    .eq('solicitado_por', user.id).eq('tipo', tipo).eq('parametros', JSON.stringify(parametros))
+    .in('estado', ['pendiente', 'despachado', 'en_proceso']).gte('creado_en', hace3min)
+    .order('id', { ascending: false }).limit(1)
+  if (enCurso?.length) return json(200, { ok: true, trabajoId: enCurso[0].id, reutilizado: true })
+
+  const token = await tokenGitHub(admin)
+  if (!token) return json(200, { ok: false, error: 'Falta configurar GITHUB_DISPATCH_TOKEN en Supabase para poder consultar GoMedisys.' })
+
+  const { data: trabajo, error: insErr } = await admin.from('gomedisys_trabajos')
+    .insert({ tipo, parametros, solicitado_por: user.id })
+    .select('id').single()
+  if (insErr || !trabajo) return json(500, { error: insErr?.message ?? 'No se pudo crear el trabajo' })
+
+  const resp = await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/${WORKFLOW}/dispatches`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'programacion-cx',
+    },
+    body: JSON.stringify({ ref: RAMA, inputs: { trabajo_id: String(trabajo.id) } }),
+  })
+  if (!resp.ok) {
+    const detalle = (await resp.text()).slice(0, 300)
+    await admin.from('gomedisys_trabajos').update({ estado: 'error', error: `GitHub ${resp.status}: ${detalle}`, terminado_en: new Date().toISOString() }).eq('id', trabajo.id)
+    return json(200, { ok: false, error: `No se pudo iniciar la consulta en GitHub (${resp.status}).` })
   }
+  await admin.from('gomedisys_trabajos').update({ estado: 'despachado' }).eq('id', trabajo.id).eq('estado', 'pendiente')
 
-  try {
-    const datos = await consultarGoMedisys(solicitud.numero_ingreso)
-    if (!datos) throw new Error('GoMedisys no devolvió datos para ese # de ingreso')
-
-    const { error: updError } = await admin.from('solicitudes_cirugia').update({
-      nombre_paciente: datos.nombre_paciente,
-      edad: datos.edad,
-      eps_id: datos.eps_id,
-      unidad_id: datos.unidad_id,
-      cama: datos.cama,
-      valoracion_preanestesica: datos.valoracion_preanestesica,
-      procedimiento: datos.procedimiento,
-      boleta_quirurgica: datos.boleta_quirurgica,
-      autorizacion_aseguradora: datos.autorizacion_aseguradora,
-      tiempo_estimado_minutos: datos.tiempo_estimado_minutos,
-      gomedisys_consultado_en: new Date().toISOString(),
-      gomedisys_resultado: 'OK',
-      estado: 'procesado',
-    }).eq('id', solicitudId)
-    if (updError) throw updError
-
-    await admin.from('solicitudes_historial').insert({
-      solicitud_id: solicitudId, accion: 'consulta_api', usuario_id: user.id,
-      detalle: { resultado: 'exitoso' },
-    })
-
-    return json(200, { ok: true, estado: 'procesado' })
-  } catch (err) {
-    const mensaje = err instanceof Error ? err.message : String(err)
-    await admin.from('solicitudes_cirugia').update({
-      estado: 'fallido',
-      gomedisys_consultado_en: new Date().toISOString(),
-      gomedisys_resultado: mensaje,
-    }).eq('id', solicitudId)
-
-    await admin.from('solicitudes_historial').insert({
-      solicitud_id: solicitudId, accion: 'consulta_api', usuario_id: user.id,
-      detalle: { resultado: 'fallido', error: mensaje },
-    })
-
-    return json(200, { ok: false, estado: 'fallido', error: mensaje })
-  }
+  return json(200, { ok: true, trabajoId: trabajo.id })
 })

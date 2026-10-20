@@ -1,0 +1,13 @@
+{
+  "name": "programacion-cx-gomedisys-runner",
+  "private": true,
+  "type": "module",
+  "description": "Runner de consultas a GoMedisys para GitHub Actions (ver .github/workflows/gomedisys-consulta.yml)",
+  "scripts": {
+    "start": "node consulta.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.112.3",
+    "mssql": "^11.0.1"
+  }
+}

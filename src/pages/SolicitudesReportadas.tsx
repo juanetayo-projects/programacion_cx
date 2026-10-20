@@ -4,6 +4,8 @@ import { useAuth } from '../lib/auth'
 import { PageHeader, Boton, Modal, Badge, FilterBar, EstadoVacio, Spinner } from '../components/ui'
 import { ESTADOS_LABEL, ESTADOS_COLOR } from '../lib/constantes'
 import { Eye, Zap, Ban, FileWarning, XCircle, Loader2, X } from 'lucide-react'
+import ProgresoConsulta, { type Tramo } from '../components/ProgresoConsulta'
+import { procesarSolicitudGoMedisys, type EstadoTrabajo } from '../lib/gomedisys'
 
 type SolicitudReportada = {
   id: number
@@ -41,6 +43,7 @@ export default function SolicitudesReportadas() {
   const [seleccion, setSeleccion] = useState<SolicitudReportada | null>(null)
   const [modal, setModal] = useState<'' | 'ver' | 'consultar' | 'cancelar'>('')
   const [consultando, setConsultando] = useState<number | null>(null)
+  const [avance, setAvance] = useState<{ estado: EstadoTrabajo; tramos: Tramo[]; inicio: number } | null>(null)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
 
@@ -113,17 +116,24 @@ export default function SolicitudesReportadas() {
 
   async function consultarApi(fila: SolicitudReportada) {
     setConsultando(fila.id)
+    const inicio = Date.now()
+    setAvance({ estado: 'pendiente', tramos: [], inicio })
     try {
-      const { data, error } = await supabase.functions.invoke('consulta-gomedisys', { body: { solicitudId: fila.id } })
-      if (error) throw new Error(error.message)
-      if (data?.ok === false) {
-        alert(`No fue posible consultar GoMedisys:\n\n${data.error}\n\nValida directamente en la aplicación de GoMedisys.`)
+      const r = await procesarSolicitudGoMedisys(fila.id, session!.user.id, (t) =>
+        setAvance({ estado: t.estado, tramos: Array.isArray(t.progreso) ? t.progreso : [], inicio }))
+      if (!r.ok) {
+        alert(`No fue posible consultar GoMedisys:
+
+${r.error}
+
+Valida directamente en la aplicación de GoMedisys.`)
       }
       cargar()
     } catch (e) {
       alert((e as Error).message)
     } finally {
       setConsultando(null)
+      setAvance(null)
     }
   }
 
@@ -296,6 +306,8 @@ export default function SolicitudesReportadas() {
       <Modal open={modal === 'cancelar'} onClose={cerrar} titulo="Cancelar cirugía">
         <ModalCancelarContenido error={error} guardando={guardando} onClose={cerrar} onGuardar={cancelar} />
       </Modal>
+
+      {avance && <ProgresoConsulta tramos={avance.tramos} inicio={avance.inicio} estado={avance.estado} titulo="Consultando paciente en GoMedisys" />}
     </div>
   )
 }

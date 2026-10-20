@@ -1,0 +1,56 @@
+name: "Consulta GoMedisys (bajo demanda)"
+
+# Lo dispara la Edge Function consulta-gomedisys cada vez que un usuario
+# consulta GoMedisys desde la app. Los runners de GitHub (Azure) sí tienen
+# acceso a la réplica de GoMedisys; Supabase no (mismo patrón que mapadecalorurg).
+#
+# El repositorio es público: el script solo imprime conteos y tiempos.
+
+on:
+  workflow_dispatch:
+    inputs:
+      trabajo_id:
+        description: "ID del trabajo en gomedisys_trabajos"
+        required: true
+
+run-name: "Consulta GoMedisys · trabajo ${{ inputs.trabajo_id }}"
+
+permissions:
+  contents: read
+
+jobs:
+  consulta:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout (solo el runner y los .sql)
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            scripts/gomedisys
+            sql
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: scripts/gomedisys/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci --no-audit --no-fund
+        working-directory: ./scripts/gomedisys
+
+      - name: Ejecutar consulta
+        env:
+          TRABAJO_ID:         ${{ inputs.trabajo_id }}
+          GM_RUNNER_KEY:      ${{ secrets.GM_RUNNER_KEY }}
+          GOMEDISYS_HOST:     ${{ secrets.GOMEDISYS_HOST }}
+          GOMEDISYS_PORT:     ${{ secrets.GOMEDISYS_PORT }}
+          GOMEDISYS_DATABASE: ${{ secrets.GOMEDISYS_DATABASE }}
+          GOMEDISYS_USERNAME: ${{ secrets.GOMEDISYS_USERNAME }}
+          GOMEDISYS_PASSWORD: ${{ secrets.GOMEDISYS_PASSWORD }}
+          SUPABASE_URL:       ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY:  ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: node consulta.js
+        working-directory: ./scripts/gomedisys
