@@ -19,6 +19,7 @@ type SolicitudReportada = {
   soporte_url: string | null
   gomedisys_resultado: string | null
   nombre_medico_reporta: string | null
+  origen: string
   especialidades: { nombre: string } | null
   perfiles: { nombre: string } | null
 }
@@ -51,7 +52,7 @@ export default function SolicitudesReportadas() {
     setCargando(true)
     let q = supabase
       .from('solicitudes_cirugia')
-      .select('id, numero_ingreso, documento_paciente, especialidad_id, estado, fecha_reporte, nombre_paciente, subespecialidad, soporte_url, gomedisys_resultado, nombre_medico_reporta, especialidades(nombre), perfiles!solicitudes_cirugia_reportado_por_fkey(nombre)')
+      .select('id, numero_ingreso, documento_paciente, especialidad_id, estado, fecha_reporte, nombre_paciente, subespecialidad, soporte_url, gomedisys_resultado, nombre_medico_reporta, origen, especialidades(nombre), perfiles!solicitudes_cirugia_reportado_por_fkey(nombre)')
       .in('estado', ['reportado', 'fallido'])
       .order('fecha_reporte', { ascending: false })
     if (filtroEstado) q = q.eq('estado', filtroEstado)
@@ -226,7 +227,12 @@ Valida directamente en la aplicación de GoMedisys.`)
                     <td className="px-4 py-2.5 text-slate-500">{new Date(f.fecha_reporte).toLocaleDateString('es-CO')}</td>
                     <td className="px-4 py-2.5 text-slate-500">{f.numero_ingreso}</td>
                     <td className="px-4 py-2.5">{f.documento_paciente}</td>
-                    <td className="px-4 py-2.5">{f.nombre_paciente ?? '—'}</td>
+                    <td className="px-4 py-2.5">
+                      {f.nombre_paciente ?? '—'}
+                      {f.origen === 'masiva' && (
+                        <div className="mt-0.5"><span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium text-sky-700">Consulta masiva GoMedisys</span></div>
+                      )}
+                    </td>
                     <td className="px-4 py-2.5">
                       <div>{f.especialidades?.nombre}</div>
                       <div className="text-xs text-slate-400">Dr(a). {medicoDe(f)}</div>

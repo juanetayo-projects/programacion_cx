@@ -937,3 +937,21 @@ Se requiere construir una app que permita
 			write". Sin él la Edge Function responde "Falta configurar
 			GITHUB_DISPATCH_TOKEN". Queda también la función de diagnóstico
 			`gm-ping` (responde 410), que se puede borrar desde el dashboard.
+
+		15.9.- Ajustes tras las primeras pruebas (2026-10-20)
+			a) Reporte individual: además del paciente, la consulta trae sus
+			   programaciones quirúrgicas (v6 con @idPaciente) y muestra los
+			   mismos datos de la consulta masiva (fecha/hora, quirófano,
+			   estado, procedimientos, diagnóstico, médicos que ordenan y
+			   operan, contrato/plan, boleta). Si tiene varias, se elige en un
+			   selector. Propone la especialidad y el médico, guarda los campos
+			   *_gomedisys y la llave gomedisys_id_programacion, y avisa si esa
+			   programación ya está en gestión.
+			b) Consulta masiva: los pacientes marcados entran a "Solicitudes
+			   reportadas" (estado 'reportado', migración 0018), con el
+			   especialista que ordena como médico que reporta y la etiqueta
+			   "Consulta masiva GoMedisys". Desde ahí siguen el flujo normal
+			   (Consultar GoMedisys → Gestión de solicitudes).
+			c) Los pacientes ya en gestión NO vuelven a mostrarse en la consulta
+			   masiva: la vista por defecto es "Disponibles"; la tarjeta "Ya en
+			   gestión" conserva el conteo y permite verlos si se necesita.

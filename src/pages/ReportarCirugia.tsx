@@ -3,9 +3,12 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { PageHeader, Boton, Modal, Spinner } from '../components/ui'
 import ReportarTabs from '../components/ReportarTabs'
-import { consultarGoMedisys, type PacienteGM, type EstadoTrabajo } from '../lib/gomedisys'
+import {
+  consultarGoMedisys, programacionVigente, camposDeProgramacion, emparejarCatalogo,
+  type PacienteGM, type ProgramacionGM, type EstadoTrabajo,
+} from '../lib/gomedisys'
 import { SUBESPECIALIDADES_ORTOPEDIA, ESTADOS_LABEL, type Estado } from '../lib/constantes'
-import { UploadCloud, CheckCircle2, Search, UserRound, AlertTriangle, X } from 'lucide-react'
+import { UploadCloud, CheckCircle2, Search, UserRound, AlertTriangle, X, CalendarClock } from 'lucide-react'
 
 type Especialidad = { id: number; nombre: string }
 
@@ -34,6 +37,9 @@ export default function ReportarCirugia() {
   const [errorBusqueda, setErrorBusqueda] = useState('')
   const [opciones, setOpciones] = useState<PacienteGM[] | null>(null)
   const [paciente, setPaciente] = useState<PacienteGM | null>(null)
+  // Programaciones quirúrgicas del paciente en GoMedisys (mismos datos de la consulta masiva)
+  const [programaciones, setProgramaciones] = useState<ProgramacionGM[]>([])
+  const [programacion, setProgramacion] = useState<ProgramacionGM | null>(null)
   const ultimaBusqueda = useRef('')
 
   // Anti-duplicados: solicitudes abiertas con el mismo # de ingreso
@@ -55,22 +61,32 @@ export default function ReportarCirugia() {
     })
   }, [])
 
-  // Cada vez que cambia el # de ingreso se revisa si ya hay una solicitud abierta
+  // Cada vez que cambia el # de ingreso (o la programación elegida) se revisa si
+  // ya hay una solicitud abierta con ese ingreso o esa programación de GoMedisys
+  const idProgramacion = programacion?.idProgramming ?? null
   useEffect(() => {
     setConfirmaDuplicado(false)
-    const ingreso = numeroIngreso.trim()
-    if (!ingreso) { setDuplicadas([]); return }
+    const ingreso = numeroIngreso.trim().replace(/[^\w-]/g, '')
+    if (!ingreso && !idProgramacion) { setDuplicadas([]); return }
     const t = setTimeout(async () => {
+      const filtros = [
+        ...(ingreso ? [`numero_ingreso.eq.${ingreso}`] : []),
+        ...(idProgramacion ? [`gomedisys_id_programacion.eq.${idProgramacion}`] : []),
+      ]
       const { data } = await supabase
         .from('solicitudes_cirugia')
         .select('id, estado, fecha_reporte')
-        .eq('numero_ingreso', ingreso)
+        .or(filtros.join(','))
         .not('estado', 'in', `(${ESTADOS_CERRADOS.join(',')})`)
         .order('id', { ascending: false })
       setDuplicadas((data ?? []) as SolicitudActiva[])
     }, 400)
     return () => clearTimeout(t)
-  }, [numeroIngreso])
+  }, [numeroIngreso, idProgramacion])
+
+  const programacionesPaciente = paciente
+    ? programaciones.filter((x) => String(x.idPaciente) === String(paciente.idPaciente))
+    : []
 
   const especialidadSeleccionada = especialidades.find((e) => String(e.id) === especialidadId)
   const esOrtopedia = especialidadSeleccionada?.nombre === 'Ortopedia'
@@ -86,15 +102,17 @@ export default function ReportarCirugia() {
     setErrorBusqueda('')
     setOpciones(null)
     try {
-      const data = await consultarGoMedisys<{ filas: PacienteGM[] }>('paciente', { valor: v }, (t) => setEtapaBusqueda(t.estado))
+      const data = await consultarGoMedisys<{ filas: PacienteGM[]; programaciones?: ProgramacionGM[] }>('paciente', { valor: v }, (t) => setEtapaBusqueda(t.estado))
       // Si mientras tanto el usuario cambió el dato, se descarta este resultado
       if (ultimaBusqueda.current !== v) return
       const filas = (data?.filas ?? []) as PacienteGM[]
+      const progs = data?.programaciones ?? []
+      setProgramaciones(progs)
       if (filas.length === 0) {
         setErrorBusqueda('GoMedisys no encontró un ingreso activo con ese número. Verifique el dato o continúe el reporte manualmente.')
         setPaciente(null)
       } else if (filas.length === 1) {
-        elegir(filas[0])
+        elegir(filas[0], progs)
       } else {
         setOpciones(filas)
       }
@@ -105,16 +123,29 @@ export default function ReportarCirugia() {
     }
   }
 
-  function elegir(p: PacienteGM) {
+  function elegir(p: PacienteGM, progs: ProgramacionGM[] = programaciones) {
     setPaciente(p)
     setOpciones(null)
     setNumeroIngreso(String(p.NoIngreso))
     setDocumento(String(p.NoDocumento ?? ''))
     ultimaBusqueda.current = String(p.NoIngreso)
+    const prog = programacionVigente(progs.filter((x) => String(x.idPaciente) === String(p.idPaciente)), p.NoIngreso)
+    aplicarProgramacion(prog)
+  }
+
+  // Al elegir una programación se proponen especialidad y médico (si están vacíos)
+  function aplicarProgramacion(prog: ProgramacionGM | null) {
+    setProgramacion(prog)
+    if (!prog) return
+    const esp = emparejarCatalogo(prog.EspecialidadOpera, especialidades, ['CIRUGIA'])
+    if (esp) setEspecialidadId((actual) => actual || String(esp))
+    if (prog.EspecialistaOrdena) setNombreMedico((actual) => actual || String(prog.EspecialistaOrdena))
   }
 
   function limpiarPaciente() {
     setPaciente(null)
+    setProgramacion(null)
+    setProgramaciones([])
     setOpciones(null)
     setErrorBusqueda('')
     ultimaBusqueda.current = ''
@@ -139,9 +170,8 @@ export default function ReportarCirugia() {
 
       // Si el paciente se validó en GoMedisys, sus datos viajan con el reporte
       const coincide = paciente && String(paciente.NoIngreso) === numeroIngreso.trim()
-      const { data, error: insErr } = await supabase
-        .from('solicitudes_cirugia')
-        .insert({
+      const prog = coincide ? programacion : null
+      const fila = {
           numero_ingreso: numeroIngreso.trim(),
           documento_paciente: documento.trim(),
           especialidad_id: Number(especialidadId),
@@ -157,11 +187,20 @@ export default function ReportarCirugia() {
             eps_gomedisys: paciente.contrato,
             gomedisys_id_paciente: paciente.idPaciente,
           } : {}),
-        })
-        .select('id')
-        .single()
-
-      if (insErr) throw insErr
+          ...(prog ? {
+            ...camposDeProgramacion(prog),
+            eps_gomedisys: prog.ContratoIngresoCirugia ?? paciente?.contrato ?? null,
+            gomedisys_id_programacion: prog.idProgramming,
+          } : {}),
+        }
+      let { data, error: insErr } = await supabase.from('solicitudes_cirugia').insert(fila).select('id').single()
+      // Si esa programación ya está en gestión en otra solicitud (y el usuario
+      // confirmó que es otra cirugía), se guarda sin la llave de programación
+      if (insErr?.code === '23505' && prog) {
+        ;({ data, error: insErr } = await supabase.from('solicitudes_cirugia')
+          .insert({ ...fila, gomedisys_id_programacion: null }).select('id').single())
+      }
+      if (insErr || !data) throw insErr ?? new Error('No se pudo registrar el reporte')
       setIdCreado(data.id)
       setNumeroIngreso(''); setDocumento(''); setEspecialidadId(''); setSubespecialidad(''); setNombreMedico(''); setArchivo(null)
       limpiarPaciente()
@@ -175,7 +214,7 @@ export default function ReportarCirugia() {
   const claseInput = 'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0D2D6B] focus:outline-none focus:ring-2 focus:ring-[#0D2D6B]/20'
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-3xl">
       <ReportarTabs />
       <PageHeader titulo="Reportar cirugía" subtitulo={`Reportado por: ${perfil?.nombre ?? ''}`} />
 
@@ -282,7 +321,52 @@ export default function ReportarCirugia() {
                   </div>
                 )}
                 <div className="col-span-2"><span className="text-slate-500">EPS / contrato:</span> {paciente.contrato ?? '—'}</div>
+                {paciente.Telefono && <div className="col-span-2"><span className="text-slate-500">Teléfono:</span> {paciente.Telefono}</div>}
               </div>
+            </div>
+
+            {/* Programación quirúrgica en GoMedisys: mismos datos de la consulta masiva */}
+            <div className="mt-3 rounded-lg border border-emerald-200 bg-white/70 p-3">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[#0D2D6B]">
+                  <CalendarClock size={14} /> Programación en GoMedisys
+                </div>
+                {programacionesPaciente.length > 1 && (
+                  <select
+                    value={programacion?.idProgramming ?? ''}
+                    onChange={(e) => aplicarProgramacion(programacionesPaciente.find((x) => String(x.idProgramming) === e.target.value) ?? null)}
+                    className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                  >
+                    {programacionesPaciente.map((x) => (
+                      <option key={x.idProgramming} value={x.idProgramming}>
+                        {x.FechaProgramada} {x.HoraProgramada} · {x.Estado ?? '—'}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              {!programacion ? (
+                <p className="text-sm text-slate-500">El paciente no tiene cirugías programadas en GoMedisys (últimos 90 días o a futuro).</p>
+              ) : (
+                <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2">
+                  <Dato etiqueta="Fecha / hora programada" valor={`${programacion.FechaProgramada ?? '—'} ${programacion.HoraProgramada ?? ''}`} />
+                  <Dato etiqueta="Quirófano" valor={programacion.Quirofano} />
+                  <Dato etiqueta="Estado en GoMedisys" valor={programacion.Estado} />
+                  <Dato etiqueta="Tipo de orden" valor={programacion.TipoOrden} />
+                  <Dato etiqueta="Procedimientos programados" valor={programacion.ProcedimientosProgramados} ancho />
+                  <Dato etiqueta="Diagnóstico preoperatorio" valor={programacion.DiagnosticoPreoperatorio} ancho />
+                  <Dato etiqueta="Especialista que ordena" valor={programacion.EspecialistaOrdena} />
+                  <Dato etiqueta="Fecha de ordenamiento" valor={programacion.FechaOrdenamiento} />
+                  <Dato etiqueta="Especialista que opera" valor={programacion.EspecialistaOpera} />
+                  <Dato etiqueta="Especialidad que opera" valor={programacion.EspecialidadOpera} />
+                  <Dato etiqueta="Contrato del ingreso" valor={programacion.ContratoIngresoCirugia} />
+                  <Dato etiqueta="Plan (aseguradora)" valor={programacion['Plan(Aseguradora)']} />
+                  <Dato etiqueta="Duración boleta" valor={programacion.DuracionBoleta != null && programacion.DuracionBoleta !== '' ? `${programacion.DuracionBoleta} min` : null} />
+                  <Dato etiqueta="Prioridad / destino" valor={[programacion.PrioridadBoleta, programacion.DestinoBoleta].filter(Boolean).join(' · ') || null} />
+                  <Dato etiqueta="Descripción boleta" valor={programacion['Descripción Boleta']} ancho />
+                  <Dato etiqueta="Anotaciones boleta" valor={programacion['Anotaciones Boleta']} ancho />
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -292,7 +376,7 @@ export default function ReportarCirugia() {
             <div className="flex items-start gap-2">
               <AlertTriangle size={16} className="mt-0.5 shrink-0" />
               <div>
-                Este # de ingreso ya tiene {duplicadas.length === 1 ? 'una solicitud abierta' : `${duplicadas.length} solicitudes abiertas`}:{' '}
+                Este paciente (# de ingreso o programación de GoMedisys) ya tiene {duplicadas.length === 1 ? 'una solicitud abierta' : `${duplicadas.length} solicitudes abiertas`}:{' '}
                 {duplicadas.map((d) => `SC-${String(d.id).padStart(6, '0')} (${ESTADOS_LABEL[d.estado as Estado] ?? d.estado})`).join(', ')}.
                 <label className="mt-2 flex items-center gap-2 font-medium">
                   <input type="checkbox" checked={confirmaDuplicado} onChange={(e) => setConfirmaDuplicado(e.target.checked)} />
@@ -376,6 +460,15 @@ export default function ReportarCirugia() {
           <Boton onClick={() => setIdCreado(null)}>Aceptar</Boton>
         </div>
       </Modal>
+    </div>
+  )
+}
+
+function Dato({ etiqueta, valor, ancho }: { etiqueta: string; valor: string | number | null | undefined; ancho?: boolean }) {
+  return (
+    <div className={ancho ? 'sm:col-span-2' : undefined}>
+      <span className="text-slate-500">{etiqueta}:</span>{' '}
+      <span className="whitespace-pre-line text-slate-800">{valor === null || valor === undefined || valor === '' ? '—' : valor}</span>
     </div>
   )
 }

@@ -60,7 +60,7 @@ export default function ConsultaMasiva() {
   const [otros, setOtros] = useState<Presencia[]>([])
   const [seleccion, setSeleccion] = useState<Set<number>>(new Set())
 
-  const [vista, setVista] = useState<'todos' | 'disponibles' | 'gestion'>('todos')
+  const [vista, setVista] = useState<'todos' | 'disponibles' | 'gestion'>('disponibles')
   const [filtroEstadoGM, setFiltroEstadoGM] = useState('')
   const [busqueda, setBusqueda] = useState('')
 
@@ -171,6 +171,7 @@ export default function ConsultaMasiva() {
     setErrores([])
     setFilas(null)
     setSeleccion(new Set())
+    setVista('disponibles')
     setTramos(dias.map((d) => ({ etiqueta: ddmm(d), estado: 'pendiente' })))
     setEstadoTrabajo('pendiente')
     setInicio(Date.now())
@@ -311,7 +312,7 @@ export default function ConsultaMasiva() {
       <ReportarTabs />
       <PageHeader
         titulo="Consulta masiva GoMedisys"
-        subtitulo="Pacientes con cirugía programada en GoMedisys: márquelos para iniciar su gestión"
+        subtitulo="Pacientes con cirugía programada en GoMedisys: los marcados pasan a Solicitudes reportadas"
         acciones={otros.length > 0 ? (
           <span className="flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800" title={otros.map((o) => o.nombre).join(', ')}>
             <Users size={14} /> {otros.length === 1 ? `${otros[0].nombre} también está consultando` : `${otros.length} usuarios más están consultando`}
@@ -374,13 +375,13 @@ export default function ConsultaMasiva() {
           <div className="mb-3 grid grid-cols-2 gap-3 md:grid-cols-4">
             <button onClick={() => setVista('todos')} className="text-left"><MetricCard titulo="Programaciones" valor={totales.total} sub={duracion != null ? `Consultadas en ${(duracion / 1000).toFixed(1)} s` : undefined} icono={<DatabaseZap size={18} className="opacity-70" />} /></button>
             <button onClick={() => setVista('disponibles')} className="text-left"><MetricCard titulo="Disponibles" valor={totales.disponibles} sub="Sin gestión en la app" icono={<CheckCircle2 size={18} className="opacity-70" />} /></button>
-            <button onClick={() => setVista('gestion')} className="text-left"><MetricCard titulo="Ya en gestión" valor={totales.gestion} sub="Tomadas por algún usuario" icono={<Lock size={18} className="opacity-70" />} /></button>
+            <button onClick={() => setVista('gestion')} className="text-left"><MetricCard titulo="Ya en gestión" valor={totales.gestion} sub="Ocultos de la lista · clic para verlos" icono={<Lock size={18} className="opacity-70" />} /></button>
             <MetricCard titulo="Seleccionadas" valor={seleccion.size} sub="Listas para marcar" icono={<ListChecks size={18} className="opacity-70" />} />
           </div>
 
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div className="neu-inset inline-flex gap-1 p-1 text-sm">
-              {([['todos', 'Todos'], ['disponibles', 'Disponibles'], ['gestion', 'En gestión']] as const).map(([k, l]) => (
+              {([['disponibles', 'Disponibles'], ['gestion', 'Ya en gestión'], ['todos', 'Todos']] as const).map(([k, l]) => (
                 <button key={k} onClick={() => setVista(k)} className={`rounded-lg px-3 py-1 ${vista === k ? 'bg-[#0D2D6B] text-white' : 'text-[#0D2D6B]'}`}>{l}</button>
               ))}
             </div>
@@ -410,7 +411,9 @@ export default function ConsultaMasiva() {
                 </thead>
                 <tbody>
                   {visibles.length === 0 ? (
-                    <tr><td colSpan={10}><EstadoVacio titulo="Sin resultados" descripcion="No hay programaciones para los filtros seleccionados" /></td></tr>
+                    <tr><td colSpan={10}><EstadoVacio titulo="Sin resultados" descripcion={vista === 'disponibles' && totales.gestion > 0
+                      ? `No quedan pacientes disponibles: ${totales.gestion} ya están en gestión.`
+                      : 'No hay programaciones para los filtros seleccionados'} /></td></tr>
                   ) : visibles.map((f) => {
                     const s = situacion(f)
                     const puede = seleccionable(s)
@@ -505,8 +508,9 @@ export default function ConsultaMasiva() {
       {/* Confirmación de la marcación */}
       <Modal open={modalMarcar} onClose={() => !marcando && setModalMarcar(false)} titulo={`Marcar ${seleccionadas.length} paciente(s) para gestión`} ancho="max-w-3xl" cerrableFuera={false}>
         <p className="mb-3 text-sm text-slate-600">
-          Se crearán las solicitudes con los datos de GoMedisys ya cargados (estado <b>Procesado</b>) y pasarán a
-          <b> Gestión de solicitudes</b>. Confirme la especialidad de cada paciente:
+          Se crearán las solicitudes con los datos de GoMedisys ya cargados (estado <b>Reportado</b>) y pasarán a
+          <b> Solicitudes reportadas</b>. Dejarán de aparecer en esta consulta para todos los usuarios.
+          Confirme la especialidad de cada paciente:
         </p>
         <div className="mb-3 flex items-center gap-2 text-sm">
           <span className="text-slate-500">Aplicar a todos:</span>
@@ -575,7 +579,7 @@ export default function ConsultaMasiva() {
           )}
           <div className="flex justify-end gap-2 pt-1">
             <Boton variante="secundario" onClick={() => setResultado(null)}>Seguir marcando</Boton>
-            <Boton onClick={() => navigate('/solicitudes')} className="flex items-center gap-2">Ir a Gestión de solicitudes <ArrowRight size={15} /></Boton>
+            <Boton onClick={() => navigate('/solicitudes-reportadas')} className="flex items-center gap-2">Ir a Solicitudes reportadas <ArrowRight size={15} /></Boton>
           </div>
         </div>
       </Modal>

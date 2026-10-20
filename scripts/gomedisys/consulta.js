@@ -10,7 +10,8 @@
 //
 // Tipos de trabajo:
 //   masiva   { desde, hasta }   sql/reporte_cirugias_optimizado_6.sql, un día por llamada (3 en paralelo)
-//   paciente { valor }          sql/paciente.sql (autocompletado del reporte individual; activos y, si no hay, cualquier estado)
+//   paciente { valor }          sql/paciente.sql (autocompletado del reporte individual; activos y, si no hay,
+//                               cualquier estado) + programaciones del paciente con la v6
 //   detalle  { valor, documento } paciente.sql + programaciones del paciente (consulta de una solicitud reportada)
 
 import sql from 'mssql'
@@ -134,12 +135,20 @@ async function main() {
       console.log(`Total: ${filas.length} filas en ${ms} ms (${fallas.length} días con error)`)
       await actualizar(progreso, { estado: 'listo', resultado: { filas, fallas, ms } })
     } else if (trabajo.tipo === 'paciente') {
-      progreso = [{ etiqueta: 'Paciente', estado: 'consultando' }]
+      // Paciente + sus programaciones quirúrgicas (para mostrar en el reporte
+      // individual los mismos datos que trae la consulta masiva)
+      progreso = [{ etiqueta: 'Paciente', estado: 'consultando' }, { etiqueta: 'Programación', estado: 'pendiente' }]
       await actualizar(progreso)
       const filas = limpiar(await paciente(trabajo.parametros.valor ?? ''))
-      progreso = [{ etiqueta: 'Paciente', estado: 'listo', filas: filas.length, ms: Date.now() - t0 }]
-      console.log(`Paciente: ${filas.length} filas en ${Date.now() - t0} ms`)
-      await actualizar(progreso, { estado: 'listo', resultado: { filas } })
+      progreso[0] = { etiqueta: 'Paciente', estado: 'listo', filas: filas.length }
+      progreso[1].estado = 'consultando'
+      await actualizar(progreso)
+      const idsPaciente = [...new Set(filas.map((f) => f.idPaciente))].slice(0, 3)
+      const programaciones = []
+      for (const id of idsPaciente) programaciones.push(...limpiar(await masiva(null, null, id)))
+      progreso[1] = { etiqueta: 'Programación', estado: 'listo', filas: programaciones.length }
+      console.log(`Paciente: ${filas.length} ingresos, ${programaciones.length} programaciones en ${Date.now() - t0} ms`)
+      await actualizar(progreso, { estado: 'listo', resultado: { filas, programaciones } })
     } else if (trabajo.tipo === 'detalle') {
       progreso = [{ etiqueta: 'Paciente', estado: 'consultando' }, { etiqueta: 'Programación', estado: 'pendiente' }]
       await actualizar(progreso)
