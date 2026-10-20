@@ -10,7 +10,7 @@
 //
 // Tipos de trabajo:
 //   masiva   { desde, hasta }   sql/reporte_cirugias_optimizado_6.sql, un día por llamada (3 en paralelo)
-//   paciente { valor }          sql/paciente.sql (autocompletado del reporte individual)
+//   paciente { valor }          sql/paciente.sql (autocompletado del reporte individual; activos y, si no hay, cualquier estado)
 //   detalle  { valor, documento } paciente.sql + programaciones del paciente (consulta de una solicitud reportada)
 
 import sql from 'mssql'
@@ -82,8 +82,14 @@ async function main() {
   }).connect()
   console.log(`Conectado a GoMedisys en ${Date.now() - t0} ms`)
 
-  const paciente = async (valor) =>
-    (await pool.request().input('valor', sql.VarChar(30), String(valor).trim()).query(sqlPaciente)).recordset
+  const pacienteSegun = async (valor, soloActivos) =>
+    (await pool.request().input('valor', sql.VarChar(30), String(valor).trim())
+      .input('soloActivos', sql.Bit, soloActivos).query(sqlPaciente)).recordset
+  // Primero ingresos activos; si no hay (ambulatorio con ingreso ya cerrado), cualquier ingreso
+  const paciente = async (valor) => {
+    const activos = await pacienteSegun(valor, 1)
+    return activos.length ? activos : pacienteSegun(valor, 0)
+  }
   const masiva = async (desde, hasta, idPaciente) =>
     (await pool.request().input('desde', sql.Date, desde).input('hasta', sql.Date, hasta)
       .input('idPaciente', sql.Int, idPaciente).query(sqlMasiva)).recordset

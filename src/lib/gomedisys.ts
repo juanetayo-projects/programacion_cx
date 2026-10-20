@@ -30,6 +30,8 @@ export type PacienteGM = {
   idPaciente: number
   Edad: number | null
   Telefono: string | null
+  /** false = ingreso no activo (p. ej. ambulatorio ya cerrado); solo llega si no hubo ingresos activos */
+  Activo: boolean | number | null
 }
 
 /** Fila de sql/reporte_cirugias_optimizado_6.sql */

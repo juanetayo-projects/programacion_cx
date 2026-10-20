@@ -241,7 +241,7 @@ export default function ReportarCirugia() {
 
         {opciones && (
           <div className="rounded-xl border border-sky-200 bg-sky-50/60 p-3">
-            <p className="mb-2 text-sm font-medium text-[#0D2D6B]">El paciente tiene varios ingresos activos. Seleccione uno:</p>
+            <p className="mb-2 text-sm font-medium text-[#0D2D6B]">El paciente tiene varios ingresos. Seleccione uno:</p>
             <div className="space-y-1.5">
               {opciones.map((o) => (
                 <button
@@ -250,7 +250,7 @@ export default function ReportarCirugia() {
                   onClick={() => elegir(o)}
                   className="flex w-full items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-left text-sm shadow-sm hover:ring-2 hover:ring-[#0D2D6B]/30"
                 >
-                  <span><b>Ingreso {String(o.NoIngreso)}</b> · {o.Paciente}</span>
+                  <span><b>Ingreso {String(o.NoIngreso)}</b> · {o.Paciente}{!o.Activo && <span className="ml-1 text-xs text-amber-600">(no activo)</span>}</span>
                   <span className="text-xs text-slate-500">{o.FechaHoraIngreso} · {o.contrato ?? 'Sin contrato'}</span>
                 </button>
               ))}
@@ -276,6 +276,11 @@ export default function ReportarCirugia() {
                 <div><span className="text-slate-500">Edad:</span> {paciente.Edad ?? '—'} años</div>
                 <div><span className="text-slate-500">Ingreso:</span> {String(paciente.NoIngreso)}</div>
                 <div><span className="text-slate-500">Fecha ingreso:</span> {paciente.FechaHoraIngreso ?? '—'}</div>
+                {!paciente.Activo && (
+                  <div className="col-span-2 flex items-center gap-1 text-xs font-medium text-amber-700">
+                    <AlertTriangle size={12} /> El ingreso no está activo en GoMedisys (p. ej. ambulatorio ya cerrado). Verifique que sea el correcto.
+                  </div>
+                )}
                 <div className="col-span-2"><span className="text-slate-500">EPS / contrato:</span> {paciente.contrato ?? '—'}</div>
               </div>
             </div>

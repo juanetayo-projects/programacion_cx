@@ -879,7 +879,12 @@ Se requiere construir una app que permita
 			sql/paciente.sql: UNION de dos búsquedas por índice en vez de
 			`identifier = @valor OR documentNumber = @valor`, TRY_CAST para
 			documentos alfanuméricos (identifier es numérico) y nuevas
-			columnas idPaciente/Edad/Telefono.
+			columnas idPaciente/Edad/Telefono/Activo. Parámetro @soloActivos:
+			de 68 programaciones medidas, solo 33 ingresos estaban activos
+			(32 en estado 4, ambulatorios ya cerrados). El runner busca primero
+			activos y, si no hay, cualquier ingreso de la clínica (15 de 15
+			encontrados vs 8 de 15 solo-activos); la pantalla avisa "ingreso no
+			activo".
 
 		15.4.- Anti-duplicados entre usuarios concurrentes
 			- Índice único parcial `gomedisys_id_programacion` (excluye
