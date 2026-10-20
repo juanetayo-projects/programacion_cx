@@ -947,11 +947,11 @@ Se requiere construir una app que permita
 			   selector. Propone la especialidad y el médico, guarda los campos
 			   *_gomedisys y la llave gomedisys_id_programacion, y avisa si esa
 			   programación ya está en gestión.
-			b) Consulta masiva: los pacientes marcados entran a "Solicitudes
-			   reportadas" (estado 'reportado', migración 0018), con el
-			   especialista que ordena como médico que reporta y la etiqueta
-			   "Consulta masiva GoMedisys". Desde ahí siguen el flujo normal
-			   (Consultar GoMedisys → Gestión de solicitudes).
+			b) Consulta masiva: los pacientes marcados pasan directo a "Gestión
+			   de solicitudes" (estado 'procesado'), con el especialista que
+			   ordena como médico que reporta. (La migración 0018 los enviaba a
+			   "Solicitudes reportadas"; el cliente pidió revertirlo y la 0019
+			   deja 'procesado'.)
 			c) Los pacientes ya en gestión NO vuelven a mostrarse en la consulta
 			   masiva: la vista por defecto es "Disponibles"; la tarjeta "Ya en
 			   gestión" conserva el conteo y permite verlos si se necesita.

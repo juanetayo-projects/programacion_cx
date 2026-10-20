@@ -312,7 +312,7 @@ export default function ConsultaMasiva() {
       <ReportarTabs />
       <PageHeader
         titulo="Consulta masiva GoMedisys"
-        subtitulo="Pacientes con cirugía programada en GoMedisys: los marcados pasan a Solicitudes reportadas"
+        subtitulo="Pacientes con cirugía programada en GoMedisys: los marcados pasan a Gestión de solicitudes"
         acciones={otros.length > 0 ? (
           <span className="flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800" title={otros.map((o) => o.nombre).join(', ')}>
             <Users size={14} /> {otros.length === 1 ? `${otros[0].nombre} también está consultando` : `${otros.length} usuarios más están consultando`}
@@ -508,8 +508,8 @@ export default function ConsultaMasiva() {
       {/* Confirmación de la marcación */}
       <Modal open={modalMarcar} onClose={() => !marcando && setModalMarcar(false)} titulo={`Marcar ${seleccionadas.length} paciente(s) para gestión`} ancho="max-w-3xl" cerrableFuera={false}>
         <p className="mb-3 text-sm text-slate-600">
-          Se crearán las solicitudes con los datos de GoMedisys ya cargados (estado <b>Reportado</b>) y pasarán a
-          <b> Solicitudes reportadas</b>. Dejarán de aparecer en esta consulta para todos los usuarios.
+          Se crearán las solicitudes con los datos de GoMedisys ya cargados (estado <b>Procesado</b>) y pasarán a
+          <b> Gestión de solicitudes</b>. Dejarán de aparecer en esta consulta para todos los usuarios.
           Confirme la especialidad de cada paciente:
         </p>
         <div className="mb-3 flex items-center gap-2 text-sm">
@@ -579,7 +579,7 @@ export default function ConsultaMasiva() {
           )}
           <div className="flex justify-end gap-2 pt-1">
             <Boton variante="secundario" onClick={() => setResultado(null)}>Seguir marcando</Boton>
-            <Boton onClick={() => navigate('/solicitudes-reportadas')} className="flex items-center gap-2">Ir a Solicitudes reportadas <ArrowRight size={15} /></Boton>
+            <Boton onClick={() => navigate('/solicitudes')} className="flex items-center gap-2">Ir a Gestión de solicitudes <ArrowRight size={15} /></Boton>
           </div>
         </div>
       </Modal>
