@@ -46,6 +46,18 @@ export function TituloEnHeader({ titulo, subtitulo, children }: { titulo: string
   )
 }
 
+// --- Campo de filtro con la etiqueta a la izquierda (ahorra una línea de alto) ---
+export const CLASE_CAMPO = 'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm focus:border-[#0D2D6B] focus:outline-none focus:ring-2 focus:ring-[#0D2D6B]/20'
+
+export function CampoLinea({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
+  return (
+    <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+      <span className="whitespace-nowrap">{etiqueta}</span>
+      {children}
+    </label>
+  )
+}
+
 // --- Encabezado de página ---
 export function PageHeader({ titulo, subtitulo, acciones }: { titulo: string; subtitulo?: string; acciones?: ReactNode }) {
   return (

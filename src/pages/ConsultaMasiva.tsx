@@ -2,14 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
-import { TituloEnHeader, Boton, Modal, Badge, EstadoVacio } from '../components/ui'
+import { TituloEnHeader, CampoLinea, CLASE_CAMPO, Boton, Modal, Badge, EstadoVacio } from '../components/ui'
 import ReportarTabs from '../components/ReportarTabs'
+import { PanelLateral, Grupo, Dato } from '../components/PanelLateral'
 import ProgresoConsulta, { type Tramo } from '../components/ProgresoConsulta'
 import { consultarGoMedisys, emparejarCatalogo as emparejar, normalizar, camposDeProgramacion, type ProgramacionGM, type EstadoTrabajo } from '../lib/gomedisys'
 import { ESTADOS_LABEL, type Estado } from '../lib/constantes'
 import {
   DatabaseZap, Search, CheckCircle2, Lock, Users, AlertTriangle, ListChecks, ArrowRight, X, Ban, RotateCw,
-  CalendarDays, Eraser, SlidersHorizontal, FileSpreadsheet, UserRound, Stethoscope, ClipboardList, ShieldCheck, ChevronLeft, ChevronRight,
+  CalendarDays, Eraser, SlidersHorizontal, FileSpreadsheet, UserRound, Stethoscope, ClipboardList, ShieldCheck,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -44,7 +45,6 @@ const diasEntre = (desde: string, hasta: string) => {
 const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 const sc = (id: number) => `SC-${String(id).padStart(6, '0')}`
 const SIN_DATO = 'Sin dato'
-const CLASE_CAMPO = 'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm focus:border-[#0D2D6B] focus:outline-none focus:ring-2 focus:ring-[#0D2D6B]/20'
 const tieneBoleta = (f: FilaGM) =>
   !!(f['Descripción Boleta'] || f['Anotaciones Boleta'] || f.FechaSolicitudBoleta || (f.DuracionBoleta != null && f.DuracionBoleta !== ''))
 
@@ -282,15 +282,9 @@ export default function ConsultaMasiva() {
     setFiltroBoleta(''); setFiltroProcedimiento(''); setBusqueda('')
   }
 
-  // Panel lateral: Esc lo cierra; flechas recorren los registros visibles
+  // Panel lateral: las flechas recorren los registros visibles
   const detalle = detalleId != null ? (filas ?? []).find((f) => f.idProgramming === detalleId) ?? null : null
   const posDetalle = detalle ? visibles.findIndex((f) => f.idProgramming === detalle.idProgramming) : -1
-  useEffect(() => {
-    if (detalleId == null) return
-    const tecla = (e: KeyboardEvent) => { if (e.key === 'Escape') setDetalleId(null) }
-    window.addEventListener('keydown', tecla)
-    return () => window.removeEventListener('keydown', tecla)
-  }, [detalleId])
 
   const totales = useMemo(() => {
     const t = { total: filas?.length ?? 0, disponibles: 0, gestion: 0 }
@@ -748,15 +742,6 @@ export default function ConsultaMasiva() {
 // Subcomponentes
 // ---------------------------------------------------------------------------
 
-function CampoLinea({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
-  return (
-    <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
-      <span className="whitespace-nowrap">{etiqueta}</span>
-      {children}
-    </label>
-  )
-}
-
 function Filtro({ etiqueta, crece, children }: { etiqueta: string; crece?: boolean; children: ReactNode }) {
   return (
     <div className={crece ? 'min-w-[200px] flex-1' : undefined}>
@@ -839,36 +824,6 @@ function BadgeEstadoGM({ estado }: { estado: string | null }) {
   )
 }
 
-const COLORES_GRUPO = {
-  paciente: { caja: 'bg-sky-50 border-sky-200', titulo: 'text-sky-800', icono: 'bg-sky-600' },
-  orden: { caja: 'bg-violet-50 border-violet-200', titulo: 'text-violet-800', icono: 'bg-violet-600' },
-  boleta: { caja: 'bg-amber-50 border-amber-200', titulo: 'text-amber-800', icono: 'bg-amber-500' },
-  gestion: { caja: 'bg-emerald-50 border-emerald-200', titulo: 'text-emerald-800', icono: 'bg-emerald-600' },
-} as const
-
-function Grupo({ color, icono: Icono, titulo, children }: { color: keyof typeof COLORES_GRUPO; icono: LucideIcon; titulo: string; children: ReactNode }) {
-  const c = COLORES_GRUPO[color]
-  return (
-    <section className={`rounded-xl border p-3 ${c.caja}`}>
-      <h3 className={`mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide ${c.titulo}`}>
-        <span className={`flex h-6 w-6 items-center justify-center rounded-md text-white ${c.icono}`}><Icono size={14} /></span>
-        {titulo}
-      </h3>
-      <dl className="grid grid-cols-2 gap-x-3 gap-y-2">{children}</dl>
-    </section>
-  )
-}
-
-function Dato({ etiqueta, valor, ancho }: { etiqueta: string; valor: ReactNode; ancho?: boolean }) {
-  const vacio = valor === null || valor === undefined || valor === ''
-  return (
-    <div className={ancho ? 'col-span-2' : undefined}>
-      <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{etiqueta}</dt>
-      <dd className={`whitespace-pre-line text-sm ${vacio ? 'text-slate-400' : 'text-slate-800'}`}>{vacio ? '—' : valor}</dd>
-    </div>
-  )
-}
-
 const fechaHora = (iso: string | null) => {
   if (!iso) return null
   const [d, h] = iso.split('T')
@@ -883,31 +838,29 @@ function PanelDetalle({ f, s, seleccionada, otrosSeleccionando, onAlternar, onCe
 }) {
   const puede = s.tipo === 'disponible' || s.tipo === 'ingreso'
   return (
-    <>
-      <div className="fixed inset-0 z-40 bg-[#071a40]/20" onClick={onCerrar} />
-      <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col bg-white shadow-2xl">
-        <header className="bg-gradient-to-r from-[#0D2D6B] to-[#16468E] px-4 py-3 text-white">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <div className="truncate text-base font-semibold">{f.NombrePaciente}</div>
-              <div className="text-xs text-white/70">{f.TipoDocumento} {f.DocumentoIdentificacion} · Ingreso {f.NumeroIngreso ?? '—'}</div>
-            </div>
-            <button onClick={onCerrar} aria-label="Cerrar" className="rounded-full p-1 text-white/80 hover:bg-white/15"><X size={18} /></button>
-          </div>
-          <div className="mt-2 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-1.5">
-              <BadgeTipoOrden tipo={f.TipoOrden} />
-              <BadgeEstadoGM estado={f.Estado} />
-            </div>
-            <div className="flex items-center gap-1 text-white/80">
-              <button disabled={!onAnterior} onClick={onAnterior} className="rounded p-0.5 hover:bg-white/15 disabled:opacity-30" title="Anterior"><ChevronLeft size={16} /></button>
-              <span className="tabular-nums">{posicion}</span>
-              <button disabled={!onSiguiente} onClick={onSiguiente} className="rounded p-0.5 hover:bg-white/15 disabled:opacity-30" title="Siguiente"><ChevronRight size={16} /></button>
-            </div>
-          </div>
-        </header>
-
-        <div className="flex-1 space-y-3 overflow-y-auto p-4">
+    <PanelLateral
+      titulo={f.NombrePaciente}
+      subtitulo={`${f.TipoDocumento ?? ''} ${f.DocumentoIdentificacion ?? ''} · Ingreso ${f.NumeroIngreso ?? '—'}`}
+      insignias={<><BadgeTipoOrden tipo={f.TipoOrden} /><BadgeEstadoGM estado={f.Estado} /></>}
+      onCerrar={onCerrar}
+      onAnterior={onAnterior}
+      onSiguiente={onSiguiente}
+      posicion={posicion}
+      pie={
+        <>
+          {puede ? (
+            <Boton onClick={onAlternar} variante={seleccionada ? 'secundario' : 'primario'} className="flex flex-1 items-center justify-center gap-2">
+              <ListChecks size={16} /> {seleccionada ? 'Quitar de la selección' : 'Seleccionar para gestión'}
+            </Boton>
+          ) : s.tipo === 'tomada' ? (
+            <Boton onClick={onIrGestion} variante="secundario" className="flex flex-1 items-center justify-center gap-2">
+              Ver en Gestión de solicitudes <ArrowRight size={15} />
+            </Boton>
+          ) : <div className="flex-1" />}
+          <Boton variante="fantasma" onClick={onCerrar}>Cerrar</Boton>
+        </>
+      }
+    >
           <Grupo color="paciente" icono={UserRound} titulo="Datos del paciente">
             <Dato etiqueta="Paciente" valor={f.NombrePaciente} ancho />
             <Dato etiqueta="Documento" valor={`${f.TipoDocumento ?? ''} ${f.DocumentoIdentificacion ?? ''}`.trim()} />
@@ -967,21 +920,6 @@ function PanelDetalle({ f, s, seleccionada, otrosSeleccionando, onAlternar, onCe
               </div>
             )}
           </Grupo>
-        </div>
-
-        <footer className="flex gap-2 border-t border-slate-200 p-3">
-          {puede ? (
-            <Boton onClick={onAlternar} variante={seleccionada ? 'secundario' : 'primario'} className="flex flex-1 items-center justify-center gap-2">
-              <ListChecks size={16} /> {seleccionada ? 'Quitar de la selección' : 'Seleccionar para gestión'}
-            </Boton>
-          ) : s.tipo === 'tomada' ? (
-            <Boton onClick={onIrGestion} variante="secundario" className="flex flex-1 items-center justify-center gap-2">
-              Ver en Gestión de solicitudes <ArrowRight size={15} />
-            </Boton>
-          ) : <div className="flex-1" />}
-          <Boton variante="fantasma" onClick={onCerrar}>Cerrar</Boton>
-        </footer>
-      </aside>
-    </>
+    </PanelLateral>
   )
 }

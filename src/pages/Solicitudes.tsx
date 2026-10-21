@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import type { Json } from '../lib/database.types'
-import { PageHeader, Boton, Modal, Badge, FilterBar, EstadoVacio, Spinner } from '../components/ui'
+import { TituloEnHeader, CampoLinea, CLASE_CAMPO, Boton, Modal, Badge, EstadoVacio, Spinner } from '../components/ui'
+import { PanelLateral, Grupo, Dato } from '../components/PanelLateral'
 import RichTextEditor from '../components/RichTextEditor'
 import {
   ESTADOS, ESTADOS_LABEL, ESTADOS_COLOR, ESTADOS_COLOR_HEX, ESTADOS_COLOR_SOLIDO, ESTADOS_NOTIFICABLES, CANALES_NOTIFICACION,
@@ -10,7 +11,8 @@ import {
 } from '../lib/constantes'
 import {
   Eye, Pencil, CalendarClock, BellRing, RefreshCw, Ban, Undo2, Stethoscope,
-  CheckCircle2, Clock, Send, Repeat, PauseCircle, CircleSlash, X, FileSpreadsheet, AlertTriangle,
+  CheckCircle2, Clock, Send, Repeat, PauseCircle, CircleSlash, FileSpreadsheet, AlertTriangle,
+  Search, SlidersHorizontal, Eraser, UserRound, ClipboardList, ShieldCheck, Save, LayoutGrid,
 } from 'lucide-react'
 
 type Solicitud = {
@@ -41,6 +43,20 @@ type Solicitud = {
   notas_notificacion: string | null
   canales_notificacion: string[]
   nombre_medico_reporta: string | null
+  quirofano_id: number | null
+  origen: string
+  eps_gomedisys: string | null
+  plan_gomedisys: string | null
+  diagnostico_preoperatorio: string | null
+  especialista_ordena: string | null
+  especialista_opera: string | null
+  especialidad_gomedisys: string | null
+  quirofano_gomedisys: string | null
+  fecha_programada_gomedisys: string | null
+  estado_gomedisys: string | null
+  tipo_orden: string | null
+  gomedisys_consultado_en: string | null
+  notificado_en: string | null
   especialidades: { nombre: string } | null
   eps: { nombre: string } | null
   unidades: { nombre: string } | null
@@ -95,6 +111,7 @@ export default function Solicitudes() {
   const [filtroHora, setFiltroHora] = useState('')
   const [filtroMedico, setFiltroMedico] = useState('')
   const [busqueda, setBusqueda] = useState('')
+  const [masFiltros, setMasFiltros] = useState(false)
   const [especialidades, setEspecialidades] = useState<{ id: number; nombre: string }[]>([])
   const [quirofanos, setQuirofanos] = useState<{ id: number; nombre: string; numero: number }[]>([])
   const [recomendaciones, setRecomendaciones] = useState<{ especialidad_id: number; titulo: string; contenido: string }[]>([])
@@ -241,6 +258,14 @@ export default function Solicitudes() {
     }
   }
 
+  const cerrarPanel = useCallback(() => { setModal(''); setSeleccion(null); setError('') }, [])
+  const posSeleccion = seleccion ? filtradas.findIndex((f) => f.id === seleccion.id) : -1
+  const navegar = (delta: number) => {
+    const sig = filtradas[posSeleccion + delta]
+    if (sig) { setSeleccion(sig); setError('') }
+  }
+  const filtrosAvanzados = [filtroMedico, filtroQuirofano, filtroHora].filter(Boolean).length
+
   function abrir(fila: Solicitud, m: typeof modal) {
     setSeleccion(fila)
     setModal(m)
@@ -269,12 +294,11 @@ export default function Solicitudes() {
     cargar()
   }
 
-  async function programar(quirofanoId: number, fecha: string, hora: string, esReprogramacion: boolean) {
+  async function programar(quirofanoId: number, fecha: string, hora: string, esReprogramacion: boolean, duracion: number) {
     if (!seleccion) return
     setGuardando(true)
     setError('')
 
-    const duracion = seleccion.tiempo_estimado_minutos ?? 60
     const inicio = minutosDesdeHora(hora)
     const fin = inicio + duracion
 
@@ -306,6 +330,7 @@ export default function Solicitudes() {
 
     const { error } = await supabase.from('solicitudes_cirugia').update({
       quirofano_id: quirofanoId, fecha_programada: fecha, hora_programada: hora,
+      tiempo_estimado_minutos: duracion,
       programado_por: session!.user.id, programado_en: new Date().toISOString(),
       estado: 'programado',
     }).eq('id', seleccion.id)
@@ -316,7 +341,7 @@ export default function Solicitudes() {
     }
     await supabase.from('solicitudes_historial').insert({
       solicitud_id: seleccion.id, accion: esReprogramacion ? 'reprogramado' : 'programado', usuario_id: session!.user.id,
-      detalle: { quirofano_id: quirofanoId, fecha, hora },
+      detalle: { quirofano_id: quirofanoId, fecha, hora, duracion },
     })
     cerrar()
     cargar()
@@ -406,81 +431,84 @@ export default function Solicitudes() {
 
   return (
     <div className="flex h-full flex-col">
+      <TituloEnHeader titulo="Gestión de solicitudes" subtitulo="Solicitudes procesadas en GoMedisys, pendientes de programar / notificar" />
+
       <div className="shrink-0">
-        <PageHeader
-          titulo="Gestión de solicitudes"
-          subtitulo="Solicitudes ya procesadas en GoMedisys, pendientes de programar / notificar"
-          acciones={
-            <Boton variante="secundario" disabled={exportando || filtradas.length === 0} onClick={exportarXlsx} className="flex items-center gap-1.5">
-              <FileSpreadsheet size={15} /> {exportando ? 'Exportando…' : 'Excel'}
-            </Boton>
-          }
-        />
-
-        <div className="mb-2">
-          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Especialidades</div>
-          <div className="flex flex-wrap gap-1.5">
-            {porEspecialidad.map((e) => (
-              <MiniCard
-                key={e.id}
-                label={e.nombre}
-                valor={e.total}
-                activo={filtroEspecialidad === String(e.id)}
-                onClick={() => setFiltroEspecialidad((prev) => (prev === String(e.id) ? '' : String(e.id)))}
-              />
-            ))}
-          </div>
-        </div>
-        <div className="mb-2 flex items-start justify-between gap-3">
-          <div>
-            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Estados</div>
-            <div className="flex flex-wrap gap-1.5">
-              {porEstado.map(([e, total]) => (
-                <MiniCard
-                  key={e}
-                  label={ESTADOS_LABEL[e]}
-                  valor={total}
-                  className={ESTADOS_COLOR[e]}
-                  activo={filtroEstado === e}
-                  onClick={() => setFiltroEstado((prev) => (prev === e ? '' : e))}
-                />
-              ))}
-            </div>
-          </div>
-          <Boton variante="fantasma" disabled={!hayFiltrosActivos} onClick={limpiarFiltros} className="mt-4 flex shrink-0 items-center gap-1.5">
-            <X size={14} /> Limpiar filtros
-          </Boton>
-        </div>
-
-        <FilterBar>
-          <div>
-            <label className="mb-0.5 block text-xs font-medium text-slate-500">Médico</label>
-            <input value={filtroMedico} onChange={(e) => setFiltroMedico(e.target.value)} placeholder="Nombre del médico…" className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div>
-            <label className="mb-0.5 block text-xs font-medium text-slate-500">Quirófano</label>
-            <select value={filtroQuirofano} onChange={(e) => setFiltroQuirofano(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
-              <option value="">Todos</option>
-              {quirofanos.map((q) => <option key={q.id} value={q.id}>{q.nombre}</option>)}
+        {/* Filtros en una sola línea */}
+        <div className="neu-card relative mb-2 flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2">
+          <CampoLinea etiqueta="Programado">
+            <input type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} className={CLASE_CAMPO} title="Desde" />
+            <span>a</span>
+            <input type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} className={CLASE_CAMPO} title="Hasta" />
+          </CampoLinea>
+          <CampoLinea etiqueta="Especialidad">
+            <select value={filtroEspecialidad} onChange={(e) => setFiltroEspecialidad(e.target.value)} className={`${CLASE_CAMPO} max-w-[190px]`}>
+              <option value="">Todas</option>
+              {especialidades.map((e) => {
+                const total = porEspecialidad.find((x) => x.id === e.id)?.total
+                return <option key={e.id} value={e.id}>{e.nombre}{total ? ` (${total})` : ''}</option>
+              })}
             </select>
+          </CampoLinea>
+          <div className="relative min-w-[200px] flex-1">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar documento, nombre o # de ingreso…" className={`${CLASE_CAMPO} w-full pl-8`} />
           </div>
-          <div>
-            <label className="mb-0.5 block text-xs font-medium text-slate-500">Hora</label>
-            <input type="time" value={filtroHora} onChange={(e) => setFiltroHora(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div>
-            <label className="mb-0.5 block text-xs font-medium text-slate-500">Programado desde</label>
-            <input type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div>
-            <label className="mb-0.5 block text-xs font-medium text-slate-500">Programado hasta</label>
-            <input type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="flex-1">
-            <label className="mb-0.5 block text-xs font-medium text-slate-500">Buscar</label>
-            <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Documento, nombre o # de ingreso…" className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
-          </div>
-        </FilterBar>
+          <button
+            onClick={() => setMasFiltros((v) => !v)}
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+              masFiltros || filtrosAvanzados ? 'border-[#0D2D6B] bg-[#0D2D6B]/5 text-[#0D2D6B]' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <SlidersHorizontal size={15} /> Más filtros
+            {filtrosAvanzados > 0 && <span className="rounded-full bg-[#0D2D6B] px-1.5 text-[11px] text-white">{filtrosAvanzados}</span>}
+          </button>
+          <Boton variante="fantasma" disabled={!hayFiltrosActivos} onClick={limpiarFiltros} title="Limpiar filtros" aria-label="Limpiar filtros" className="!px-2 !py-1.5">
+            <Eraser size={16} />
+          </Boton>
+          <Boton variante="secundario" disabled={exportando || filtradas.length === 0} onClick={exportarXlsx} className="flex items-center gap-1.5 !py-1.5">
+            <FileSpreadsheet size={15} /> {exportando ? 'Exportando…' : 'Excel'}
+          </Boton>
+
+          {masFiltros && (
+            <div className="absolute right-3 top-full z-30 mt-1 grid w-[min(520px,calc(100vw-2rem))] grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+              <div className="col-span-2">
+                <label className="mb-1 block text-xs font-medium text-slate-500">Médico</label>
+                <input value={filtroMedico} onChange={(e) => setFiltroMedico(e.target.value)} placeholder="Nombre del médico…" className={`${CLASE_CAMPO} w-full`} />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-500">Quirófano</label>
+                <select value={filtroQuirofano} onChange={(e) => setFiltroQuirofano(e.target.value)} className={`${CLASE_CAMPO} w-full`}>
+                  <option value="">Todos</option>
+                  {quirofanos.map((q) => <option key={q.id} value={q.id}>{q.nombre}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-500">Hora programada</label>
+                <input type="time" value={filtroHora} onChange={(e) => setFiltroHora(e.target.value)} className={`${CLASE_CAMPO} w-full`} />
+              </div>
+              <div className="col-span-2 flex justify-end">
+                <Boton variante="secundario" onClick={() => setMasFiltros(false)} className="!py-1.5">Listo</Boton>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Estados: una sola fila, clic para filtrar */}
+        <div className="mb-2 flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Estado</span>
+          {porEstado.map(([e, total]) => (
+            <MiniCard
+              key={e}
+              label={ESTADOS_LABEL[e]}
+              valor={total}
+              className={ESTADOS_COLOR[e]}
+              activo={filtroEstado === e}
+              onClick={() => setFiltroEstado((prev) => (prev === e ? '' : e))}
+            />
+          ))}
+          <span className="ml-auto text-xs text-slate-500">{filtradas.length} solicitudes · clic en el ojo para ver el detalle</span>
+        </div>
       </div>
 
       <div className="neu-card flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -504,7 +532,11 @@ export default function Solicitudes() {
                 <tr><td colSpan={7}><EstadoVacio titulo="Sin solicitudes" descripcion="Ajusta los filtros o espera nuevos registros procesados" /></td></tr>
               ) : (
                 filtradas.map((f) => (
-                  <tr key={f.id} className="border-t border-slate-100">
+                  <tr
+                    key={f.id}
+                    onClick={() => abrir(f, 'ver')}
+                    className={`cursor-pointer border-t border-slate-100 ${seleccion?.id === f.id && modal ? '!bg-amber-50 outline outline-2 -outline-offset-2 outline-amber-300' : ''}`}
+                  >
                     <td className="px-4 py-2.5 font-mono text-xs text-slate-500">SC-{String(f.id).padStart(6, '0')}</td>
                     <td className="px-4 py-2.5 text-slate-500">{new Date(f.fecha_reporte).toLocaleDateString('es-CO')}</td>
                     <td className="px-4 py-2.5">
@@ -527,7 +559,7 @@ export default function Solicitudes() {
                       ) : '—'}
                     </td>
                     <td className="px-4 py-2.5">
-                      <div className="flex justify-end gap-1.5">
+                      <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                         <button title="Ver" onClick={() => abrir(f, 'ver')} className="text-slate-500 hover:text-[#0D2D6B]"><Eye size={15} /></button>
                         <button title="Editar" onClick={() => abrir(f, 'editar')} className="text-slate-500 hover:text-[#0D2D6B]"><Pencil size={15} /></button>
                         {!ESTADOS_PROGRAMADOS.includes(f.estado) && f.estado !== 'realizado' && f.estado !== 'cancelado' && (
@@ -556,69 +588,33 @@ export default function Solicitudes() {
         </div>
       </div>
 
-      {/* VER */}
-      <Modal open={modal === 'ver'} onClose={cerrar} cerrableFuera={false} titulo={`Solicitud SC-${String(seleccion?.id).padStart(6, '0')}`} ancho="max-w-4xl">
-        {seleccion && (
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-xl border border-[#0D2D6B]/20 bg-[#EAF0FA] p-3">
-              <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[#0D2D6B]/70">Paciente</div>
-              <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-sm">
-                <Campo label="# Ingreso" valor={seleccion.numero_ingreso} />
-                <Campo label="Documento" valor={seleccion.documento_paciente} />
-                <Campo label="Paciente" valor={seleccion.nombre_paciente} full />
-                <Campo label="Edad" valor={seleccion.edad} />
-                <Campo label="EPS" valor={seleccion.eps?.nombre} />
-                <Campo label="Unidad / Cama" valor={[seleccion.unidades?.nombre, seleccion.cama].filter(Boolean).join(' - ')} full />
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-violet-300/50 bg-violet-50 p-3">
-              <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-violet-700/80">Orden Cx</div>
-              <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-sm">
-                <Campo label="Procedimiento" valor={seleccion.procedimiento} full />
-                <Campo label="Especialidad" valor={seleccion.especialidades?.nombre} />
-                <Campo label="Tiempo estimado" valor={seleccion.tiempo_estimado_minutos ? `${seleccion.tiempo_estimado_minutos} min` : null} />
-                <Campo label="Reportado por" valor={medicoDe(seleccion)} full />
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-amber-300/60 bg-amber-50 p-3">
-              <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-amber-700/80">Boleta Qx</div>
-              <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-sm">
-                <Campo label="Valoración preanestésica" valor={seleccion.valoracion_preanestesica} />
-                <Campo label="Autorización aseguradora" valor={seleccion.autorizacion_aseguradora} />
-                <Campo label="Estado material osteosíntesis" valor={seleccion.estado_material_osteosintesis} />
-                <Campo label="Casa médica" valor={seleccion.casa_medica_material} />
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-300 bg-slate-50 p-3">
-              <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-600">Gestión</div>
-              <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-sm">
-                <Campo label="Estado" valor={ESTADOS_LABEL[seleccion.estado]} />
-                <Campo label="Programación" valor={seleccion.fecha_programada ? `${seleccion.quirofanos?.nombre ?? ''} · ${seleccion.fecha_programada} ${seleccion.hora_programada ?? ''}` : null} />
-                <Campo label="Observaciones programación" valor={seleccion.observaciones_programacion} full />
-                {seleccion.estado === 'cancelado' && <Campo label="Motivo cancelación" valor={seleccion.motivo_cancelacion} full />}
-              </div>
-            </div>
-
-            <div className="col-span-full rounded-xl border border-slate-200 bg-white p-3">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-[#0D2D6B]">Notificación</div>
-              {seleccion.canales_notificacion?.length ? (
-                <div className="text-sm text-slate-700">Canales: {seleccion.canales_notificacion.join(', ')}</div>
-              ) : null}
-              {seleccion.notas_notificacion ? (
-                <div
-                  className="mt-1 max-h-32 overflow-y-auto rounded-lg bg-slate-50 p-2 text-sm text-slate-700 [&_h3]:font-semibold [&_h3]:text-[#0D2D6B] [&_ul]:list-disc [&_ul]:pl-5"
-                  dangerouslySetInnerHTML={{ __html: seleccion.notas_notificacion }}
-                />
-              ) : !seleccion.canales_notificacion?.length ? (
-                <div className="text-sm font-semibold text-slate-900">—</div>
-              ) : null}
-            </div>
-          </div>
-        )}
-      </Modal>
+      {/* VER: panel lateral con el mismo diseño de la consulta masiva */}
+      {modal === 'ver' && seleccion && (
+        <PanelLateral
+          titulo={seleccion.nombre_paciente ?? seleccion.documento_paciente}
+          subtitulo={`SC-${String(seleccion.id).padStart(6, '0')} · Doc ${seleccion.documento_paciente} · Ingreso ${seleccion.numero_ingreso}`}
+          insignias={<>
+            <Badge className={ESTADOS_COLOR[seleccion.estado]}>{ICONO_ESTADO[seleccion.estado]} {ESTADOS_LABEL[seleccion.estado]}</Badge>
+            {seleccion.tipo_orden && <BadgeTipoOrden tipo={seleccion.tipo_orden} />}
+          </>}
+          onCerrar={cerrarPanel}
+          onAnterior={posSeleccion > 0 ? () => navegar(-1) : undefined}
+          onSiguiente={posSeleccion >= 0 && posSeleccion < filtradas.length - 1 ? () => navegar(1) : undefined}
+          posicion={posSeleccion >= 0 ? `${posSeleccion + 1} de ${filtradas.length}` : ''}
+          pie={<>
+            <Boton variante="secundario" onClick={() => setModal('editar')} className="flex items-center gap-1.5"><Pencil size={14} /> Editar</Boton>
+            {!ESTADOS_PROGRAMADOS.includes(seleccion.estado) && seleccion.estado !== 'cancelado' && (
+              <Boton onClick={() => setModal('programar')} className="flex flex-1 items-center justify-center gap-1.5"><CalendarClock size={14} /> Programar</Boton>
+            )}
+            {ESTADOS_PROGRAMADOS.includes(seleccion.estado) && (
+              <Boton onClick={() => setModal('reprogramar')} className="flex flex-1 items-center justify-center gap-1.5"><RefreshCw size={14} /> Reprogramar</Boton>
+            )}
+            <Boton variante="fantasma" onClick={cerrarPanel}>Cerrar</Boton>
+          </>}
+        >
+          <GruposSolicitud s={seleccion} medico={medicoDe(seleccion)} />
+        </PanelLateral>
+      )}
 
       {/* QUITAR CANCELACIÓN */}
       <Modal open={modal === 'reactivar'} onClose={cerrar} titulo="Quitar cancelación" ancho="max-w-md">
@@ -696,18 +692,23 @@ export default function Solicitudes() {
       </Modal>
 
       {/* EDITAR */}
-      <ModalEditar open={modal === 'editar'} seleccion={seleccion} error={error} guardando={guardando} onClose={cerrar} onGuardar={guardarEdicion} />
+      {modal === 'editar' && seleccion && (
+        <PanelEditar seleccion={seleccion} medico={medicoDe(seleccion)} error={error} guardando={guardando} onClose={cerrarPanel} onGuardar={guardarEdicion} />
+      )}
 
       {/* PROGRAMAR / REPROGRAMAR */}
-      <ModalProgramar
-        open={modal === 'programar' || modal === 'reprogramar'}
-        esReprogramacion={modal === 'reprogramar'}
-        quirofanos={quirofanos}
-        error={error}
-        guardando={guardando}
-        onClose={cerrar}
-        onGuardar={programar}
-      />
+      {(modal === 'programar' || modal === 'reprogramar') && seleccion && (
+        <PanelProgramar
+          seleccion={seleccion}
+          medico={medicoDe(seleccion)}
+          esReprogramacion={modal === 'reprogramar'}
+          quirofanos={quirofanos}
+          error={error}
+          guardando={guardando}
+          onClose={cerrarPanel}
+          onGuardar={programar}
+        />
+      )}
 
       {/* NOTIFICAR */}
       <ModalNotificar
@@ -752,8 +753,92 @@ function Campo({ label, valor, full }: { label: string; valor: string | number |
   )
 }
 
-function ModalEditar({ open, seleccion, error, guardando, onClose, onGuardar }: {
-  open: boolean; seleccion: Solicitud | null; error: string; guardando: boolean
+const fechaHoraTexto = (v: string | null) => {
+  if (!v) return null
+  const [d, h] = v.replace(' ', 'T').split('T')
+  return `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}${h ? ` ${h.slice(0, 5)}` : ''}`
+}
+
+function BadgeTipoOrden({ tipo }: { tipo: string }) {
+  const intra = tipo.toUpperCase().startsWith('INTRA')
+  return (
+    <span className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${intra ? 'bg-indigo-100 text-indigo-700' : 'bg-teal-100 text-teal-700'}`}>
+      {tipo}
+    </span>
+  )
+}
+
+/** Datos de la solicitud agrupados por concepto (mismo diseño de la consulta masiva) */
+function GruposSolicitud({ s, medico, compacto }: { s: Solicitud; medico: string; compacto?: boolean }) {
+  return (
+    <>
+      <Grupo color="paciente" icono={UserRound} titulo="Datos del paciente">
+        <Dato etiqueta="Paciente" valor={s.nombre_paciente} ancho />
+        <Dato etiqueta="Documento" valor={s.documento_paciente} />
+        <Dato etiqueta="# Ingreso" valor={s.numero_ingreso} />
+        <Dato etiqueta="Edad" valor={s.edad != null ? `${s.edad} años` : null} />
+        <Dato etiqueta="EPS" valor={s.eps?.nombre ?? s.eps_gomedisys} />
+        {!compacto && <>
+          <Dato etiqueta="Teléfono" valor={s.telefono_paciente} />
+          <Dato etiqueta="Correo" valor={s.email_paciente} />
+          <Dato etiqueta="Contrato (GoMedisys)" valor={s.eps_gomedisys} ancho />
+          <Dato etiqueta="Plan (aseguradora)" valor={s.plan_gomedisys} ancho />
+          <Dato etiqueta="Unidad / cama" valor={[s.unidades?.nombre, s.cama].filter(Boolean).join(' - ')} ancho />
+        </>}
+      </Grupo>
+
+      <Grupo color="orden" icono={Stethoscope} titulo="Orden quirúrgica">
+        <Dato etiqueta="Procedimiento" valor={s.procedimiento} ancho />
+        <Dato etiqueta="Especialidad" valor={s.especialidades?.nombre} />
+        <Dato etiqueta="Tiempo estimado" valor={s.tiempo_estimado_minutos ? `${s.tiempo_estimado_minutos} min` : null} />
+        {!compacto && <>
+          <Dato etiqueta="Tipo de orden" valor={s.tipo_orden} />
+          <Dato etiqueta="Especialista que ordena" valor={s.especialista_ordena ?? medico} />
+          <Dato etiqueta="Diagnóstico preoperatorio" valor={s.diagnostico_preoperatorio} ancho />
+          <Dato etiqueta="Especialista que opera" valor={s.especialista_opera} />
+          <Dato etiqueta="Especialidad que opera" valor={s.especialidad_gomedisys} />
+          <Dato etiqueta="Programada en GoMedisys" valor={[fechaHoraTexto(s.fecha_programada_gomedisys), s.quirofano_gomedisys].filter(Boolean).join(' · ')} />
+          <Dato etiqueta="Estado en GoMedisys" valor={s.estado_gomedisys} />
+          <Dato etiqueta="Reportado por" valor={medico} />
+          <Dato etiqueta="Origen" valor={s.origen === 'masiva' ? 'Consulta masiva GoMedisys' : 'Reporte individual'} />
+        </>}
+      </Grupo>
+
+      {!compacto && (
+        <Grupo color="boleta" icono={ClipboardList} titulo="Boleta quirúrgica">
+          <Dato etiqueta="Boleta (GoMedisys)" valor={s.boleta_quirurgica} ancho />
+          <Dato etiqueta="Valoración preanestésica" valor={s.valoracion_preanestesica} />
+          <Dato etiqueta="Autorización aseguradora" valor={s.autorizacion_aseguradora} />
+          <Dato etiqueta="Estado material osteosíntesis" valor={s.estado_material_osteosintesis} />
+          <Dato etiqueta="Casa médica" valor={s.casa_medica_material} />
+        </Grupo>
+      )}
+
+      {!compacto && (
+        <Grupo color="gestion" icono={ShieldCheck} titulo="Gestión">
+          <Dato etiqueta="Estado" valor={ESTADOS_LABEL[s.estado]} />
+          <Dato etiqueta="Fecha de reporte" valor={new Date(s.fecha_reporte).toLocaleDateString('es-CO')} />
+          <Dato etiqueta="Programación" valor={s.fecha_programada ? `${s.quirofanos?.nombre ?? ''} · ${s.fecha_programada} ${s.hora_programada?.slice(0, 5) ?? ''}` : null} ancho />
+          <Dato etiqueta="Observaciones de programación" valor={s.observaciones_programacion} ancho />
+          {s.estado === 'cancelado' && <Dato etiqueta="Motivo de cancelación" valor={s.motivo_cancelacion} ancho />}
+          <Dato etiqueta="Notificado" valor={s.notificado_en ? `${new Date(s.notificado_en).toLocaleString('es-CO')}${s.canales_notificacion?.length ? ` · ${s.canales_notificacion.join(', ')}` : ''}` : null} ancho />
+          {s.notas_notificacion && (
+            <div className="col-span-2">
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Recomendaciones enviadas</dt>
+              <dd
+                className="mt-0.5 max-h-40 overflow-y-auto rounded-lg bg-white/70 p-2 text-sm text-slate-700 [&_h3]:font-semibold [&_h3]:text-[#0D2D6B] [&_ul]:list-disc [&_ul]:pl-5"
+                dangerouslySetInnerHTML={{ __html: s.notas_notificacion }}
+              />
+            </div>
+          )}
+        </Grupo>
+      )}
+    </>
+  )
+}
+
+function PanelEditar({ seleccion, medico, error, guardando, onClose, onGuardar }: {
+  seleccion: Solicitud; medico: string; error: string; guardando: boolean
   onClose: () => void; onGuardar: (c: {
     autorizacion_aseguradora: string | null
     observaciones_programacion: string | null
@@ -761,114 +846,263 @@ function ModalEditar({ open, seleccion, error, guardando, onClose, onGuardar }: 
     casa_medica_material: string | null
   }) => void
 }) {
-  const [autorizacion, setAutorizacion] = useState('')
-  const [obs, setObs] = useState('')
-  const [material, setMaterial] = useState('')
-  const [casa, setCasa] = useState('')
-
-  useEffect(() => {
-    if (seleccion) {
-      setAutorizacion(seleccion.autorizacion_aseguradora ?? '')
-      setObs(seleccion.observaciones_programacion ?? '')
-      setMaterial(seleccion.estado_material_osteosintesis ?? '')
-      setCasa(seleccion.casa_medica_material ?? '')
-    }
-  }, [seleccion])
+  const [autorizacion, setAutorizacion] = useState(seleccion.autorizacion_aseguradora ?? '')
+  const [obs, setObs] = useState(seleccion.observaciones_programacion ?? '')
+  const [material, setMaterial] = useState(seleccion.estado_material_osteosintesis ?? '')
+  const [casa, setCasa] = useState(seleccion.casa_medica_material ?? '')
+  const campo = `${CLASE_CAMPO} w-full`
 
   return (
-    <Modal open={open} onClose={onClose} titulo="Editar solicitud" ancho="max-w-3xl">
-      <div className="space-y-3">
-        {seleccion && (
-          <div className="rounded-xl border border-[#0D2D6B]/20 bg-[#EAF0FA] p-2.5">
-            <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[#0D2D6B]/70">Datos del paciente (solo lectura)</div>
-            <div className="grid grid-cols-3 gap-x-4 gap-y-1.5 text-sm">
-              <Campo label="# Ingreso" valor={seleccion.numero_ingreso} />
-              <Campo label="Documento" valor={seleccion.documento_paciente} />
-              <Campo label="Paciente" valor={seleccion.nombre_paciente} />
-              <Campo label="Edad" valor={seleccion.edad} />
-              <Campo label="EPS" valor={seleccion.eps?.nombre} />
-              <Campo label="Unidad / Cama" valor={[seleccion.unidades?.nombre, seleccion.cama].filter(Boolean).join(' - ')} />
-              <Campo label="Procedimiento" valor={seleccion.procedimiento} full />
-            </div>
-          </div>
-        )}
+    <PanelLateral
+      titulo="Editar solicitud"
+      subtitulo={`SC-${String(seleccion.id).padStart(6, '0')} · ${seleccion.nombre_paciente ?? seleccion.documento_paciente}`}
+      insignias={<Badge className={ESTADOS_COLOR[seleccion.estado]}>{ESTADOS_LABEL[seleccion.estado]}</Badge>}
+      onCerrar={onClose}
+      pie={<>
+        <Boton variante="secundario" onClick={onClose}>Cancelar</Boton>
+        <Boton disabled={guardando} className="flex flex-1 items-center justify-center gap-1.5" onClick={() => onGuardar({
+          autorizacion_aseguradora: autorizacion || null,
+          observaciones_programacion: obs || null,
+          estado_material_osteosintesis: material || null,
+          casa_medica_material: casa || null,
+        })}><Save size={14} /> {guardando ? 'Guardando…' : 'Guardar cambios'}</Boton>
+      </>}
+    >
+      <GruposSolicitud s={seleccion} medico={medico} compacto />
 
-        <div className="rounded-xl border border-[#0D2D6B]/15 bg-white p-2.5">
-          <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-[#0D2D6B]">Campos editables por programación</div>
-          <div className="grid grid-cols-2 gap-2.5">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-600">Autorización del asegurador</label>
-              <input value={autorizacion} onChange={(e) => setAutorizacion(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-600">Casa médica que entrega material</label>
-              <input value={casa} onChange={(e) => setCasa(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
-            </div>
-            <div className="col-span-2">
-              <label className="mb-1 block text-sm font-medium text-slate-600">Observaciones de programación</label>
-              <textarea value={obs} onChange={(e) => setObs(e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
-            </div>
-            <div className="col-span-2">
-              <label className="mb-1 block text-sm font-medium text-slate-600">Estado material de osteosíntesis</label>
-              <textarea value={material} onChange={(e) => setMaterial(e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
-            </div>
-          </div>
+      <Grupo color="boleta" icono={Pencil} titulo="Campos editables por programación">
+        <div className="col-span-2">
+          <label className="mb-1 block text-xs font-medium text-slate-600">Autorización del asegurador</label>
+          <input value={autorizacion} onChange={(e) => setAutorizacion(e.target.value)} className={campo} />
         </div>
-
-        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
-        <div className="flex justify-end gap-2 pt-1">
-          <Boton variante="secundario" onClick={onClose}>Cancelar</Boton>
-          <Boton disabled={guardando} onClick={() => onGuardar({
-            autorizacion_aseguradora: autorizacion || null,
-            observaciones_programacion: obs || null,
-            estado_material_osteosintesis: material || null,
-            casa_medica_material: casa || null,
-          })}>{guardando ? 'Guardando…' : 'Guardar'}</Boton>
+        <div className="col-span-2">
+          <label className="mb-1 block text-xs font-medium text-slate-600">Casa médica que entrega material</label>
+          <input value={casa} onChange={(e) => setCasa(e.target.value)} className={campo} />
         </div>
-      </div>
-    </Modal>
+        <div className="col-span-2">
+          <label className="mb-1 block text-xs font-medium text-slate-600">Estado material de osteosíntesis</label>
+          <textarea value={material} onChange={(e) => setMaterial(e.target.value)} rows={2} className={campo} />
+        </div>
+        <div className="col-span-2">
+          <label className="mb-1 block text-xs font-medium text-slate-600">Observaciones de programación</label>
+          <textarea value={obs} onChange={(e) => setObs(e.target.value)} rows={3} className={campo} />
+        </div>
+      </Grupo>
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+    </PanelLateral>
   )
 }
 
-function ModalProgramar({ open, esReprogramacion, quirofanos, error, guardando, onClose, onGuardar }: {
-  open: boolean; esReprogramacion: boolean; quirofanos: { id: number; nombre: string; numero: number }[]
+type Reserva = {
+  id: number
+  quirofano_id: number
+  hora_programada: string
+  tiempo_estimado_minutos: number | null
+  nombre_paciente: string | null
+  documento_paciente: string
+  procedimiento: string | null
+  estado: Estado
+  especialidades: { nombre: string } | null
+}
+
+const PASO_MIN = 15
+const aHora = (min: number) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
+
+/** Programar / reprogramar en el panel lateral, con la ocupación de los quirófanos en la fecha */
+function PanelProgramar({ seleccion, medico, esReprogramacion, quirofanos, error, guardando, onClose, onGuardar }: {
+  seleccion: Solicitud; medico: string; esReprogramacion: boolean
+  quirofanos: { id: number; nombre: string; numero: number }[]
   error: string; guardando: boolean; onClose: () => void
-  onGuardar: (quirofanoId: number, fecha: string, hora: string, esReprogramacion: boolean) => void
+  onGuardar: (quirofanoId: number, fecha: string, hora: string, esReprogramacion: boolean, duracion: number) => void
 }) {
-  const hoy = new Date().toISOString().slice(0, 10)
-  const [quirofano, setQuirofano] = useState('')
-  const [fecha, setFecha] = useState(hoy)
-  const [hora, setHora] = useState('07:00')
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+  const [quirofano, setQuirofano] = useState(seleccion.quirofano_id ? String(seleccion.quirofano_id) : '')
+  const [fecha, setFecha] = useState(seleccion.fecha_programada ?? hoy)
+  const [hora, setHora] = useState(seleccion.hora_programada?.slice(0, 5) ?? '07:00')
+  const [duracion, setDuracion] = useState(seleccion.tiempo_estimado_minutos ?? 60)
+  const [reservas, setReservas] = useState<Reserva[]>([])
+  const [cargando, setCargando] = useState(false)
+
+  const cargarOcupacion = useCallback(async () => {
+    if (!fecha) return
+    setCargando(true)
+    const { data } = await supabase
+      .from('solicitudes_cirugia')
+      .select('id, quirofano_id, hora_programada, tiempo_estimado_minutos, nombre_paciente, documento_paciente, procedimiento, estado, especialidades(nombre)')
+      .eq('fecha_programada', fecha)
+      .neq('estado', 'cancelado')
+      .not('quirofano_id', 'is', null)
+      .not('hora_programada', 'is', null)
+    // Defensivo: solo reservas completas (quirófano y hora), sin la solicitud que se está programando
+    setReservas(((data ?? []) as unknown as Reserva[]).filter((r) => r.id !== seleccion.id && r.quirofano_id != null && !!r.hora_programada))
+    setCargando(false)
+  }, [fecha, seleccion.id])
+
+  useEffect(() => { cargarOcupacion() }, [cargarOcupacion])
+
+  const inicio = hora ? minutosDesdeHora(hora) : null
+  const fin = inicio != null ? inicio + (duracion || 60) : null
+  const choques = reservas.filter((r) => {
+    if (String(r.quirofano_id) !== quirofano || inicio == null || fin == null) return false
+    const rI = minutosDesdeHora(r.hora_programada.slice(0, 5))
+    const rF = rI + (r.tiempo_estimado_minutos ?? 60)
+    return inicio < rF && rI < fin
+  })
+
+  // Rango visible del tablero: 06:00-20:00, ampliado si hay reservas por fuera
+  const extremos = reservas.flatMap((r) => {
+    const i = minutosDesdeHora(r.hora_programada.slice(0, 5))
+    return [i, i + (r.tiempo_estimado_minutos ?? 60)]
+  }).concat(inicio != null && fin != null ? [inicio, fin] : [])
+  const desdeMin = Math.min(6 * 60, ...extremos.map((m) => Math.floor(m / 60) * 60))
+  const hastaMin = Math.max(20 * 60, ...extremos.map((m) => Math.ceil(m / 60) * 60))
+  const total = hastaMin - desdeMin
+  const pct = (m: number) => `${((m - desdeMin) / total) * 100}%`
+  const horas = Array.from({ length: total / 60 + 1 }, (_, i) => desdeMin + i * 60)
+
+  function elegirEspacio(qId: number, e: React.MouseEvent<HTMLDivElement>) {
+    const r = e.currentTarget.getBoundingClientRect()
+    const min = desdeMin + ((e.clientX - r.left) / r.width) * total
+    const redondeado = Math.max(desdeMin, Math.min(hastaMin - PASO_MIN, Math.round(min / PASO_MIN) * PASO_MIN))
+    setQuirofano(String(qId))
+    setHora(aHora(redondeado))
+  }
+
+  const campo = `${CLASE_CAMPO} w-full`
+  const puedeConfirmar = !!quirofano && !!fecha && !!hora && duracion > 0 && choques.length === 0 && !guardando
 
   return (
-    <Modal open={open} onClose={onClose} titulo={esReprogramacion ? 'Reprogramar cirugía' : 'Programar cirugía'}>
-      <div className="space-y-3">
+    <PanelLateral
+      ancho="max-w-3xl"
+      titulo={esReprogramacion ? 'Reprogramar cirugía' : 'Programar cirugía'}
+      subtitulo={`SC-${String(seleccion.id).padStart(6, '0')} · ${seleccion.nombre_paciente ?? seleccion.documento_paciente}`}
+      insignias={<Badge className={ESTADOS_COLOR[seleccion.estado]}>{ESTADOS_LABEL[seleccion.estado]}</Badge>}
+      onCerrar={onClose}
+      pie={<>
+        <Boton variante="secundario" onClick={onClose}>Cancelar</Boton>
+        <Boton disabled={!puedeConfirmar} className="flex flex-1 items-center justify-center gap-1.5"
+          onClick={() => onGuardar(Number(quirofano), fecha, hora, esReprogramacion, duracion)}>
+          <CalendarClock size={14} /> {guardando ? 'Guardando…' : 'Confirmar programación'}
+        </Boton>
+      </>}
+    >
+      <Grupo color="orden" icono={Stethoscope} titulo="Cirugía a programar">
+        <Dato etiqueta="Paciente" valor={`${seleccion.nombre_paciente ?? '—'} · ${seleccion.documento_paciente}`} ancho />
+        <Dato etiqueta="Procedimiento" valor={seleccion.procedimiento} ancho />
+        <Dato etiqueta="Especialidad" valor={seleccion.especialidades?.nombre} />
+        <Dato etiqueta="Médico" valor={seleccion.especialista_ordena ?? medico} />
+        {seleccion.fecha_programada_gomedisys && (
+          <Dato etiqueta="Programada en GoMedisys" valor={[fechaHoraTexto(seleccion.fecha_programada_gomedisys), seleccion.quirofano_gomedisys].filter(Boolean).join(' · ')} ancho />
+        )}
+      </Grupo>
+
+      <Grupo color="gestion" icono={CalendarClock} titulo="Fecha, quirófano y hora">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">Quirófano</label>
-          <select value={quirofano} onChange={(e) => setQuirofano(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <label className="mb-1 block text-xs font-medium text-slate-600">Fecha</label>
+          <input type="date" min={hoy} value={fecha} onChange={(e) => setFecha(e.target.value)} className={campo} />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-600">Quirófano</label>
+          <select value={quirofano} onChange={(e) => setQuirofano(e.target.value)} className={campo}>
             <option value="">Seleccionar…</option>
             {quirofanos.map((q) => <option key={q.id} value={q.id}>{q.nombre}</option>)}
           </select>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Fecha</label>
-            <input type="date" min={hoy} value={fecha} onChange={(e) => setFecha(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Hora</label>
-            <input type="time" value={hora} onChange={(e) => setHora(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-          </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-600">Hora de inicio</label>
+          <input type="time" step={PASO_MIN * 60} value={hora} onChange={(e) => setHora(e.target.value)} className={campo} />
         </div>
-        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
-        <div className="flex justify-end gap-2 pt-2">
-          <Boton variante="secundario" onClick={onClose}>Cancelar</Boton>
-          <Boton disabled={guardando || !quirofano} onClick={() => onGuardar(Number(quirofano), fecha, hora, esReprogramacion)}>
-            {guardando ? 'Guardando…' : 'Confirmar'}
-          </Boton>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-600">Duración estimada (min)</label>
+          <input type="number" min={15} step={15} value={duracion} onChange={(e) => setDuracion(Number(e.target.value))} className={campo} />
         </div>
-      </div>
-    </Modal>
+        {inicio != null && fin != null && (
+          <div className={`col-span-2 flex items-start gap-2 rounded-lg px-3 py-2 text-sm ${choques.length ? 'bg-red-50 text-red-700' : quirofano ? 'bg-emerald-100/70 text-emerald-800' : 'bg-white/70 text-slate-600'}`}>
+            {choques.length ? <AlertTriangle size={16} className="mt-0.5 shrink-0" /> : <CheckCircle2 size={16} className="mt-0.5 shrink-0" />}
+            <div>
+              {!quirofano
+                ? `Seleccione un quirófano (o haga clic en un espacio libre del tablero). Horario: ${aHora(inicio)} – ${aHora(fin)}.`
+                : choques.length
+                  ? <>El horario {aHora(inicio)} – {aHora(fin)} se cruza con: {choques.map((c) => `${c.nombre_paciente ?? c.documento_paciente} (${c.hora_programada.slice(0, 5)}, ${c.tiempo_estimado_minutos ?? 60} min)`).join('; ')}. Elija otro horario o quirófano.</>
+                  : `Horario libre: ${aHora(inicio)} – ${aHora(fin)} en ${quirofanos.find((q) => String(q.id) === quirofano)?.nombre ?? ''}.`}
+            </div>
+          </div>
+        )}
+      </Grupo>
+
+      {/* Tablero de ocupación del día */}
+      <section className="rounded-xl border border-slate-200 bg-white p-3">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-[#0D2D6B]">
+            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[#0D2D6B] text-white"><LayoutGrid size={14} /></span>
+            Ocupación de quirófanos · {fecha ? `${fecha.slice(8, 10)}/${fecha.slice(5, 7)}/${fecha.slice(0, 4)}` : '—'}
+          </h3>
+          <button onClick={cargarOcupacion} className="flex items-center gap-1 text-xs text-slate-500 hover:text-[#0D2D6B]">
+            <RefreshCw size={12} className={cargando ? 'animate-spin' : ''} /> Actualizar
+          </button>
+        </div>
+
+        <div className="relative ml-28 h-5 text-[10px] text-slate-400">
+          {horas.map((m) => (
+            <span key={m} className="absolute -translate-x-1/2" style={{ left: pct(m) }}>{aHora(m).slice(0, 2)}h</span>
+          ))}
+        </div>
+        <div className="space-y-1.5">
+          {quirofanos.map((q) => {
+            const delQ = reservas.filter((r) => r.quirofano_id === q.id)
+            const ocupado = delQ.reduce((acc, r) => acc + (r.tiempo_estimado_minutos ?? 60), 0)
+            const elegido = String(q.id) === quirofano
+            return (
+              <div key={q.id} className="flex items-center gap-2">
+                <div className={`shrink-0 truncate text-xs ${elegido ? 'font-bold text-[#0D2D6B]' : 'text-slate-600'}`} style={{ width: '6.5rem' }} title={q.nombre}>
+                  {q.nombre}
+                  <div className="text-[10px] font-normal text-slate-400">{delQ.length} res. · {Math.round((ocupado / 60) * 10) / 10} h</div>
+                </div>
+                <div
+                  onClick={(e) => elegirEspacio(q.id, e)}
+                  title="Clic en un espacio libre para proponer esa hora"
+                  className={`relative h-9 flex-1 cursor-crosshair overflow-hidden rounded-md border ${elegido ? 'border-[#0D2D6B]/40 bg-sky-50' : 'border-slate-200 bg-slate-50'}`}
+                >
+                  {horas.map((m) => (
+                    <span key={m} className="absolute inset-y-0 w-px bg-slate-200" style={{ left: pct(m) }} />
+                  ))}
+                  {delQ.map((r) => {
+                    const i = minutosDesdeHora(r.hora_programada.slice(0, 5))
+                    const d = r.tiempo_estimado_minutos ?? 60
+                    return (
+                      <div
+                        key={r.id}
+                        onClick={(e) => e.stopPropagation()}
+                        title={`${r.hora_programada.slice(0, 5)}–${aHora(i + d)} · ${r.nombre_paciente ?? r.documento_paciente}\n${r.especialidades?.nombre ?? ''} · ${ESTADOS_LABEL[r.estado]}\n${r.procedimiento ?? ''}`}
+                        className={`absolute inset-y-1 cursor-not-allowed overflow-hidden rounded border px-1 text-[10px] leading-tight ${ESTADOS_COLOR[r.estado]}`}
+                        style={{ left: pct(i), width: `calc(${pct(i + d)} - ${pct(i)})` }}
+                      >
+                        <div className="truncate font-semibold">{r.hora_programada.slice(0, 5)} {r.nombre_paciente ?? r.documento_paciente}</div>
+                        <div className="truncate opacity-75">{r.especialidades?.nombre}</div>
+                      </div>
+                    )
+                  })}
+                  {elegido && inicio != null && fin != null && (
+                    <div
+                      className={`pointer-events-none absolute inset-y-0.5 rounded border-2 border-dashed ${choques.length ? 'border-red-500 bg-red-400/25' : 'border-emerald-600 bg-emerald-400/30'}`}
+                      style={{ left: pct(inicio), width: `calc(${pct(fin)} - ${pct(inicio)})` }}
+                    />
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-5 rounded border-2 border-dashed border-emerald-600 bg-emerald-400/30" /> Propuesta libre</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-5 rounded border-2 border-dashed border-red-500 bg-red-400/25" /> Cruce</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-5 rounded border border-amber-300 bg-amber-100" /> Reservado (color por estado)</span>
+          <span className="ml-auto">{reservas.length} reservas en el día</span>
+        </div>
+      </section>
+
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+    </PanelLateral>
   )
 }
 

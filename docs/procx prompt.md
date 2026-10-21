@@ -993,3 +993,28 @@ Se requiere construir una app que permita
 			   celdas de color igual que las insignias de pantalla, filas
 			   seleccionadas resaltadas, logo, filtros aplicados, encabezado
 			   congelado y autofiltro.
+
+		15.12.- Gestión de solicitudes con panel lateral y ocupación de quirófanos (2026-10-21)
+			a) Componente compartido src/components/PanelLateral.tsx
+			   (PanelLateral, Grupo, Dato): mismo diseño en Consulta masiva y
+			   Gestión de solicitudes (encabezado institucional, grupos con
+			   color por concepto, Esc para cerrar, flechas para recorrer).
+			b) Ver (ojo o clic en la fila): panel con Datos del paciente,
+			   Orden quirúrgica (incluye los datos traídos de GoMedisys),
+			   Boleta quirúrgica y Gestión (programación, observaciones,
+			   notificación y recomendaciones enviadas). Botones Editar y
+			   Programar/Reprogramar en el pie.
+			c) Editar: panel con el resumen del paciente y la orden, y los
+			   campos editables por programación.
+			d) Programar / Reprogramar: panel con fecha, quirófano, hora y
+			   duración estimada (se guarda en tiempo_estimado_minutos), y un
+			   tablero de ocupación de todos los quirófanos para la fecha
+			   elegida: reservas con color por estado, la propuesta en verde
+			   (libre) o rojo (cruce), horas ocupadas por quirófano y clic en
+			   un espacio libre para tomarlo. Con cruce no se puede confirmar;
+			   la validación en el servidor (índice único + chequeo de
+			   solapamiento) se mantiene como respaldo.
+			e) Título en la franja azul; filtros en una línea (Programado
+			   desde/hasta, Especialidad con conteo, Buscar, Más filtros:
+			   médico, quirófano, hora; Limpiar; Excel) y estados en una sola
+			   fila de chips.
