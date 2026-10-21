@@ -2,14 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
-import { PageHeader, Boton, Modal, Badge, FilterBar, EstadoVacio } from '../components/ui'
+import { TituloEnHeader, Boton, Modal, Badge, EstadoVacio } from '../components/ui'
 import ReportarTabs from '../components/ReportarTabs'
 import ProgresoConsulta, { type Tramo } from '../components/ProgresoConsulta'
 import { consultarGoMedisys, emparejarCatalogo as emparejar, normalizar, camposDeProgramacion, type ProgramacionGM, type EstadoTrabajo } from '../lib/gomedisys'
 import { ESTADOS_LABEL, type Estado } from '../lib/constantes'
 import {
   DatabaseZap, Search, CheckCircle2, Lock, Users, AlertTriangle, ListChecks, ArrowRight, X, Ban, RotateCw,
-  CalendarDays, Eraser, UserRound, Stethoscope, ClipboardList, ShieldCheck, ChevronLeft, ChevronRight,
+  CalendarDays, Eraser, SlidersHorizontal, FileSpreadsheet, UserRound, Stethoscope, ClipboardList, ShieldCheck, ChevronLeft, ChevronRight,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -81,6 +81,8 @@ export default function ConsultaMasiva() {
   const [filtroTipoOrden, setFiltroTipoOrden] = useState('')
   const [filtroBoleta, setFiltroBoleta] = useState<'' | 'con' | 'sin'>('')
   const [filtroProcedimiento, setFiltroProcedimiento] = useState('')
+  const [masFiltros, setMasFiltros] = useState(false)
+  const [exportando, setExportando] = useState(false)
   // Registro abierto en el panel lateral de detalle
   const [detalleId, setDetalleId] = useState<number | null>(null)
 
@@ -363,86 +365,136 @@ export default function ConsultaMasiva() {
     if (filas) cargarGestion(filas)
   }
 
+  // Exporta lo que se ve en la tabla (filtros + pestaña) con los colores de pantalla
+  async function exportar() {
+    setExportando(true)
+    try {
+      const { exportarConsultaMasiva } = await import('../lib/exportarConsultaMasiva')
+      const filtrosTexto = [
+        `Rango consultado: ${desde} a ${hasta}`,
+        `Vista: ${vista === 'disponibles' ? 'Disponibles' : vista === 'gestion' ? 'Ya en gestión' : 'Todos'}`,
+        filtroFecha && `Fecha: ${filtroFecha}`,
+        filtroTipoOrden && `Tipo de orden: ${filtroTipoOrden}`,
+        filtroContrato && `Contrato: ${filtroContrato}`,
+        filtroBoleta && `Boleta: ${filtroBoleta === 'con' ? 'con boleta' : 'sin boleta'}`,
+        filtroEstadoGM && `Estado GM: ${filtroEstadoGM}`,
+        filtroProcedimiento && `Procedimiento: ${filtroProcedimiento}`,
+        busqueda && `Búsqueda: ${busqueda}`,
+      ].filter(Boolean).join(' · ')
+      await exportarConsultaMasiva(
+        visibles.map((f) => {
+          const st = situacion(f)
+          const gestion = st.tipo === 'tomada'
+            ? { tipo: st.tipo, texto: `En gestión ${sc(st.g.id)}`, responsable: st.g.responsable, estadoApp: ESTADOS_LABEL[st.g.estado as Estado] ?? st.g.estado }
+            : st.tipo === 'ingreso'
+              ? { tipo: st.tipo, texto: `Ingreso reportado (${st.gs.map((g) => sc(g.id)).join(', ')})`, responsable: null, estadoApp: null }
+              : st.tipo === 'cancelada'
+                ? { tipo: st.tipo, texto: 'Cancelada en GoMedisys', responsable: null, estadoApp: null }
+                : { tipo: st.tipo, texto: 'Disponible', responsable: null, estadoApp: null }
+          return { f, gestion, seleccionada: seleccion.has(f.idProgramming) }
+        }),
+        filtrosTexto,
+      )
+    } catch (e) {
+      alert(`No fue posible exportar: ${(e as Error).message}`)
+    } finally {
+      setExportando(false)
+    }
+  }
+
+  const filtrosAvanzadosActivos = [filtroFecha, filtroContrato, filtroBoleta, filtroEstadoGM, filtroProcedimiento].filter(Boolean).length
+
   const tomadasPorMi = resultado?.filter((r) => r.r_tomada_por_mi) ?? []
   const tomadasPorOtro = resultado?.filter((r) => !r.r_tomada_por_mi) ?? []
 
   return (
     <div>
-      <ReportarTabs />
-      <PageHeader
-        titulo="Consulta masiva GoMedisys"
-        subtitulo="Pacientes con cirugía programada en GoMedisys: los marcados pasan a Gestión de solicitudes"
-        acciones={otros.length > 0 ? (
-          <span className="flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800" title={otros.map((o) => o.nombre).join(', ')}>
-            <Users size={14} /> {otros.length === 1 ? `${otros[0].nombre} también está consultando` : `${otros.length} usuarios más están consultando`}
+      <TituloEnHeader titulo="Consulta masiva GoMedisys" subtitulo="Los pacientes marcados pasan a Gestión de solicitudes">
+        <ReportarTabs oscuro />
+        {otros.length > 0 && (
+          <span className="hidden shrink-0 items-center gap-1.5 rounded-full bg-amber-300/90 px-3 py-1 text-xs font-medium text-[#0D2D6B] xl:flex" title={otros.map((o) => o.nombre).join(', ')}>
+            <Users size={13} /> {otros.length === 1 ? `${otros[0].nombre} también está consultando` : `${otros.length} usuarios más consultando`}
           </span>
-        ) : undefined}
-      />
+        )}
+      </TituloEnHeader>
 
-      <FilterBar>
-        <div className="flex items-end gap-2">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">Programada desde</label>
-            <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className={CLASE_CAMPO} />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">Hasta</label>
-            <input type="date" value={hasta} min={desde} max={sumarDias(desde, 61)} onChange={(e) => setHasta(e.target.value)} className={CLASE_CAMPO} />
-          </div>
-          <Boton onClick={consultar} disabled={consultando} className="flex items-center gap-2">
-            <DatabaseZap size={16} /> {filas ? 'Volver a consultar' : 'Consultar GoMedisys'}
-          </Boton>
-        </div>
+      <div className="neu-card relative mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2">
+        <CampoLinea etiqueta="Desde">
+          <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className={CLASE_CAMPO} />
+        </CampoLinea>
+        <CampoLinea etiqueta="Hasta">
+          <input type="date" value={hasta} min={desde} max={sumarDias(desde, 61)} onChange={(e) => setHasta(e.target.value)} className={CLASE_CAMPO} />
+        </CampoLinea>
+        <Boton onClick={consultar} disabled={consultando} className="flex items-center gap-2 !py-1.5">
+          <DatabaseZap size={16} /> {filas ? 'Volver a consultar' : 'Consultar GoMedisys'}
+        </Boton>
 
         {filas && (
           <>
-            <div className="mx-1 hidden h-9 w-px self-end bg-slate-200 lg:block" />
-            <Filtro etiqueta="Fecha">
-              <select value={filtroFecha} onChange={(e) => setFiltroFecha(e.target.value)} className={CLASE_CAMPO}>
-                <option value="">Todas</option>
-                {opciones.fechas.map((d) => <option key={d} value={d}>{d.slice(8, 10)}/{d.slice(5, 7)}/{d.slice(0, 4)}</option>)}
-              </select>
-            </Filtro>
-            <Filtro etiqueta="Tipo de orden">
-              <select value={filtroTipoOrden} onChange={(e) => setFiltroTipoOrden(e.target.value)} className={CLASE_CAMPO}>
+            <div className="hidden h-7 w-px bg-slate-200 lg:block" />
+            <CampoLinea etiqueta="Tipo orden">
+              <select value={filtroTipoOrden} onChange={(e) => setFiltroTipoOrden(e.target.value)} className={`${CLASE_CAMPO} max-w-[150px]`}>
                 <option value="">Todas</option>
                 {opciones.tiposOrden.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
-            </Filtro>
-            <Filtro etiqueta="Contrato">
-              <select value={filtroContrato} onChange={(e) => setFiltroContrato(e.target.value)} className={`${CLASE_CAMPO} max-w-[200px]`}>
-                <option value="">Todos</option>
-                {opciones.contratos.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </Filtro>
-            <Filtro etiqueta="Boleta">
-              <select value={filtroBoleta} onChange={(e) => setFiltroBoleta(e.target.value as '' | 'con' | 'sin')} className={CLASE_CAMPO}>
-                <option value="">Todas</option>
-                <option value="con">Con boleta</option>
-                <option value="sin">Sin boleta</option>
-              </select>
-            </Filtro>
-            <Filtro etiqueta="Estado GM">
-              <select value={filtroEstadoGM} onChange={(e) => setFiltroEstadoGM(e.target.value)} className={CLASE_CAMPO}>
-                <option value="">Todos</option>
-                {opciones.estados.map((e) => <option key={e} value={e}>{e}</option>)}
-              </select>
-            </Filtro>
-            <Filtro etiqueta="Procedimiento">
-              <input value={filtroProcedimiento} onChange={(e) => setFiltroProcedimiento(e.target.value)} placeholder="Código o nombre…" className={`${CLASE_CAMPO} w-40`} />
-            </Filtro>
-            <Filtro etiqueta="Buscar" crece>
-              <div className="relative">
-                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Paciente, documento, ingreso, médico…" className={`${CLASE_CAMPO} w-full pl-8`} />
-              </div>
-            </Filtro>
-            <Boton variante="fantasma" disabled={!hayFiltros} onClick={limpiarFiltros} className="flex items-center gap-1.5 self-end">
-              <Eraser size={14} /> Limpiar
+            </CampoLinea>
+            <div className="relative min-w-[180px] flex-1">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar paciente, documento, ingreso, médico…" className={`${CLASE_CAMPO} w-full pl-8`} />
+            </div>
+            <button
+              onClick={() => setMasFiltros((v) => !v)}
+              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+                masFiltros || filtrosAvanzadosActivos ? 'border-[#0D2D6B] bg-[#0D2D6B]/5 text-[#0D2D6B]' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <SlidersHorizontal size={15} /> Más filtros
+              {filtrosAvanzadosActivos > 0 && <span className="rounded-full bg-[#0D2D6B] px-1.5 text-[11px] text-white">{filtrosAvanzadosActivos}</span>}
+            </button>
+            <Boton variante="fantasma" disabled={!hayFiltros} onClick={limpiarFiltros} title="Limpiar filtros" aria-label="Limpiar filtros" className="!px-2 !py-1.5">
+              <Eraser size={16} />
             </Boton>
+
+            {masFiltros && (
+              <div className="absolute right-3 top-full z-30 mt-1 grid w-[min(560px,calc(100vw-2rem))] grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+                <Filtro etiqueta="Fecha programada">
+                  <select value={filtroFecha} onChange={(e) => setFiltroFecha(e.target.value)} className={`${CLASE_CAMPO} w-full`}>
+                    <option value="">Todas</option>
+                    {opciones.fechas.map((d) => <option key={d} value={d}>{d.slice(8, 10)}/{d.slice(5, 7)}/{d.slice(0, 4)}</option>)}
+                  </select>
+                </Filtro>
+                <Filtro etiqueta="Contrato">
+                  <select value={filtroContrato} onChange={(e) => setFiltroContrato(e.target.value)} className={`${CLASE_CAMPO} w-full`}>
+                    <option value="">Todos</option>
+                    {opciones.contratos.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </Filtro>
+                <Filtro etiqueta="Boleta">
+                  <select value={filtroBoleta} onChange={(e) => setFiltroBoleta(e.target.value as '' | 'con' | 'sin')} className={`${CLASE_CAMPO} w-full`}>
+                    <option value="">Todas</option>
+                    <option value="con">Con boleta</option>
+                    <option value="sin">Sin boleta</option>
+                  </select>
+                </Filtro>
+                <Filtro etiqueta="Estado en GoMedisys">
+                  <select value={filtroEstadoGM} onChange={(e) => setFiltroEstadoGM(e.target.value)} className={`${CLASE_CAMPO} w-full`}>
+                    <option value="">Todos</option>
+                    {opciones.estados.map((e) => <option key={e} value={e}>{e}</option>)}
+                  </select>
+                </Filtro>
+                <div className="col-span-2">
+                  <Filtro etiqueta="Procedimiento">
+                    <input value={filtroProcedimiento} onChange={(e) => setFiltroProcedimiento(e.target.value)} placeholder="Código o nombre del procedimiento…" className={`${CLASE_CAMPO} w-full`} />
+                  </Filtro>
+                </div>
+                <div className="col-span-2 flex justify-end">
+                  <Boton variante="secundario" onClick={() => setMasFiltros(false)} className="!py-1.5">Listo</Boton>
+                </div>
+              </div>
+            )}
           </>
         )}
-      </FilterBar>
+      </div>
 
       {errores.length > 0 && (
         <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -486,7 +538,10 @@ export default function ConsultaMasiva() {
               ))}
             </div>
             <div className="flex items-center gap-3">
-              <span className="hidden text-xs text-slate-500 md:inline">Clic en un registro para ver su detalle</span>
+              <span className="hidden text-xs text-slate-500 2xl:inline">Clic en un registro para ver su detalle</span>
+              <Boton variante="secundario" onClick={exportar} disabled={exportando || visibles.length === 0} className="flex items-center gap-2">
+                <FileSpreadsheet size={16} /> {exportando ? 'Exportando…' : 'Exportar Excel'}
+              </Boton>
               <Boton onClick={abrirMarcar} disabled={seleccion.size === 0} className="flex items-center gap-2">
                 <ListChecks size={16} /> Marcar para gestión ({seleccion.size})
               </Boton>
@@ -692,6 +747,15 @@ export default function ConsultaMasiva() {
 // ---------------------------------------------------------------------------
 // Subcomponentes
 // ---------------------------------------------------------------------------
+
+function CampoLinea({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
+  return (
+    <label className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+      <span className="whitespace-nowrap">{etiqueta}</span>
+      {children}
+    </label>
+  )
+}
 
 function Filtro({ etiqueta, crece, children }: { etiqueta: string; crece?: boolean; children: ReactNode }) {
   return (

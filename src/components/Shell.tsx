@@ -7,6 +7,7 @@ import {
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import { ROLES_LABEL, type Modulo } from '../lib/constantes'
+import { ID_TITULO_HEADER } from './ui'
 
 type ItemNav = { to: string; label: string; icon: typeof LayoutDashboard; modulo: Modulo; hijos?: ItemNav[] }
 
@@ -99,8 +100,10 @@ export default function Shell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="flex shrink-0 justify-end border-b border-white/10 bg-gradient-to-r from-[#0D2D6B] to-[#16468E] px-6 py-3">
-          <div className="relative">
+        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-white/10 bg-gradient-to-r from-[#0D2D6B] to-[#16468E] px-6 py-3">
+          {/* Las páginas pueden ubicar aquí su título (ver TituloEnHeader en ui.tsx) */}
+          <div id={ID_TITULO_HEADER} className="min-w-0 flex-1" />
+          <div className="relative shrink-0">
             <button onClick={() => setMenuAbierto((v) => !v)} className="flex items-center gap-2 rounded-lg px-2 py-1 text-right hover:bg-white/10">
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium text-white">{perfil?.nombre ?? '—'}</div>

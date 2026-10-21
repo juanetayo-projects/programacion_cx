@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
-import { PageHeader, Boton, Modal, Spinner } from '../components/ui'
+import { TituloEnHeader, Boton, Modal, Spinner } from '../components/ui'
 import ReportarTabs from '../components/ReportarTabs'
 import {
   consultarGoMedisys, programacionVigente, camposDeProgramacion, emparejarCatalogo,
@@ -215,8 +215,9 @@ export default function ReportarCirugia() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <ReportarTabs />
-      <PageHeader titulo="Reportar cirugía" subtitulo={`Reportado por: ${perfil?.nombre ?? ''}`} />
+      <TituloEnHeader titulo="Reportar cirugía" subtitulo={`Reportado por: ${perfil?.nombre ?? ''}`}>
+        <ReportarTabs oscuro />
+      </TituloEnHeader>
 
       <form onSubmit={enviar} className="neu-card space-y-4 p-6">
         <div className="grid grid-cols-2 gap-4">

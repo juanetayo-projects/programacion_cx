@@ -975,3 +975,21 @@ Se requiere construir una app que permita
 			   para gestión, recorrer los registros visibles con las flechas y
 			   cerrarse con Esc. La casilla de la tabla sigue seleccionando sin
 			   abrir el panel.
+
+		15.11.- Encabezado compacto y exportación a Excel (2026-10-21)
+			a) El título de la página y las pestañas Reporte individual /
+			   Consulta masiva se muestran en la franja azul superior (antes
+			   vacía) — componente TituloEnHeader (ui.tsx, portal al espacio
+			   que deja el Shell). Aplica a las dos sub-opciones de Reportar
+			   cirugía.
+			b) Barra de filtros en una sola línea: Desde, Hasta, Consultar,
+			   Tipo de orden, Buscar, "Más filtros" (Fecha, Contrato, Boleta,
+			   Estado GM, Procedimiento; muestra cuántos están activos) y
+			   Limpiar (icono).
+			c) Exportar Excel (src/lib/exportarConsultaMasiva.ts): exporta lo
+			   que se ve en la tabla (filtros y pestaña), 33 columnas
+			   agrupadas con los colores del panel de detalle (Gestión verde,
+			   Paciente azul, Orden violeta, Boleta ámbar), estados como
+			   celdas de color igual que las insignias de pantalla, filas
+			   seleccionadas resaltadas, logo, filtros aplicados, encabezado
+			   congelado y autofiltro.

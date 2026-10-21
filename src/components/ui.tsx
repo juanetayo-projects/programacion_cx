@@ -1,4 +1,5 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
 // --- Card de métrica con degradado institucional ---
@@ -22,6 +23,26 @@ export function MetricCard({
       <div className="mt-1 text-2xl font-bold">{valor}</div>
       {sub && <div className="mt-1 text-xs opacity-75">{sub}</div>}
     </div>
+  )
+}
+
+// --- Título dentro de la franja azul superior (Shell) ---
+// Ahorra el espacio vertical del PageHeader en vistas con mucha información.
+export const ID_TITULO_HEADER = 'shell-titulo-header'
+
+export function TituloEnHeader({ titulo, subtitulo, children }: { titulo: string; subtitulo?: string; children?: ReactNode }) {
+  const [destino, setDestino] = useState<HTMLElement | null>(null)
+  useEffect(() => { setDestino(document.getElementById(ID_TITULO_HEADER)) }, [])
+  if (!destino) return null
+  return createPortal(
+    <div className="flex min-w-0 items-center gap-4">
+      <div className="min-w-0">
+        <h1 className="truncate text-base font-semibold leading-tight text-white">{titulo}</h1>
+        {subtitulo && <p className="truncate text-xs text-white/65">{subtitulo}</p>}
+      </div>
+      {children}
+    </div>,
+    destino,
   )
 }
 
