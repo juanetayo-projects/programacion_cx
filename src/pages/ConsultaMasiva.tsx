@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
-import { PageHeader, Boton, Modal, Badge, FilterBar, EstadoVacio, MetricCard } from '../components/ui'
+import { PageHeader, Boton, Modal, Badge, FilterBar, EstadoVacio } from '../components/ui'
 import ReportarTabs from '../components/ReportarTabs'
 import ProgresoConsulta, { type Tramo } from '../components/ProgresoConsulta'
 import { consultarGoMedisys, emparejarCatalogo as emparejar, normalizar, camposDeProgramacion, type ProgramacionGM, type EstadoTrabajo } from '../lib/gomedisys'
 import { ESTADOS_LABEL, type Estado } from '../lib/constantes'
 import {
   DatabaseZap, Search, CheckCircle2, Lock, Users, AlertTriangle, ListChecks, ArrowRight, X, Ban, RotateCw,
+  CalendarDays, Eraser, UserRound, Stethoscope, ClipboardList, ShieldCheck, ChevronLeft, ChevronRight,
+  type LucideIcon,
 } from 'lucide-react'
 
 type FilaGM = ProgramacionGM
@@ -41,6 +43,17 @@ const diasEntre = (desde: string, hasta: string) => {
 }
 const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 const sc = (id: number) => `SC-${String(id).padStart(6, '0')}`
+const SIN_DATO = 'Sin dato'
+const CLASE_CAMPO = 'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm focus:border-[#0D2D6B] focus:outline-none focus:ring-2 focus:ring-[#0D2D6B]/20'
+const tieneBoleta = (f: FilaGM) =>
+  !!(f['Descripción Boleta'] || f['Anotaciones Boleta'] || f.FechaSolicitudBoleta || (f.DuracionBoleta != null && f.DuracionBoleta !== ''))
+
+type Situacion =
+  | { tipo: 'tomada'; g: EnGestion }
+  | { tipo: 'cancelada' }
+  | { tipo: 'ingreso'; gs: EnGestion[] }
+  | { tipo: 'disponible' }
+
 export default function ConsultaMasiva() {
   const { perfil, session } = useAuth()
   const navigate = useNavigate()
@@ -63,6 +76,13 @@ export default function ConsultaMasiva() {
   const [vista, setVista] = useState<'todos' | 'disponibles' | 'gestion'>('disponibles')
   const [filtroEstadoGM, setFiltroEstadoGM] = useState('')
   const [busqueda, setBusqueda] = useState('')
+  const [filtroFecha, setFiltroFecha] = useState('')
+  const [filtroContrato, setFiltroContrato] = useState('')
+  const [filtroTipoOrden, setFiltroTipoOrden] = useState('')
+  const [filtroBoleta, setFiltroBoleta] = useState<'' | 'con' | 'sin'>('')
+  const [filtroProcedimiento, setFiltroProcedimiento] = useState('')
+  // Registro abierto en el panel lateral de detalle
+  const [detalleId, setDetalleId] = useState<number | null>(null)
 
   const [especialidades, setEspecialidades] = useState<Catalogo[]>([])
   const [eps, setEps] = useState<Catalogo[]>([])
@@ -200,12 +220,6 @@ export default function ConsultaMasiva() {
   }
 
   // --- Estado de gestión de cada fila --------------------------------------
-  type Situacion =
-    | { tipo: 'tomada'; g: EnGestion }
-    | { tipo: 'cancelada' }
-    | { tipo: 'ingreso'; gs: EnGestion[] }
-    | { tipo: 'disponible' }
-
   const situacion = useCallback((f: FilaGM): Situacion => {
     const g = porProgramacion.get(Number(f.idProgramming))
     if (g) return { tipo: 'tomada', g }
@@ -217,19 +231,64 @@ export default function ConsultaMasiva() {
 
   const seleccionable = (s: Situacion) => s.tipo === 'disponible' || s.tipo === 'ingreso'
 
-  const estadosGM = useMemo(() => [...new Set((filas ?? []).map((f) => f.Estado ?? '—'))].sort(), [filas])
+  // Opciones de los filtros, a partir de lo que trajo la consulta
+  const opciones = useMemo(() => {
+    const unicos = (fn: (f: FilaGM) => string | null | undefined) =>
+      [...new Set((filas ?? []).map((f) => fn(f) || SIN_DATO))].sort((x, y) => x.localeCompare(y))
+    return {
+      fechas: [...new Set((filas ?? []).map((f) => f.FechaProgramadaISO).filter(Boolean) as string[])].sort(),
+      estados: unicos((f) => f.Estado),
+      contratos: unicos((f) => f.ContratoIngresoCirugia),
+      tiposOrden: unicos((f) => f.TipoOrden),
+    }
+  }, [filas])
 
-  const visibles = useMemo(() => {
+  // Todos los filtros menos la pestaña (Disponibles / En gestión / Todos)
+  const filtradas = useMemo(() => {
     let r = filas ?? []
-    if (filtroEstadoGM) r = r.filter((f) => (f.Estado ?? '—') === filtroEstadoGM)
-    if (vista === 'disponibles') r = r.filter((f) => seleccionable(situacion(f)))
-    if (vista === 'gestion') r = r.filter((f) => situacion(f).tipo === 'tomada')
+    if (filtroFecha) r = r.filter((f) => f.FechaProgramadaISO === filtroFecha)
+    if (filtroEstadoGM) r = r.filter((f) => (f.Estado || SIN_DATO) === filtroEstadoGM)
+    if (filtroContrato) r = r.filter((f) => (f.ContratoIngresoCirugia || SIN_DATO) === filtroContrato)
+    if (filtroTipoOrden) r = r.filter((f) => (f.TipoOrden || SIN_DATO) === filtroTipoOrden)
+    if (filtroBoleta) r = r.filter((f) => tieneBoleta(f) === (filtroBoleta === 'con'))
+    if (filtroProcedimiento) {
+      const p = normalizar(filtroProcedimiento)
+      r = r.filter((f) => normalizar(f.ProcedimientosProgramados ?? '').includes(p))
+    }
     if (busqueda) {
       const b = normalizar(busqueda)
-      r = r.filter((f) => normalizar(`${f.NombrePaciente} ${f.DocumentoIdentificacion} ${f.NumeroIngreso} ${f.ProcedimientosProgramados} ${f.Quirofano}`).includes(b))
+      r = r.filter((f) => normalizar(`${f.NombrePaciente} ${f.DocumentoIdentificacion} ${f.NumeroIngreso} ${f.Quirofano} ${f.EspecialistaOrdena} ${f.EspecialistaOpera}`).includes(b))
     }
     return r
-  }, [filas, filtroEstadoGM, vista, busqueda, situacion])
+  }, [filas, filtroFecha, filtroEstadoGM, filtroContrato, filtroTipoOrden, filtroBoleta, filtroProcedimiento, busqueda])
+
+  const conteoVista = useMemo(() => ({
+    disponibles: filtradas.filter((f) => seleccionable(situacion(f))).length,
+    gestion: filtradas.filter((f) => situacion(f).tipo === 'tomada').length,
+    todos: filtradas.length,
+  }), [filtradas, situacion])
+
+  const visibles = useMemo(() => {
+    if (vista === 'disponibles') return filtradas.filter((f) => seleccionable(situacion(f)))
+    if (vista === 'gestion') return filtradas.filter((f) => situacion(f).tipo === 'tomada')
+    return filtradas
+  }, [filtradas, vista, situacion])
+
+  const hayFiltros = !!(filtroFecha || filtroEstadoGM || filtroContrato || filtroTipoOrden || filtroBoleta || filtroProcedimiento || busqueda)
+  function limpiarFiltros() {
+    setFiltroFecha(''); setFiltroEstadoGM(''); setFiltroContrato(''); setFiltroTipoOrden('')
+    setFiltroBoleta(''); setFiltroProcedimiento(''); setBusqueda('')
+  }
+
+  // Panel lateral: Esc lo cierra; flechas recorren los registros visibles
+  const detalle = detalleId != null ? (filas ?? []).find((f) => f.idProgramming === detalleId) ?? null : null
+  const posDetalle = detalle ? visibles.findIndex((f) => f.idProgramming === detalle.idProgramming) : -1
+  useEffect(() => {
+    if (detalleId == null) return
+    const tecla = (e: KeyboardEvent) => { if (e.key === 'Escape') setDetalleId(null) }
+    window.addEventListener('keydown', tecla)
+    return () => window.removeEventListener('keydown', tecla)
+  }, [detalleId])
 
   const totales = useMemo(() => {
     const t = { total: filas?.length ?? 0, disponibles: 0, gestion: 0 }
@@ -321,33 +380,66 @@ export default function ConsultaMasiva() {
       />
 
       <FilterBar>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500">Fecha programada desde</label>
-          <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+        <div className="flex items-end gap-2">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">Programada desde</label>
+            <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className={CLASE_CAMPO} />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">Hasta</label>
+            <input type="date" value={hasta} min={desde} max={sumarDias(desde, 61)} onChange={(e) => setHasta(e.target.value)} className={CLASE_CAMPO} />
+          </div>
+          <Boton onClick={consultar} disabled={consultando} className="flex items-center gap-2">
+            <DatabaseZap size={16} /> {filas ? 'Volver a consultar' : 'Consultar GoMedisys'}
+          </Boton>
         </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500">Hasta</label>
-          <input type="date" value={hasta} min={desde} max={sumarDias(desde, 61)} onChange={(e) => setHasta(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
-        </div>
-        <Boton onClick={consultar} disabled={consultando} className="flex items-center gap-2">
-          <DatabaseZap size={16} /> {filas ? 'Volver a consultar' : 'Consultar GoMedisys'}
-        </Boton>
+
         {filas && (
           <>
-            <div className="ml-auto">
-              <label className="mb-1 block text-xs font-medium text-slate-500">Estado en GoMedisys</label>
-              <select value={filtroEstadoGM} onChange={(e) => setFiltroEstadoGM(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
-                <option value="">Todos</option>
-                {estadosGM.map((e) => <option key={e} value={e}>{e}</option>)}
+            <div className="mx-1 hidden h-9 w-px self-end bg-slate-200 lg:block" />
+            <Filtro etiqueta="Fecha">
+              <select value={filtroFecha} onChange={(e) => setFiltroFecha(e.target.value)} className={CLASE_CAMPO}>
+                <option value="">Todas</option>
+                {opciones.fechas.map((d) => <option key={d} value={d}>{d.slice(8, 10)}/{d.slice(5, 7)}/{d.slice(0, 4)}</option>)}
               </select>
-            </div>
-            <div className="min-w-[220px]">
-              <label className="mb-1 block text-xs font-medium text-slate-500">Buscar</label>
+            </Filtro>
+            <Filtro etiqueta="Tipo de orden">
+              <select value={filtroTipoOrden} onChange={(e) => setFiltroTipoOrden(e.target.value)} className={CLASE_CAMPO}>
+                <option value="">Todas</option>
+                {opciones.tiposOrden.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </Filtro>
+            <Filtro etiqueta="Contrato">
+              <select value={filtroContrato} onChange={(e) => setFiltroContrato(e.target.value)} className={`${CLASE_CAMPO} max-w-[200px]`}>
+                <option value="">Todos</option>
+                {opciones.contratos.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </Filtro>
+            <Filtro etiqueta="Boleta">
+              <select value={filtroBoleta} onChange={(e) => setFiltroBoleta(e.target.value as '' | 'con' | 'sin')} className={CLASE_CAMPO}>
+                <option value="">Todas</option>
+                <option value="con">Con boleta</option>
+                <option value="sin">Sin boleta</option>
+              </select>
+            </Filtro>
+            <Filtro etiqueta="Estado GM">
+              <select value={filtroEstadoGM} onChange={(e) => setFiltroEstadoGM(e.target.value)} className={CLASE_CAMPO}>
+                <option value="">Todos</option>
+                {opciones.estados.map((e) => <option key={e} value={e}>{e}</option>)}
+              </select>
+            </Filtro>
+            <Filtro etiqueta="Procedimiento">
+              <input value={filtroProcedimiento} onChange={(e) => setFiltroProcedimiento(e.target.value)} placeholder="Código o nombre…" className={`${CLASE_CAMPO} w-40`} />
+            </Filtro>
+            <Filtro etiqueta="Buscar" crece>
               <div className="relative">
                 <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Paciente, documento, ingreso, procedimiento…" className="w-full rounded-lg border border-slate-300 py-1.5 pl-8 pr-3 text-sm" />
+                <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Paciente, documento, ingreso, médico…" className={`${CLASE_CAMPO} w-full pl-8`} />
               </div>
-            </div>
+            </Filtro>
+            <Boton variante="fantasma" disabled={!hayFiltros} onClick={limpiarFiltros} className="flex items-center gap-1.5 self-end">
+              <Eraser size={14} /> Limpiar
+            </Boton>
           </>
         )}
       </FilterBar>
@@ -365,33 +457,44 @@ export default function ConsultaMasiva() {
           <EstadoVacio
             icono={<DatabaseZap size={40} className="text-[#0D2D6B]/40" />}
             titulo="Seleccione el rango de fechas y consulte GoMedisys"
-            descripcion="Se traen todas las cirugías programadas del rango. Los pacientes que otro usuario ya marcó para gestión aparecen bloqueados para evitar registros duplicados."
+            descripcion="Se traen todas las cirugías programadas del rango. Los pacientes que ya están en gestión no se muestran, para evitar registros duplicados."
           />
         </div>
       )}
 
       {filas && (
         <>
-          <div className="mb-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-            <button onClick={() => setVista('todos')} className="text-left"><MetricCard titulo="Programaciones" valor={totales.total} sub={duracion != null ? `Consultadas en ${(duracion / 1000).toFixed(1)} s` : undefined} icono={<DatabaseZap size={18} className="opacity-70" />} /></button>
-            <button onClick={() => setVista('disponibles')} className="text-left"><MetricCard titulo="Disponibles" valor={totales.disponibles} sub="Sin gestión en la app" icono={<CheckCircle2 size={18} className="opacity-70" />} /></button>
-            <button onClick={() => setVista('gestion')} className="text-left"><MetricCard titulo="Ya en gestión" valor={totales.gestion} sub="Ocultos de la lista · clic para verlos" icono={<Lock size={18} className="opacity-70" />} /></button>
-            <MetricCard titulo="Seleccionadas" valor={seleccion.size} sub="Listas para marcar" icono={<ListChecks size={18} className="opacity-70" />} />
+          {/* Indicadores compactos */}
+          <div className="mb-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
+            <Kpi color="azul" icono={CalendarDays} titulo="Programaciones" valor={totales.total}
+              sub={duracion != null ? `Consultadas en ${(duracion / 1000).toFixed(1)} s` : 'En el rango consultado'}
+              activo={vista === 'todos'} onClick={() => setVista('todos')} />
+            <Kpi color="verde" icono={CheckCircle2} titulo="Disponibles" valor={totales.disponibles} sub="Sin gestión en la app"
+              activo={vista === 'disponibles'} onClick={() => setVista('disponibles')} />
+            <Kpi color="ambar" icono={Lock} titulo="Ya en gestión" valor={totales.gestion} sub="Ocultos de la lista"
+              activo={vista === 'gestion'} onClick={() => setVista('gestion')} />
+            <Kpi color="violeta" icono={ListChecks} titulo="Seleccionadas" valor={seleccion.size} sub="Listas para marcar" />
           </div>
 
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div className="neu-inset inline-flex gap-1 p-1 text-sm">
               {([['disponibles', 'Disponibles'], ['gestion', 'Ya en gestión'], ['todos', 'Todos']] as const).map(([k, l]) => (
-                <button key={k} onClick={() => setVista(k)} className={`rounded-lg px-3 py-1 ${vista === k ? 'bg-[#0D2D6B] text-white' : 'text-[#0D2D6B]'}`}>{l}</button>
+                <button key={k} onClick={() => setVista(k)} className={`flex items-center gap-1.5 rounded-lg px-3 py-1 ${vista === k ? 'bg-[#0D2D6B] text-white' : 'text-[#0D2D6B]'}`}>
+                  {l}
+                  <span className={`rounded-full px-1.5 text-[11px] font-semibold ${vista === k ? 'bg-white/20' : 'bg-[#0D2D6B]/10'}`}>{conteoVista[k]}</span>
+                </button>
               ))}
             </div>
-            <Boton onClick={abrirMarcar} disabled={seleccion.size === 0} className="flex items-center gap-2">
-              <ListChecks size={16} /> Marcar para gestión ({seleccion.size})
-            </Boton>
+            <div className="flex items-center gap-3">
+              <span className="hidden text-xs text-slate-500 md:inline">Clic en un registro para ver su detalle</span>
+              <Boton onClick={abrirMarcar} disabled={seleccion.size === 0} className="flex items-center gap-2">
+                <ListChecks size={16} /> Marcar para gestión ({seleccion.size})
+              </Boton>
+            </div>
           </div>
 
           <div className="neu-card overflow-hidden">
-            <div className="max-h-[62vh] overflow-auto">
+            <div className="max-h-[64vh] overflow-auto">
               <table className="tabla-cac w-full text-sm">
                 <thead className="sticky top-0 z-10 bg-[#0D2D6B] text-left text-xs font-semibold uppercase text-white">
                   <tr>
@@ -401,6 +504,7 @@ export default function ConsultaMasiva() {
                     <th className="px-3 py-2.5">Gestión</th>
                     <th className="px-3 py-2.5">Programada</th>
                     <th className="px-3 py-2.5">Paciente</th>
+                    <th className="px-3 py-2.5">Tipo de orden</th>
                     <th className="px-3 py-2.5"># Ingreso</th>
                     <th className="px-3 py-2.5">Contrato</th>
                     <th className="px-3 py-2.5">Procedimientos</th>
@@ -411,7 +515,7 @@ export default function ConsultaMasiva() {
                 </thead>
                 <tbody>
                   {visibles.length === 0 ? (
-                    <tr><td colSpan={10}><EstadoVacio titulo="Sin resultados" descripcion={vista === 'disponibles' && totales.gestion > 0
+                    <tr><td colSpan={11}><EstadoVacio titulo="Sin resultados" descripcion={vista === 'disponibles' && totales.gestion > 0 && !hayFiltros
                       ? `No quedan pacientes disponibles: ${totales.gestion} ya están en gestión.`
                       : 'No hay programaciones para los filtros seleccionados'} /></td></tr>
                   ) : visibles.map((f) => {
@@ -419,11 +523,12 @@ export default function ConsultaMasiva() {
                     const puede = seleccionable(s)
                     const otrosSel = seleccionadoPorOtros.get(f.idProgramming)
                     const marcada = seleccion.has(f.idProgramming)
+                    const abierta = detalleId === f.idProgramming
                     return (
                       <tr
                         key={f.idProgramming}
-                        onClick={() => puede && alternar(f.idProgramming)}
-                        className={`border-t border-slate-100 align-top ${puede ? 'cursor-pointer' : 'opacity-60'} ${marcada ? '!bg-sky-50' : ''}`}
+                        onClick={() => setDetalleId(f.idProgramming)}
+                        className={`cursor-pointer border-t border-slate-100 align-top ${puede ? '' : 'opacity-60'} ${marcada ? '!bg-sky-50' : ''} ${abierta ? '!bg-amber-50 outline outline-2 -outline-offset-2 outline-amber-300' : ''}`}
                       >
                         <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                           {puede
@@ -431,24 +536,7 @@ export default function ConsultaMasiva() {
                             : <Lock size={14} className="text-slate-400" />}
                         </td>
                         <td className="px-3 py-2.5">
-                          {s.tipo === 'tomada' && (
-                            <Badge className="border-violet-300 bg-violet-100 text-violet-700">
-                              <Lock size={11} /> {sc(s.g.id)}
-                            </Badge>
-                          )}
-                          {s.tipo === 'tomada' && (
-                            <div className="mt-1 text-[11px] text-slate-500">
-                              {s.g.responsable ?? '—'} · {ESTADOS_LABEL[s.g.estado as Estado] ?? s.g.estado}
-                            </div>
-                          )}
-                          {s.tipo === 'cancelada' && <Badge className="border-neutral-300 bg-neutral-100 text-neutral-600"><Ban size={11} /> Cancelada</Badge>}
-                          {s.tipo === 'ingreso' && (
-                            <Badge className="border-orange-300 bg-orange-100 text-orange-700" >
-                              <AlertTriangle size={11} /> Ingreso reportado
-                            </Badge>
-                          )}
-                          {s.tipo === 'ingreso' && <div className="mt-1 text-[11px] text-slate-500">{s.gs.map((g) => sc(g.id)).join(', ')}</div>}
-                          {s.tipo === 'disponible' && <Badge className="border-emerald-300 bg-emerald-100 text-emerald-700"><CheckCircle2 size={11} /> Disponible</Badge>}
+                          <BadgeSituacion s={s} />
                           {otrosSel && puede && (
                             <div className="mt-1 flex items-center gap-1 text-[11px] font-medium text-amber-700" title="Otro usuario lo tiene seleccionado en este momento">
                               <Users size={11} /> {otrosSel.join(', ')} lo está seleccionando
@@ -465,42 +553,56 @@ export default function ConsultaMasiva() {
                             {f.TipoDocumento} {f.DocumentoIdentificacion} · {f['Edad(Anos)'] ?? '—'} años{f.Genero ? ` · ${f.Genero}` : ''}
                           </div>
                         </td>
+                        <td className="px-3 py-2.5"><BadgeTipoOrden tipo={f.TipoOrden} /></td>
                         <td className="px-3 py-2.5 text-slate-600">
                           {f.NumeroIngreso ?? '—'}
                           {!!f.IngresoInferido && <div className="text-[10px] text-amber-600" title="La programación no traía ingreso; se tomó el último ingreso del paciente">inferido</div>}
                         </td>
                         <td className="px-3 py-2.5 text-xs">
                           <div className="text-slate-700">{f.ContratoIngresoCirugia ?? '—'}</div>
-                          {f['Plan(Aseguradora)'] && <div className="text-slate-400">{f['Plan(Aseguradora)']}</div>}
+                          {f['Plan(Aseguradora)'] && f['Plan(Aseguradora)'] !== f.ContratoIngresoCirugia && <div className="text-slate-400">{f['Plan(Aseguradora)']}</div>}
                         </td>
-                        <td className="max-w-[280px] px-3 py-2.5 text-xs text-slate-600">
-                          <div className="line-clamp-3 whitespace-pre-line" title={f.ProcedimientosProgramados ?? ''}>{f.ProcedimientosProgramados ?? '—'}</div>
+                        <td className="max-w-[260px] px-3 py-2.5 text-xs text-slate-600">
+                          <div className="line-clamp-2 whitespace-pre-line" title={f.ProcedimientosProgramados ?? ''}>{f.ProcedimientosProgramados ?? '—'}</div>
                         </td>
                         <td className="px-3 py-2.5 text-xs">
                           <div className="text-slate-700">{f.EspecialistaOrdena ?? '—'}</div>
-                          {f.FechaOrdenamiento && <div className="text-slate-400">Orden: {f.FechaOrdenamiento}{f.TipoOrden ? ` · ${f.TipoOrden}` : ''}</div>}
-                          {f.EspecialistaOpera && <div className="mt-1 text-slate-500">Opera: {f.EspecialistaOpera}{f.EspecialidadOpera ? ` (${f.EspecialidadOpera})` : ''}</div>}
+                          {f.FechaOrdenamiento && <div className="text-slate-400">Orden: {f.FechaOrdenamiento}</div>}
+                          {f.EspecialistaOpera && <div className="mt-1 text-slate-500">Opera: {f.EspecialistaOpera}</div>}
                         </td>
                         <td className="px-3 py-2.5 text-xs text-slate-600">
-                          {f.DuracionBoleta != null && f.DuracionBoleta !== '' ? <div>{f.DuracionBoleta} min</div> : <div className="text-slate-400">Sin boleta</div>}
-                          {f.PrioridadBoleta && <div className="text-slate-400">{f.PrioridadBoleta}</div>}
+                          {tieneBoleta(f)
+                            ? <><div>{f.DuracionBoleta != null && f.DuracionBoleta !== '' ? `${f.DuracionBoleta} min` : 'Con boleta'}</div>{f.PrioridadBoleta && <div className="text-slate-400">{f.PrioridadBoleta}</div>}</>
+                            : <div className="text-slate-400">Sin boleta</div>}
                         </td>
-                        <td className="px-3 py-2.5 text-xs">
-                          <span className={`rounded-full px-2 py-0.5 font-medium ${
-                            f.Estado === 'Activa' ? 'bg-sky-100 text-sky-700'
-                            : f.Estado === 'Confirmada' ? 'bg-emerald-100 text-emerald-700'
-                            : f.Estado === 'Cancelada' ? 'bg-neutral-200 text-neutral-600'
-                            : 'bg-orange-100 text-orange-700'
-                          }`}>{f.Estado ?? '—'}</span>
-                        </td>
+                        <td className="px-3 py-2.5 text-xs"><BadgeEstadoGM estado={f.Estado} /></td>
                       </tr>
                     )
                   })}
                 </tbody>
               </table>
             </div>
+            <div className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
+              Mostrando {visibles.length} de {filas.length} programaciones
+            </div>
           </div>
         </>
+      )}
+
+      {/* Panel lateral de detalle */}
+      {detalle && (
+        <PanelDetalle
+          f={detalle}
+          s={situacion(detalle)}
+          seleccionada={seleccion.has(detalle.idProgramming)}
+          otrosSeleccionando={seleccionadoPorOtros.get(detalle.idProgramming)}
+          onAlternar={() => alternar(detalle.idProgramming)}
+          onCerrar={() => setDetalleId(null)}
+          onAnterior={posDetalle > 0 ? () => setDetalleId(visibles[posDetalle - 1].idProgramming) : undefined}
+          onSiguiente={posDetalle >= 0 && posDetalle < visibles.length - 1 ? () => setDetalleId(visibles[posDetalle + 1].idProgramming) : undefined}
+          posicion={posDetalle >= 0 ? `${posDetalle + 1} de ${visibles.length}` : ''}
+          onIrGestion={() => navigate('/solicitudes')}
+        />
       )}
 
       {consultando && <ProgresoConsulta tramos={tramos} inicio={inicio} estado={estadoTrabajo} />}
@@ -584,5 +686,238 @@ export default function ConsultaMasiva() {
         </div>
       </Modal>
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Subcomponentes
+// ---------------------------------------------------------------------------
+
+function Filtro({ etiqueta, crece, children }: { etiqueta: string; crece?: boolean; children: ReactNode }) {
+  return (
+    <div className={crece ? 'min-w-[200px] flex-1' : undefined}>
+      <label className="mb-1 block text-xs font-medium text-slate-500">{etiqueta}</label>
+      {children}
+    </div>
+  )
+}
+
+const COLORES_KPI = {
+  azul: { fondo: 'bg-sky-50 border-sky-100', icono: 'bg-sky-100 text-sky-700', anillo: 'ring-sky-400' },
+  verde: { fondo: 'bg-emerald-50 border-emerald-100', icono: 'bg-emerald-500 text-white', anillo: 'ring-emerald-400' },
+  ambar: { fondo: 'bg-amber-50 border-amber-100', icono: 'bg-amber-400 text-white', anillo: 'ring-amber-400' },
+  violeta: { fondo: 'bg-violet-50 border-violet-100', icono: 'bg-violet-100 text-violet-700', anillo: 'ring-violet-400' },
+} as const
+
+/** Indicador compacto (una sola línea de alto) */
+function Kpi({ color, icono: Icono, titulo, valor, sub, activo, onClick }: {
+  color: keyof typeof COLORES_KPI; icono: LucideIcon; titulo: string; valor: number; sub: string
+  activo?: boolean; onClick?: () => void
+}) {
+  const c = COLORES_KPI[color]
+  const Contenedor = onClick ? 'button' : 'div'
+  return (
+    <Contenedor
+      onClick={onClick}
+      className={`flex items-center gap-3 rounded-xl border px-3 py-2 text-left transition ${c.fondo} ${onClick ? 'hover:shadow-md' : ''} ${activo ? `ring-2 ${c.anillo}` : ''}`}
+    >
+      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${c.icono}`}><Icono size={20} /></span>
+      <div className="min-w-0">
+        <div className="text-xs font-medium text-slate-600">{titulo}</div>
+        <div className="flex items-baseline gap-2">
+          <span className="text-2xl font-bold leading-tight text-[#0D2D6B]">{valor}</span>
+          <span className="truncate text-[11px] text-slate-500">{sub}</span>
+        </div>
+      </div>
+    </Contenedor>
+  )
+}
+
+function BadgeSituacion({ s }: { s: Situacion }) {
+  if (s.tipo === 'tomada') {
+    return (
+      <>
+        <Badge className="border-violet-300 bg-violet-100 text-violet-700"><Lock size={11} /> {sc(s.g.id)}</Badge>
+        <div className="mt-1 text-[11px] text-slate-500">{s.g.responsable ?? '—'} · {ESTADOS_LABEL[s.g.estado as Estado] ?? s.g.estado}</div>
+      </>
+    )
+  }
+  if (s.tipo === 'cancelada') return <Badge className="border-neutral-300 bg-neutral-100 text-neutral-600"><Ban size={11} /> Cancelada</Badge>
+  if (s.tipo === 'ingreso') {
+    return (
+      <>
+        <Badge className="border-orange-300 bg-orange-100 text-orange-700"><AlertTriangle size={11} /> Ingreso reportado</Badge>
+        <div className="mt-1 text-[11px] text-slate-500">{s.gs.map((g) => sc(g.id)).join(', ')}</div>
+      </>
+    )
+  }
+  return <Badge className="border-emerald-300 bg-emerald-100 text-emerald-700"><CheckCircle2 size={11} /> Disponible</Badge>
+}
+
+function BadgeTipoOrden({ tipo }: { tipo: string | null }) {
+  if (!tipo) return <span className="text-xs text-slate-400">Sin dato</span>
+  const intra = tipo.toUpperCase().startsWith('INTRA')
+  return (
+    <span className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${intra ? 'bg-indigo-100 text-indigo-700' : 'bg-teal-100 text-teal-700'}`}>
+      {tipo}
+    </span>
+  )
+}
+
+function BadgeEstadoGM({ estado }: { estado: string | null }) {
+  return (
+    <span className={`rounded-full px-2 py-0.5 font-medium ${
+      estado === 'Activa' ? 'bg-sky-100 text-sky-700'
+      : estado === 'Confirmada' ? 'bg-emerald-100 text-emerald-700'
+      : estado === 'Cancelada' ? 'bg-neutral-200 text-neutral-600'
+      : 'bg-orange-100 text-orange-700'
+    }`}>{estado ?? '—'}</span>
+  )
+}
+
+const COLORES_GRUPO = {
+  paciente: { caja: 'bg-sky-50 border-sky-200', titulo: 'text-sky-800', icono: 'bg-sky-600' },
+  orden: { caja: 'bg-violet-50 border-violet-200', titulo: 'text-violet-800', icono: 'bg-violet-600' },
+  boleta: { caja: 'bg-amber-50 border-amber-200', titulo: 'text-amber-800', icono: 'bg-amber-500' },
+  gestion: { caja: 'bg-emerald-50 border-emerald-200', titulo: 'text-emerald-800', icono: 'bg-emerald-600' },
+} as const
+
+function Grupo({ color, icono: Icono, titulo, children }: { color: keyof typeof COLORES_GRUPO; icono: LucideIcon; titulo: string; children: ReactNode }) {
+  const c = COLORES_GRUPO[color]
+  return (
+    <section className={`rounded-xl border p-3 ${c.caja}`}>
+      <h3 className={`mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide ${c.titulo}`}>
+        <span className={`flex h-6 w-6 items-center justify-center rounded-md text-white ${c.icono}`}><Icono size={14} /></span>
+        {titulo}
+      </h3>
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-2">{children}</dl>
+    </section>
+  )
+}
+
+function Dato({ etiqueta, valor, ancho }: { etiqueta: string; valor: ReactNode; ancho?: boolean }) {
+  const vacio = valor === null || valor === undefined || valor === ''
+  return (
+    <div className={ancho ? 'col-span-2' : undefined}>
+      <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{etiqueta}</dt>
+      <dd className={`whitespace-pre-line text-sm ${vacio ? 'text-slate-400' : 'text-slate-800'}`}>{vacio ? '—' : valor}</dd>
+    </div>
+  )
+}
+
+const fechaHora = (iso: string | null) => {
+  if (!iso) return null
+  const [d, h] = iso.split('T')
+  return `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}${h ? ` ${h.slice(0, 5)}` : ''}`
+}
+
+/** Panel lateral con todo el detalle de una programación, agrupado por concepto */
+function PanelDetalle({ f, s, seleccionada, otrosSeleccionando, onAlternar, onCerrar, onAnterior, onSiguiente, posicion, onIrGestion }: {
+  f: FilaGM; s: Situacion; seleccionada: boolean; otrosSeleccionando?: string[]
+  onAlternar: () => void; onCerrar: () => void; onAnterior?: () => void; onSiguiente?: () => void
+  posicion: string; onIrGestion: () => void
+}) {
+  const puede = s.tipo === 'disponible' || s.tipo === 'ingreso'
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-[#071a40]/20" onClick={onCerrar} />
+      <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col bg-white shadow-2xl">
+        <header className="bg-gradient-to-r from-[#0D2D6B] to-[#16468E] px-4 py-3 text-white">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="truncate text-base font-semibold">{f.NombrePaciente}</div>
+              <div className="text-xs text-white/70">{f.TipoDocumento} {f.DocumentoIdentificacion} · Ingreso {f.NumeroIngreso ?? '—'}</div>
+            </div>
+            <button onClick={onCerrar} aria-label="Cerrar" className="rounded-full p-1 text-white/80 hover:bg-white/15"><X size={18} /></button>
+          </div>
+          <div className="mt-2 flex items-center justify-between text-xs">
+            <div className="flex items-center gap-1.5">
+              <BadgeTipoOrden tipo={f.TipoOrden} />
+              <BadgeEstadoGM estado={f.Estado} />
+            </div>
+            <div className="flex items-center gap-1 text-white/80">
+              <button disabled={!onAnterior} onClick={onAnterior} className="rounded p-0.5 hover:bg-white/15 disabled:opacity-30" title="Anterior"><ChevronLeft size={16} /></button>
+              <span className="tabular-nums">{posicion}</span>
+              <button disabled={!onSiguiente} onClick={onSiguiente} className="rounded p-0.5 hover:bg-white/15 disabled:opacity-30" title="Siguiente"><ChevronRight size={16} /></button>
+            </div>
+          </div>
+        </header>
+
+        <div className="flex-1 space-y-3 overflow-y-auto p-4">
+          <Grupo color="paciente" icono={UserRound} titulo="Datos del paciente">
+            <Dato etiqueta="Paciente" valor={f.NombrePaciente} ancho />
+            <Dato etiqueta="Documento" valor={`${f.TipoDocumento ?? ''} ${f.DocumentoIdentificacion ?? ''}`.trim()} />
+            <Dato etiqueta="Edad / género" valor={`${f['Edad(Anos)'] ?? '—'} años${f.Genero ? ` · ${f.Genero}` : ''}`} />
+            <Dato etiqueta="Teléfono" valor={f.Telefono1} />
+            <Dato etiqueta="# Ingreso" valor={f.NumeroIngreso != null ? `${f.NumeroIngreso}${f.IngresoInferido ? ' (inferido)' : ''}` : null} />
+            <Dato etiqueta="Contrato" valor={f.ContratoIngresoCirugia} ancho />
+            <Dato etiqueta="Plan (aseguradora)" valor={f['Plan(Aseguradora)']} ancho />
+          </Grupo>
+
+          <Grupo color="orden" icono={Stethoscope} titulo="Orden quirúrgica">
+            <Dato etiqueta="Tipo de orden" valor={f.TipoOrden} />
+            <Dato etiqueta="Fecha de ordenamiento" valor={f.FechaOrdenamiento} />
+            <Dato etiqueta="Fecha / hora programada" valor={`${f.FechaProgramada ?? '—'} ${f.HoraProgramada ?? ''}`} />
+            <Dato etiqueta="Quirófano" valor={f.Quirofano} />
+            <Dato etiqueta="Procedimientos programados" valor={f.ProcedimientosProgramados} ancho />
+            <Dato etiqueta="Diagnóstico preoperatorio" valor={f.DiagnosticoPreoperatorio} ancho />
+            <Dato etiqueta="Especialista que ordena" valor={f.EspecialistaOrdena} />
+            <Dato etiqueta="Especialista que opera" valor={f.EspecialistaOpera} />
+            <Dato etiqueta="Especialidad que opera" valor={f.EspecialidadOpera} />
+            <Dato etiqueta="Estado en GoMedisys" valor={f.Estado} />
+          </Grupo>
+
+          <Grupo color="boleta" icono={ClipboardList} titulo="Boleta quirúrgica">
+            {tieneBoleta(f) ? (
+              <>
+                <Dato etiqueta="Fecha de solicitud" valor={fechaHora(f.FechaSolicitudBoleta)} />
+                <Dato etiqueta="Duración" valor={f.DuracionBoleta != null && f.DuracionBoleta !== '' ? `${f.DuracionBoleta} min` : null} />
+                <Dato etiqueta="Prioridad" valor={f.PrioridadBoleta} />
+                <Dato etiqueta="Destino probable" valor={f.DestinoBoleta} />
+                <Dato etiqueta="Descripción (equipos en sala)" valor={f['Descripción Boleta']} ancho />
+                <Dato etiqueta="Anotaciones" valor={f['Anotaciones Boleta']} ancho />
+              </>
+            ) : (
+              <div className="col-span-2 text-sm text-amber-800/70">Sin boleta quirúrgica en los 30 días previos a la cirugía.</div>
+            )}
+          </Grupo>
+
+          <Grupo color="gestion" icono={ShieldCheck} titulo="Gestión">
+            <div className="col-span-2"><BadgeSituacion s={s} /></div>
+            {s.tipo === 'tomada' && (
+              <>
+                <Dato etiqueta="Solicitud" valor={sc(s.g.id)} />
+                <Dato etiqueta="Responsable" valor={s.g.responsable} />
+                <Dato etiqueta="Estado en la app" valor={ESTADOS_LABEL[s.g.estado as Estado] ?? s.g.estado} />
+              </>
+            )}
+            {s.tipo === 'ingreso' && (
+              <div className="col-span-2 text-xs text-orange-700">
+                Este # de ingreso ya tiene una solicitud abierta ({s.gs.map((g) => sc(g.id)).join(', ')}). Márquelo solo si es otra cirugía.
+              </div>
+            )}
+            {s.tipo === 'cancelada' && <div className="col-span-2 text-xs text-slate-600">La programación está cancelada en GoMedisys; no se puede marcar.</div>}
+            {otrosSeleccionando && puede && (
+              <div className="col-span-2 flex items-center gap-1 text-xs font-medium text-amber-700">
+                <Users size={12} /> {otrosSeleccionando.join(', ')} lo está seleccionando en este momento
+              </div>
+            )}
+          </Grupo>
+        </div>
+
+        <footer className="flex gap-2 border-t border-slate-200 p-3">
+          {puede ? (
+            <Boton onClick={onAlternar} variante={seleccionada ? 'secundario' : 'primario'} className="flex flex-1 items-center justify-center gap-2">
+              <ListChecks size={16} /> {seleccionada ? 'Quitar de la selección' : 'Seleccionar para gestión'}
+            </Boton>
+          ) : s.tipo === 'tomada' ? (
+            <Boton onClick={onIrGestion} variante="secundario" className="flex flex-1 items-center justify-center gap-2">
+              Ver en Gestión de solicitudes <ArrowRight size={15} />
+            </Boton>
+          ) : <div className="flex-1" />}
+          <Boton variante="fantasma" onClick={onCerrar}>Cerrar</Boton>
+        </footer>
+      </aside>
+    </>
   )
 }

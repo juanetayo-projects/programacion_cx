@@ -61,6 +61,7 @@ export type ProgramacionGM = {
   EspecialidadOpera: string | null
   'Descripción Boleta': string | null
   'Anotaciones Boleta': string | null
+  FechaSolicitudBoleta: string | null
   DuracionBoleta: number | string | null
   PrioridadBoleta: string | null
   DestinoBoleta: string | null

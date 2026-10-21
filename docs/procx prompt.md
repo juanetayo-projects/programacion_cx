@@ -955,3 +955,23 @@ Se requiere construir una app que permita
 			c) Los pacientes ya en gestión NO vuelven a mostrarse en la consulta
 			   masiva: la vista por defecto es "Disponibles"; la tarjeta "Ya en
 			   gestión" conserva el conteo y permite verlos si se necesita.
+
+		15.10.- Consulta masiva: diseño compacto, filtros y panel de detalle (2026-10-21)
+			a) Indicadores compactos (una línea de alto, fondo de color por
+			   concepto, como el modelo compartido); los de Programaciones,
+			   Disponibles y Ya en gestión son clicables y cambian la pestaña.
+			   Las pestañas muestran el conteo según los filtros vigentes.
+			b) Filtros sobre el resultado: Fecha (día del rango), Tipo de orden,
+			   Contrato, Boleta (con/sin), Estado GM, Procedimiento (código o
+			   nombre) y Buscar (paciente, documento, ingreso, quirófano,
+			   médicos), con botón Limpiar. El rango Desde/Hasta sigue siendo
+			   el de la consulta a GoMedisys.
+			c) Nueva columna "Tipo de orden" (Intra-Hospitalaria / Ambulatoria,
+			   con color distinto) y su filtro.
+			d) Clic en un registro abre un panel lateral derecho con todo el
+			   detalle agrupado y con color de fondo por grupo: Datos del
+			   paciente (azul), Orden quirúrgica (violeta), Boleta quirúrgica
+			   (ámbar) y Gestión (verde). Permite seleccionar/quitar el paciente
+			   para gestión, recorrer los registros visibles con las flechas y
+			   cerrarse con Esc. La casilla de la tabla sigue seleccionando sin
+			   abrir el panel.
