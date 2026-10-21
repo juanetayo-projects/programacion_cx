@@ -1018,3 +1018,30 @@ Se requiere construir una app que permita
 			   desde/hasta, Especialidad con conteo, Buscar, Más filtros:
 			   médico, quirófano, hora; Limpiar; Excel) y estados en una sola
 			   fila de chips.
+
+		15.13.- Notificación al paciente y retiro de "Solicitudes reportadas" (2026-10-21)
+			a) "Solicitudes reportadas" queda oculto (menú, ruta redirige a
+			   Gestión, no aparece en Roles y permisos: MODULOS_OCULTOS). El
+			   reporte individual validado en GoMedisys entra como 'procesado';
+			   si no se validó, entra 'reportado' y se gestiona en Gestión de
+			   solicitudes, que ahora muestra también Reportado / Consulta
+			   fallida con la acción "Consultar GoMedisys" (rayo).
+			b) Notificar se hace en el panel lateral: qué se comunica,
+			   contacto, canales, recomendaciones (editor) y VISTA PREVIA por
+			   canal: el correo exacto (iframe), WhatsApp y SMS.
+			c) Correo: plantilla profesional compartida entre la app (vista
+			   previa) y la Edge Function (envío):
+			   supabase/functions/notificar-paciente/plantilla.ts. Logo de la
+			   clínica, "Programación de Cirugías", estado destacado, fecha y
+			   hora en español, datos de la cirugía, recomendaciones, pie de
+			   confidencialidad (Ley 1581). Asunto según el estado.
+			   Remitente: Programación de Cirugías - Clínica CAC Santa Bárbara
+			   <notificaciones@cacsantabarbara.co>.
+			d) WhatsApp y SMS (fase 1, manual): al notificar se abre una
+			   ventana con los textos listos para copiar; WhatsApp con botón
+			   "Abrir en WhatsApp Web" (número con +57) y SMS sin tildes,
+			   ajustado a 1 mensaje cuando es posible. Fase 2 (pendiente):
+			   envío automático por WhatsApp/SMS.
+			e) Pendiente para habilitar el correo: secret RESEND_API_KEY en
+			   Supabase (Edge Functions → Secrets). Sin él, la notificación
+			   por correo muestra "Falta configurar RESEND_API_KEY".

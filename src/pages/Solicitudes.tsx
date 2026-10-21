@@ -5,6 +5,12 @@ import type { Json } from '../lib/database.types'
 import { TituloEnHeader, CampoLinea, CLASE_CAMPO, Boton, Modal, Badge, EstadoVacio, Spinner } from '../components/ui'
 import { PanelLateral, Grupo, Dato } from '../components/PanelLateral'
 import RichTextEditor from '../components/RichTextEditor'
+import ProgresoConsulta, { type Tramo } from '../components/ProgresoConsulta'
+import { procesarSolicitudGoMedisys, type EstadoTrabajo } from '../lib/gomedisys'
+import {
+  plantillaCorreo, textoWhatsApp, textoSms, segmentosSms, telefonoWhatsApp, LOGO_CORREO,
+  type DatosNotificacion,
+} from '../lib/mensajesNotificacion'
 import {
   ESTADOS, ESTADOS_LABEL, ESTADOS_COLOR, ESTADOS_COLOR_HEX, ESTADOS_COLOR_SOLIDO, ESTADOS_NOTIFICABLES, CANALES_NOTIFICACION,
   type Estado, type EstadoNotificable,
@@ -13,6 +19,7 @@ import {
   Eye, Pencil, CalendarClock, BellRing, RefreshCw, Ban, Undo2, Stethoscope,
   CheckCircle2, Clock, Send, Repeat, PauseCircle, CircleSlash, FileSpreadsheet, AlertTriangle,
   Search, SlidersHorizontal, Eraser, UserRound, ClipboardList, ShieldCheck, Save, LayoutGrid,
+  Zap, FileWarning, XCircle, Mail, MessageCircle, Smartphone, Copy, ExternalLink, Eye as EyeIcon,
 } from 'lucide-react'
 
 type Solicitud = {
@@ -80,12 +87,15 @@ function minutosDesdeHora(hora: string) {
   return h * 60 + m
 }
 
-// Estados que ya pasaron por la consulta GoMedisys y aún no han sido realizados
-// — este módulo solo gestiona registros a partir de ahí; los recién reportados
-// viven en "Solicitudes reportadas" y los ya realizados en "Cirugías realizadas".
-const ESTADOS_GESTION = ESTADOS.filter((e) => !['reportado', 'fallido', 'realizado'].includes(e))
+// Todos los estados salvo los ya realizados (viven en "Cirugías realizadas").
+// Oct-2026: "Solicitudes reportadas" quedó oculto; los reportes que no se
+// validaron contra GoMedisys (reportado / consulta fallida) también se
+// gestionan aquí, con la acción "Consultar GoMedisys".
+const ESTADOS_GESTION = ESTADOS.filter((e) => e !== 'realizado')
 
 const ICONO_ESTADO: Partial<Record<Estado, React.ReactNode>> = {
+  reportado: <FileWarning size={13} />,
+  fallido: <XCircle size={13} />,
   procesado: <CheckCircle2 size={13} />,
   programado: <Clock size={13} />,
   notificado: <BellRing size={13} />,
@@ -112,6 +122,8 @@ export default function Solicitudes() {
   const [filtroMedico, setFiltroMedico] = useState('')
   const [busqueda, setBusqueda] = useState('')
   const [masFiltros, setMasFiltros] = useState(false)
+  const [avanceGM, setAvanceGM] = useState<{ estado: EstadoTrabajo; tramos: Tramo[]; inicio: number } | null>(null)
+  const [envioManual, setEnvioManual] = useState<{ datos: DatosNotificacion; canales: string[]; telefono: string } | null>(null)
   const [especialidades, setEspecialidades] = useState<{ id: number; nombre: string }[]>([])
   const [quirofanos, setQuirofanos] = useState<{ id: number; nombre: string; numero: number }[]>([])
   const [recomendaciones, setRecomendaciones] = useState<{ especialidad_id: number; titulo: string; contenido: string }[]>([])
@@ -128,7 +140,7 @@ export default function Solicitudes() {
     let q = supabase
       .from('solicitudes_cirugia')
       .select('*, especialidades(nombre), eps(nombre), unidades(nombre), quirofanos(nombre), perfiles!solicitudes_cirugia_reportado_por_fkey(nombre)')
-      .not('estado', 'in', '(reportado,fallido,realizado)')
+      .neq('estado', 'realizado')
       .order('fecha_reporte', { ascending: false })
     if (filtroEstado) q = q.eq('estado', filtroEstado)
     if (filtroEspecialidad) q = q.eq('especialidad_id', Number(filtroEspecialidad))
@@ -368,10 +380,15 @@ export default function Solicitudes() {
     setError('')
     try {
       if (canales.includes('email') && email) {
-        const { error: fnError } = await supabase.functions.invoke('notificar-paciente', {
-          body: { solicitudId: seleccion.id, email, notas },
+        const { data: fnData, error: fnError } = await supabase.functions.invoke('notificar-paciente', {
+          body: { solicitudId: seleccion.id, email, notas, estado: estadoDestino },
         })
-        if (fnError) throw new Error(fnError.message)
+        if (fnError) {
+          // La Edge Function responde 4xx con { error } (p. ej. falta RESEND_API_KEY)
+          const detalle = await (fnError as { context?: Response }).context?.json?.().catch(() => null)
+          throw new Error(detalle?.error ?? fnError.message)
+        }
+        if (fnData?.ok === false) throw new Error(fnData.error)
       }
       const esCancelacion = estadoDestino === 'cancelado'
       const { error } = await supabase.from('solicitudes_cirugia').update({
@@ -387,12 +404,30 @@ export default function Solicitudes() {
       await supabase.from('solicitudes_historial').insert({
         solicitud_id: seleccion.id, accion: 'notificado', usuario_id: session!.user.id, detalle: { canales, estado: estadoDestino },
       })
+      // WhatsApp y SMS se envían a mano por ahora: se muestran los textos para copiar
+      const manuales = canales.filter((c) => c === 'whatsapp' || c === 'sms')
+      if (manuales.length) {
+        setEnvioManual({ datos: datosNotificacion(seleccion, estadoDestino, notas), canales: manuales, telefono })
+      }
       cerrar()
       cargar()
     } catch (e) {
       setError((e as Error).message)
     } finally {
       setGuardando(false)
+    }
+  }
+
+  async function consultarGoMedisysFila(fila: Solicitud) {
+    const inicio = Date.now()
+    setAvanceGM({ estado: 'pendiente', tramos: [], inicio })
+    try {
+      const r = await procesarSolicitudGoMedisys(fila.id, session!.user.id, (t) =>
+        setAvanceGM({ estado: t.estado, tramos: Array.isArray(t.progreso) ? t.progreso : [], inicio }))
+      if (!r.ok) alert(`No fue posible consultar GoMedisys:\n\n${r.error}`)
+    } finally {
+      setAvanceGM(null)
+      cargar()
     }
   }
 
@@ -562,6 +597,9 @@ export default function Solicitudes() {
                       <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                         <button title="Ver" onClick={() => abrir(f, 'ver')} className="text-slate-500 hover:text-[#0D2D6B]"><Eye size={15} /></button>
                         <button title="Editar" onClick={() => abrir(f, 'editar')} className="text-slate-500 hover:text-[#0D2D6B]"><Pencil size={15} /></button>
+                        {(f.estado === 'reportado' || f.estado === 'fallido') && (
+                          <button title="Consultar GoMedisys" onClick={() => consultarGoMedisysFila(f)} className="text-slate-500 hover:text-[#0D2D6B]"><Zap size={15} /></button>
+                        )}
                         {!ESTADOS_PROGRAMADOS.includes(f.estado) && f.estado !== 'realizado' && f.estado !== 'cancelado' && (
                           <button title="Programar" onClick={() => abrir(f, 'programar')} className="text-slate-500 hover:text-[#0D2D6B]"><CalendarClock size={15} /></button>
                         )}
@@ -607,7 +645,10 @@ export default function Solicitudes() {
               <Boton onClick={() => setModal('programar')} className="flex flex-1 items-center justify-center gap-1.5"><CalendarClock size={14} /> Programar</Boton>
             )}
             {ESTADOS_PROGRAMADOS.includes(seleccion.estado) && (
-              <Boton onClick={() => setModal('reprogramar')} className="flex flex-1 items-center justify-center gap-1.5"><RefreshCw size={14} /> Reprogramar</Boton>
+              <>
+                <Boton variante="secundario" onClick={() => setModal('notificar')} className="flex items-center gap-1.5"><BellRing size={14} /> Notificar</Boton>
+                <Boton onClick={() => setModal('reprogramar')} className="flex flex-1 items-center justify-center gap-1.5"><RefreshCw size={14} /> Reprogramar</Boton>
+              </>
             )}
             <Boton variante="fantasma" onClick={cerrarPanel}>Cerrar</Boton>
           </>}
@@ -711,15 +752,21 @@ export default function Solicitudes() {
       )}
 
       {/* NOTIFICAR */}
-      <ModalNotificar
-        open={modal === 'notificar'}
-        seleccion={seleccion}
-        recomendaciones={recomendaciones}
-        error={error}
-        guardando={guardando}
-        onClose={cerrar}
-        onGuardar={notificar}
-      />
+      {modal === 'notificar' && seleccion && (
+        <PanelNotificar
+          seleccion={seleccion}
+          recomendaciones={recomendaciones}
+          error={error}
+          guardando={guardando}
+          onClose={cerrarPanel}
+          onGuardar={notificar}
+        />
+      )}
+
+      {/* Envío manual por WhatsApp / SMS */}
+      {envioManual && <ModalEnvioManual {...envioManual} onClose={() => setEnvioManual(null)} />}
+
+      {avanceGM && <ProgresoConsulta tramos={avanceGM.tramos} inicio={avanceGM.inicio} estado={avanceGM.estado} titulo="Consultando paciente en GoMedisys" />}
 
       {/* CANCELAR */}
       <ModalCancelar open={modal === 'cancelar'} error={error} guardando={guardando} onClose={cerrar} onGuardar={cancelar} />
@@ -1106,102 +1153,245 @@ function PanelProgramar({ seleccion, medico, esReprogramacion, quirofanos, error
   )
 }
 
-function ModalNotificar({ open, seleccion, recomendaciones, error, guardando, onClose, onGuardar }: {
-  open: boolean; seleccion: Solicitud | null
+/** Datos que reciben las plantillas de correo, WhatsApp y SMS */
+function datosNotificacion(s: Solicitud, estado: EstadoNotificable, recomendacionesHtml: string): DatosNotificacion {
+  return {
+    paciente: s.nombre_paciente,
+    documento: s.documento_paciente,
+    procedimiento: s.procedimiento,
+    especialidad: s.especialidades?.nombre ?? null,
+    fecha: s.fecha_programada,
+    hora: s.hora_programada,
+    estado,
+    recomendacionesHtml: recomendacionesHtml || null,
+    logoUrl: LOGO_CORREO,
+  }
+}
+
+const ICONO_CANAL: Record<string, typeof Mail> = { email: Mail, whatsapp: MessageCircle, sms: Smartphone }
+const NOMBRE_CANAL: Record<string, string> = { email: 'Correo', whatsapp: 'WhatsApp', sms: 'SMS' }
+
+function PanelNotificar({ seleccion, recomendaciones, error, guardando, onClose, onGuardar }: {
+  seleccion: Solicitud
   recomendaciones: { especialidad_id: number; titulo: string; contenido: string }[]
   error: string; guardando: boolean; onClose: () => void
   onGuardar: (canales: string[], notas: string, telefono: string, email: string, estadoDestino: EstadoNotificable) => void
 }) {
   const [canales, setCanales] = useState<string[]>(['email'])
-  const [contenido, setContenido] = useState('')
-  const [telefono, setTelefono] = useState('')
-  const [email, setEmail] = useState('')
+  const [contenido, setContenido] = useState(() => seleccion.notas_notificacion || recomendaciones
+    .filter((r) => r.especialidad_id === seleccion.especialidad_id)
+    .map((r) => `<h3>${r.titulo}</h3><p>${r.contenido}</p>`).join(''))
+  const [telefono, setTelefono] = useState(seleccion.telefono_paciente ?? '')
+  const [email, setEmail] = useState(seleccion.email_paciente ?? '')
   const [estadoDestino, setEstadoDestino] = useState<EstadoNotificable | ''>('')
+  const [vista, setVista] = useState('email')
 
+  // Las recomendaciones pueden llegar después de abrir el panel
   useEffect(() => {
-    if (seleccion) {
-      setTelefono(seleccion.telefono_paciente ?? '')
-      setEmail(seleccion.email_paciente ?? '')
-      setEstadoDestino('')
-      if (seleccion.notas_notificacion) {
-        setContenido(seleccion.notas_notificacion)
-      } else {
-        const recsEspecialidad = recomendaciones.filter((r) => r.especialidad_id === seleccion.especialidad_id)
-        setContenido(recsEspecialidad.map((r) => `<h3>${r.titulo}</h3><p>${r.contenido}</p>`).join(''))
-      }
+    if (!contenido && !seleccion.notas_notificacion) {
+      const recs = recomendaciones.filter((r) => r.especialidad_id === seleccion.especialidad_id)
+      if (recs.length) setContenido(recs.map((r) => `<h3>${r.titulo}</h3><p>${r.contenido}</p>`).join(''))
     }
-  }, [seleccion, recomendaciones])
+  }, [recomendaciones]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function toggleCanal(c: string) {
-    setCanales((prev) => prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c])
+    const activo = canales.includes(c)
+    const n = activo ? canales.filter((x) => x !== c) : [...canales, c]
+    setCanales(n)
+    // La vista previa muestra el canal recién activado (o el primero que quede)
+    setVista(!activo ? c : n.includes(vista) ? vista : n[0] ?? 'email')
   }
 
+  const datos = estadoDestino ? datosNotificacion(seleccion, estadoDestino, contenido) : null
+  const correo = datos ? plantillaCorreo(datos) : null
+  const faltaCorreo = canales.includes('email') && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  const faltaTelefono = (canales.includes('whatsapp') || canales.includes('sms')) && telefono.replace(/\D/g, '').length < 7
+  const campo = `${CLASE_CAMPO} w-full`
+
   return (
-    <Modal open={open} onClose={onClose} titulo="Notificar al paciente" ancho="max-w-xl">
-      <div className="space-y-2">
-        {seleccion && (
-          <div className="rounded-xl border border-[#0D2D6B]/20 bg-[#EAF0FA] px-3 py-2 text-sm">
-            <span className="font-semibold text-slate-900">{seleccion.nombre_paciente ?? seleccion.documento_paciente}</span>
-            <span className="text-slate-500"> · SC-{String(seleccion.id).padStart(6, '0')} · {seleccion.especialidades?.nombre}</span>
-          </div>
-        )}
+    <PanelLateral
+      ancho="max-w-3xl"
+      titulo="Notificar al paciente"
+      subtitulo={`SC-${String(seleccion.id).padStart(6, '0')} · ${seleccion.nombre_paciente ?? seleccion.documento_paciente} · ${seleccion.especialidades?.nombre ?? ''}`}
+      insignias={<Badge className={ESTADOS_COLOR[seleccion.estado]}>{ESTADOS_LABEL[seleccion.estado]}</Badge>}
+      onCerrar={onClose}
+      pie={<>
+        <Boton variante="secundario" onClick={onClose}>Cancelar</Boton>
+        <Boton
+          disabled={guardando || !estadoDestino || canales.length === 0 || faltaCorreo}
+          className="flex flex-1 items-center justify-center gap-1.5"
+          onClick={() => estadoDestino && onGuardar(canales, contenido, telefono, email, estadoDestino)}
+        >
+          <Send size={14} /> {guardando ? 'Enviando…' : `Notificar${canales.length ? ` por ${canales.map((c) => NOMBRE_CANAL[c]).join(', ')}` : ''}`}
+        </Boton>
+      </>}
+    >
+      <Grupo color="orden" icono={Stethoscope} titulo="Cirugía">
+        <Dato etiqueta="Paciente" valor={`${seleccion.nombre_paciente ?? '—'} · ${seleccion.documento_paciente}`} ancho />
+        <Dato etiqueta="Procedimiento" valor={seleccion.procedimiento} ancho />
+        <Dato etiqueta="Programación" valor={seleccion.fecha_programada ? `${seleccion.fecha_programada} ${seleccion.hora_programada?.slice(0, 5) ?? ''} · ${seleccion.quirofanos?.nombre ?? ''}` : null} ancho />
+      </Grupo>
+
+      <Grupo color="gestion" icono={BellRing} titulo="¿Qué se le va a comunicar al paciente? *">
+        <div className="col-span-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+          {ESTADOS_NOTIFICABLES.map((e) => (
+            <button
+              key={e}
+              type="button"
+              onClick={() => setEstadoDestino(e)}
+              className={`rounded-lg border px-2 py-1.5 text-xs transition ${estadoDestino === e ? `${ESTADOS_COLOR_SOLIDO[e]} font-medium` : `${ESTADOS_COLOR[e]} opacity-70 hover:opacity-100`}`}
+            >
+              {ESTADOS_LABEL[e]}
+            </button>
+          ))}
+        </div>
+      </Grupo>
+
+      <Grupo color="paciente" icono={UserRound} titulo="Contacto y canales">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">¿Qué se le va a comunicar al paciente? *</label>
-          <div className="grid grid-cols-4 gap-1.5">
-            {ESTADOS_NOTIFICABLES.map((e) => (
-              <label
-                key={e}
-                className={`flex cursor-pointer items-center justify-center rounded-lg border px-2 py-1.5 text-center text-xs transition ${
-                  estadoDestino === e
-                    ? `${ESTADOS_COLOR_SOLIDO[e]} font-medium`
-                    : `${ESTADOS_COLOR[e]} opacity-70 hover:opacity-100`
-                }`}
+          <label className="mb-1 block text-xs font-medium text-slate-600">Teléfono (WhatsApp / SMS)</label>
+          <input value={telefono} onChange={(e) => setTelefono(e.target.value)} className={campo} placeholder="3001234567" />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-600">Correo</label>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={campo} placeholder="paciente@correo.com" />
+        </div>
+        <div className="col-span-2 flex flex-wrap items-center gap-2">
+          {CANALES_NOTIFICACION.map((c) => {
+            const Icono = ICONO_CANAL[c]
+            const activo = canales.includes(c)
+            return (
+              <button
+                key={c}
+                type="button"
+                onClick={() => toggleCanal(c)}
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition ${activo ? 'border-[#0D2D6B] bg-[#0D2D6B] text-white' : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'}`}
               >
-                <input
-                  type="radio"
-                  name="estadoDestino"
-                  value={e}
-                  checked={estadoDestino === e}
-                  onChange={() => setEstadoDestino(e)}
-                  className="sr-only"
-                />
-                {ESTADOS_LABEL[e]}
-              </label>
+                <Icono size={14} /> {NOMBRE_CANAL[c]}
+              </button>
+            )
+          })}
+          <span className="text-[11px] text-slate-500">WhatsApp y SMS: por ahora se generan los textos para enviarlos a mano.</span>
+        </div>
+        {faltaCorreo && <div className="col-span-2 text-xs text-red-600">Para notificar por correo escriba un correo válido.</div>}
+        {faltaTelefono && <div className="col-span-2 text-xs text-amber-700">Falta el teléfono del paciente para WhatsApp/SMS.</div>}
+      </Grupo>
+
+      <Grupo color="boleta" icono={ClipboardList} titulo="Recomendaciones a enviar">
+        <div className="col-span-2">
+          <RichTextEditor value={contenido} onChange={setContenido} placeholder="Recomendaciones pre-quirúrgicas e indicaciones para el paciente…" minHeight="90px" />
+        </div>
+      </Grupo>
+
+      {/* Vista previa de lo que recibirá el paciente */}
+      <section className="rounded-xl border border-slate-200 bg-white p-3">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-[#0D2D6B]">
+            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[#0D2D6B] text-white"><EyeIcon size={14} /></span>
+            Vista previa para el paciente
+          </h3>
+          <div className="flex gap-1">
+            {canales.map((c) => (
+              <button key={c} onClick={() => setVista(c)} className={`rounded-md px-2.5 py-1 text-xs ${vista === c ? 'bg-[#0D2D6B] text-white' : 'bg-slate-100 text-slate-600'}`}>{NOMBRE_CANAL[c]}</button>
             ))}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        {!datos ? (
+          <p className="py-6 text-center text-sm text-slate-400">Seleccione qué se le va a comunicar al paciente para ver la vista previa.</p>
+        ) : canales.length === 0 ? (
+          <p className="py-6 text-center text-sm text-slate-400">Seleccione al menos un canal.</p>
+        ) : vista === 'email' && correo ? (
           <div>
-            <label className="mb-0.5 block text-sm font-medium text-slate-600">Teléfono</label>
-            <input value={telefono} onChange={(e) => setTelefono(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+            <div className="mb-2 rounded-lg bg-slate-50 px-3 py-1.5 text-xs text-slate-600">
+              <b>Para:</b> {email || '—'} · <b>Asunto:</b> {correo.asunto}
+            </div>
+            <iframe title="Vista previa del correo" srcDoc={correo.html} className="h-[520px] w-full rounded-lg border border-slate-200" sandbox="" />
           </div>
-          <div>
-            <label className="mb-0.5 block text-sm font-medium text-slate-600">Correo</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+        ) : vista === 'whatsapp' ? (
+          <div className="rounded-lg bg-[#E5DDD5] p-4">
+            <div className="ml-auto max-w-[85%] whitespace-pre-wrap rounded-lg rounded-tr-none bg-[#DCF8C6] px-3 py-2 text-sm text-slate-800 shadow">{textoWhatsApp(datos)}</div>
           </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <label className="text-sm font-medium text-slate-600">Canales:</label>
-          {CANALES_NOTIFICACION.map((c) => (
-            <label key={c} className="flex items-center gap-1.5 text-sm capitalize">
-              <input type="checkbox" checked={canales.includes(c)} onChange={() => toggleCanal(c)} /> {c}
-            </label>
-          ))}
-        </div>
-        <div>
-          <label className="mb-0.5 block text-sm font-medium text-slate-600">Recomendaciones a enviar</label>
-          <RichTextEditor value={contenido} onChange={setContenido} placeholder="Recomendaciones pre-quirúrgicas e indicaciones para el paciente…" minHeight="80px" />
-        </div>
-        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
-        <div className="flex justify-end gap-2 pt-1">
-          <Boton variante="secundario" onClick={onClose}>Cancelar</Boton>
-          <Boton
-            disabled={guardando || !estadoDestino}
-            className="flex items-center gap-1.5"
-            onClick={() => estadoDestino && onGuardar(canales, contenido, telefono, email, estadoDestino)}
-          >
-            <Send size={14} /> {guardando ? 'Enviando…' : 'Notificar'}
-          </Boton>
+        ) : (
+          <div className="rounded-lg bg-slate-100 p-4">
+            <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-white px-3 py-2 text-sm text-slate-800 shadow">{textoSms(datos)}</div>
+            <div className="mt-1 text-[11px] text-slate-500">{textoSms(datos).length} caracteres · {segmentosSms(textoSms(datos))} SMS</div>
+          </div>
+        )}
+      </section>
+
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+    </PanelLateral>
+  )
+}
+
+/** Textos listos para copiar y enviar a mano por WhatsApp Web / plataforma de SMS */
+function ModalEnvioManual({ datos, canales, telefono, onClose }: { datos: DatosNotificacion; canales: string[]; telefono: string; onClose: () => void }) {
+  const [copiado, setCopiado] = useState('')
+  async function copiar(clave: string, texto: string) {
+    try {
+      await navigator.clipboard.writeText(texto)
+      setCopiado(clave)
+      setTimeout(() => setCopiado(''), 2000)
+    } catch {
+      alert('No se pudo copiar automáticamente. Seleccione el texto y cópielo con Ctrl+C.')
+    }
+  }
+  const tel = telefonoWhatsApp(telefono)
+  return (
+    <Modal open onClose={onClose} titulo="Envío manual de la notificación" ancho="max-w-2xl" cerrableFuera={false}>
+      <div className="space-y-4">
+        <p className="text-sm text-slate-600">
+          La notificación quedó registrada. Copie el mensaje y envíelo manualmente por el canal correspondiente.
+        </p>
+        {canales.includes('whatsapp') && (() => {
+          const texto = textoWhatsApp(datos)
+          return (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-sm font-semibold text-emerald-800"><MessageCircle size={16} /> WhatsApp · {telefono || 'sin teléfono'}</div>
+                <div className="flex gap-2">
+                  <Boton variante="secundario" onClick={() => copiar('wa', texto)} className="flex items-center gap-1.5 !py-1 text-xs">
+                    <Copy size={13} /> {copiado === 'wa' ? '¡Copiado!' : 'Copiar mensaje'}
+                  </Boton>
+                  {tel && (
+                    <a
+                      href={`https://web.whatsapp.com/send?phone=${tel}&text=${encodeURIComponent(texto)}`}
+                      target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"
+                    >
+                      <ExternalLink size={13} /> Abrir en WhatsApp Web
+                    </a>
+                  )}
+                </div>
+              </div>
+              <textarea readOnly value={texto} rows={9} className="w-full rounded-lg border border-emerald-200 bg-white p-2 text-sm text-slate-700" />
+            </div>
+          )
+        })()}
+        {canales.includes('sms') && (() => {
+          const texto = textoSms(datos)
+          return (
+            <div className="rounded-xl border border-sky-200 bg-sky-50 p-3">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-sm font-semibold text-sky-800"><Smartphone size={16} /> SMS · {telefono || 'sin teléfono'}</div>
+                <div className="flex gap-2">
+                  {telefono && (
+                    <Boton variante="secundario" onClick={() => copiar('tel', telefono)} className="flex items-center gap-1.5 !py-1 text-xs">
+                      <Copy size={13} /> {copiado === 'tel' ? '¡Copiado!' : 'Copiar número'}
+                    </Boton>
+                  )}
+                  <Boton variante="secundario" onClick={() => copiar('sms', texto)} className="flex items-center gap-1.5 !py-1 text-xs">
+                    <Copy size={13} /> {copiado === 'sms' ? '¡Copiado!' : 'Copiar mensaje'}
+                  </Boton>
+                </div>
+              </div>
+              <textarea readOnly value={texto} rows={4} className="w-full rounded-lg border border-sky-200 bg-white p-2 text-sm text-slate-700" />
+              <div className="mt-1 text-[11px] text-slate-500">{texto.length} caracteres · {segmentosSms(texto)} SMS (sin tildes para no partir el mensaje)</div>
+            </div>
+          )
+        })()}
+        <div className="flex justify-end">
+          <Boton onClick={onClose}>Listo</Boton>
         </div>
       </div>
     </Modal>

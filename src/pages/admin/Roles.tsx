@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { PageHeader, Spinner } from '../../components/ui'
-import { ROLES, ROLES_LABEL, MODULOS, MODULOS_LABEL, type Rol, type Modulo } from '../../lib/constantes'
+import { ROLES, ROLES_LABEL, MODULOS, MODULOS_OCULTOS, MODULOS_LABEL, type Rol, type Modulo } from '../../lib/constantes'
 import { ShieldCheck, Check } from 'lucide-react'
 
 type Permiso = { rol: Rol; modulo: Modulo; permitido: boolean }
@@ -63,7 +63,7 @@ export default function Roles() {
                 </tr>
               </thead>
               <tbody>
-                {MODULOS.map((m) => (
+                {MODULOS.filter((m) => !MODULOS_OCULTOS.includes(m)).map((m) => (
                   <tr key={m} className="border-t border-slate-100">
                     <td className="px-4 py-3 font-medium text-slate-700">{MODULOS_LABEL[m]}</td>
                     {ROLES.map((r) => {

@@ -180,7 +180,12 @@ export default function ReportarCirugia() {
           soporte_url: soporteUrl,
           reportado_por: session!.user.id,
           origen: 'individual',
+          // Validado en GoMedisys → entra directo a Gestión de solicitudes;
+          // si no, queda "Reportado" y allí se puede consultar GoMedisys
+          estado: coincide ? 'procesado' : 'reportado',
           ...(coincide ? {
+            gomedisys_consultado_en: new Date().toISOString(),
+            gomedisys_resultado: 'OK',
             nombre_paciente: paciente.Paciente,
             edad: paciente.Edad,
             telefono_paciente: paciente.Telefono,

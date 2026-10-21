@@ -113,6 +113,12 @@ export const MODULOS = [
 ] as const
 export type Modulo = (typeof MODULOS)[number]
 
+// Módulos que siguen existiendo en la base de datos pero ya no se muestran.
+// Oct-2026: "Solicitudes reportadas" quedó oculto — la consulta a GoMedisys
+// ahora es individual (al reportar) o masiva, y los reportes sin validar se
+// gestionan en "Gestión de solicitudes".
+export const MODULOS_OCULTOS: Modulo[] = ['solicitudes_reportadas']
+
 export const MODULOS_LABEL: Record<Modulo, string> = {
   dashboard: 'Dashboard',
   reportar: 'Reportar cirugía',

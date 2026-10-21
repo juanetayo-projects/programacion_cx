@@ -117,7 +117,7 @@ export async function consultarGoMedisys<R>(
   })
 }
 
-const normalizar = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
+const normalizar = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
 
 /** Empareja un texto de GoMedisys con un catálogo de la app (exacto, contenido o por palabras clave) */
 export function emparejarCatalogo(texto: string | null | undefined, catalogo: { id: number; nombre: string }[], ignorar: string[] = []) {
