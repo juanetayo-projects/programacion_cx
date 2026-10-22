@@ -1035,6 +1035,8 @@ Se requiere construir una app que permita
 			   clínica, "Programación de Cirugías", estado destacado, fecha y
 			   hora en español, datos de la cirugía, recomendaciones, pie de
 			   confidencialidad (Ley 1581). Asunto según el estado.
+			   Bloque de contacto: línea de atención 350 211 8899, extensiones
+			   2616, 2617, 2618 y 2619 (constantes en plantilla.ts).
 			   Remitente: Programación de Cirugías - Clínica CAC Santa Bárbara
 			   <notificaciones@cacsantabarbara.co>.
 			d) WhatsApp y SMS (fase 1, manual): al notificar se abre una

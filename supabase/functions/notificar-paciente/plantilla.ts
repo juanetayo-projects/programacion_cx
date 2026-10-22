@@ -19,6 +19,10 @@ export type DatosNotificacion = {
 
 const CLINICA = 'Clínica CAC Santa Bárbara'
 const AREA = 'Programación de Cirugías'
+// Línea de atención del área (se muestra en el correo)
+const LINEA_ATENCION = '350 211 8899'
+const LINEA_ATENCION_TEL = '+573502118899'
+const EXTENSIONES = ['2616', '2617', '2618', '2619']
 
 const TEXTOS: Record<EstadoNotificado, { asunto: string; titulo: string; mensaje: string; color: string; fondo: string }> = {
   programado: {
@@ -140,9 +144,21 @@ export function plantillaCorreo(d: DatosNotificacion): { asunto: string; html: s
           </div>
         </td></tr>` : ''}
 
+        <!-- Contacto -->
+        <tr><td style="padding:18px 28px 0">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px">
+            <tr><td style="padding:16px 20px">
+              <div style="color:#0D2D6B;font-size:13px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px">¿Tienes dudas? Comunícate con ${AREA}</div>
+              <div style="margin-top:8px;color:#0F172A;font-size:14px">Línea de atención:
+                <a href="tel:${LINEA_ATENCION_TEL}" style="color:#0D2D6B;font-size:18px;font-weight:bold;text-decoration:none">${LINEA_ATENCION}</a>
+              </div>
+              <div style="margin-top:4px;color:#0F172A;font-size:14px">Extensiones: <strong>${EXTENSIONES.join(' · ')}</strong></div>
+            </td></tr>
+          </table>
+        </td></tr>
+
         <tr><td style="padding:20px 28px 24px">
-          <p style="margin:0;color:#334155;font-size:14px;line-height:1.6">Si tienes alguna duda, comunícate con el área de <strong>${AREA}</strong> de la ${CLINICA}.</p>
-          <p style="margin:14px 0 0;color:#0F172A;font-size:14px">Cordialmente,<br><strong>${AREA}</strong><br>${CLINICA}</p>
+          <p style="margin:0;color:#0F172A;font-size:14px">Cordialmente,<br><strong>${AREA}</strong><br>${CLINICA}</p>
         </td></tr>
 
         <!-- Pie -->
