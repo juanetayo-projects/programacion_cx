@@ -1290,3 +1290,13 @@ Se requiere construir una app que permita
 			22.3.- Migraciones: 0031_autorizacion_asegurador.sql (+ ajuste NULL = no vigente)
 			22.4.- Documentación: README actualizado y docs/PROMPT_FLUJO_INFOGRAFIA.md
 				(prompt paso a paso del proceso para diseñar la infografía).
+
+		23.- Limpieza para pruebas funcionales (2026-10-24)
+			Se borraron todos los registros del proceso (solicitudes, historial,
+			ítems/correos/actas MOS, notas, autorizaciones, trabajos GoMedisys) y los
+			archivos de prueba de los buckets 'mos' y 'notas'; los consecutivos
+			reinician en SC-000001. Se conservan usuarios, roles y permisos,
+			aseguradores, proveedores y demás catálogos. Respaldo previo en el
+			esquema no expuesto respaldo_20261024 (copia de las tablas y del listado
+			de archivos). La función temporal limpiar-storage-pruebas quedó
+			desactivada (410).
