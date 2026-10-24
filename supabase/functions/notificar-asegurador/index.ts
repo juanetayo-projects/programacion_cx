@@ -146,6 +146,11 @@ Deno.serve(async (req) => {
     mos_asegurador_id: asegurador.id,
     mos_notificado_en: enviadoEn,
     mos_notificado_por: user.id,
+    // Una nueva notificación espera una nueva respuesta del asegurador
+    mos_respuesta_asegurador: null,
+    mos_respuesta_en: null,
+    mos_respuesta_obs: null,
+    mos_respuesta_por: null,
   }).eq('id', solicitud.id)
 
   // Cada ítem queda como registro independiente (mos_items) para gestionar

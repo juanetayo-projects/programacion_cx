@@ -139,15 +139,39 @@ export const MODULOS_LABEL: Record<Modulo, string> = {
 
 // Módulo MOS (Materiales de Osteosíntesis): estado propio de la solicitud,
 // independiente del estado de programación. NULL en la base = pendiente.
-export const ESTADOS_MOS = ['pendiente', 'asegurador_notificado'] as const
+// estado_mos refleja el último hito alcanzado (ver components/AvanceMos.tsx)
+export const ESTADOS_MOS = [
+  'pendiente', 'asegurador_notificado', 'asegurador_aprobado', 'asegurador_rechazado',
+  'proveedor_notificado', 'proveedor_confirmado', 'material_recibido',
+] as const
 export type EstadoMos = (typeof ESTADOS_MOS)[number]
 
 export const ESTADOS_MOS_LABEL: Record<EstadoMos, string> = {
   pendiente: 'Pendiente de gestión',
   asegurador_notificado: 'Asegurador notificado · en espera de respuesta',
+  asegurador_aprobado: 'Aprobado por el asegurador · pendiente notificar proveedor',
+  asegurador_rechazado: 'Rechazado por el asegurador',
+  proveedor_notificado: 'Proveedor notificado · en espera de confirmación',
+  proveedor_confirmado: 'Proveedor confirmó el material · en espera de entrega',
+  material_recibido: 'Material recibido en la clínica',
+}
+
+export const ESTADOS_MOS_CORTO: Record<EstadoMos, string> = {
+  pendiente: 'Pendientes',
+  asegurador_notificado: 'Asegurador notificado',
+  asegurador_aprobado: 'Aprobado',
+  asegurador_rechazado: 'Rechazado',
+  proveedor_notificado: 'Proveedor notificado',
+  proveedor_confirmado: 'Proveedor confirmó',
+  material_recibido: 'Material recibido',
 }
 
 export const ESTADOS_MOS_COLOR: Record<EstadoMos, string> = {
   pendiente: 'bg-slate-100 text-slate-700 border-slate-300',
   asegurador_notificado: 'bg-indigo-100 text-indigo-700 border-indigo-300',
+  asegurador_aprobado: 'bg-emerald-100 text-emerald-700 border-emerald-300',
+  asegurador_rechazado: 'bg-red-100 text-red-700 border-red-300',
+  proveedor_notificado: 'bg-teal-100 text-teal-700 border-teal-300',
+  proveedor_confirmado: 'bg-cyan-100 text-cyan-700 border-cyan-300',
+  material_recibido: 'bg-green-100 text-green-800 border-green-400',
 }

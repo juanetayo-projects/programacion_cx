@@ -6,6 +6,7 @@ const TABS = [
   { key: 'especialidades', label: 'Especialidades' },
   { key: 'eps', label: 'EPS' },
   { key: 'aseguradores', label: 'Aseguradores (MOS)' },
+  { key: 'proveedores', label: 'Proveedores (MOS)' },
   { key: 'unidades', label: 'Unidades' },
   { key: 'quirofanos', label: 'Quirófanos' },
   { key: 'recomendaciones_cirugia', label: 'Recomendaciones' },
@@ -60,6 +61,22 @@ export default function Catalogos() {
             { key: 'nombre', label: 'Nombre asegurador', tipo: 'text', requerido: true },
             { key: 'contacto', label: 'Persona de contacto', tipo: 'text' },
             { key: 'telefono', label: 'Teléfono', tipo: 'text' },
+            { key: 'email', label: 'Correo de contacto', tipo: 'text', requerido: true },
+            { key: 'activo', label: 'Activo', tipo: 'boolean' },
+          ]}
+        />
+      )}
+      {tab === 'proveedores' && (
+        <CrudTable
+          tabla="proveedores"
+          titulo="Proveedores de material de osteosíntesis"
+          columnas={[
+            { key: 'nombre', label: 'Nombre proveedor', tipo: 'text', requerido: true },
+            { key: 'nit', label: 'NIT', tipo: 'text' },
+            { key: 'direccion', label: 'Dirección', tipo: 'text' },
+            { key: 'ciudad', label: 'Ciudad', tipo: 'text' },
+            { key: 'telefono', label: 'Teléfono', tipo: 'text' },
+            { key: 'contacto', label: 'Persona de contacto', tipo: 'text' },
             { key: 'email', label: 'Correo de contacto', tipo: 'text', requerido: true },
             { key: 'activo', label: 'Activo', tipo: 'boolean' },
           ]}

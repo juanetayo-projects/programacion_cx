@@ -6,13 +6,14 @@ import { TituloEnHeader, CampoLinea, CLASE_CAMPO, Boton, Modal, Badge, EstadoVac
 import { PanelLateral, Grupo, Dato } from '../components/PanelLateral'
 import RichTextEditor from '../components/RichTextEditor'
 import { ModalDetalleMos } from './Mos'
+import { AvanceMos, AvanceMosCompacto } from '../components/AvanceMos'
 import {
   plantillaCorreo, textoWhatsApp, textoSms, segmentosSms, telefonoWhatsApp, LOGO_CORREO,
   type DatosNotificacion,
 } from '../lib/mensajesNotificacion'
 import {
   ESTADOS, ESTADOS_LABEL, ESTADOS_COLOR, ESTADOS_MOS_LABEL, ESTADOS_COLOR_HEX, ESTADOS_COLOR_SOLIDO, ESTADOS_NOTIFICABLES, CANALES_NOTIFICACION,
-  type Estado, type EstadoNotificable,
+  type Estado, type EstadoNotificable, type EstadoMos,
 } from '../lib/constantes'
 import {
   Eye, Pencil, CalendarClock, BellRing, RefreshCw, Ban, Undo2, Stethoscope,
@@ -63,7 +64,13 @@ type Solicitud = {
   tipo_orden: string | null
   gomedisys_consultado_en: string | null
   notificado_en: string | null
-  estado_mos: 'asegurador_notificado' | null
+  estado_mos: Exclude<EstadoMos, 'pendiente'> | null
+  mos_notificado_en: string | null
+  mos_respuesta_asegurador: 'aprobado' | 'rechazado' | null
+  mos_respuesta_en: string | null
+  mos_proveedor_notificado_en: string | null
+  mos_proveedor_confirmado_en: string | null
+  mos_material_recibido_en: string | null
   especialidades: { nombre: string } | null
   eps: { nombre: string } | null
   unidades: { nombre: string } | null
@@ -571,6 +578,11 @@ export default function Solicitudes() {
                     </td>
                     <td className="px-4 py-2.5">
                       <Badge className={ESTADOS_COLOR[f.estado]}>{ICONO_ESTADO[f.estado]} {ESTADOS_LABEL[f.estado]}</Badge>
+                      {f.estado_mos && (
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <AvanceMosCompacto s={f} onClick={() => setDetalleMos(f.id)} />
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-2.5 whitespace-nowrap text-slate-500">
                       {f.fecha_programada ? (
@@ -849,6 +861,13 @@ function GruposSolicitud({ s, medico, compacto }: { s: Solicitud; medico: string
           <Dato etiqueta="Autorización aseguradora" valor={s.autorizacion_aseguradora} />
           <Dato etiqueta="Estado material osteosíntesis" valor={s.estado_material_osteosintesis} />
           <Dato etiqueta="Casa médica" valor={s.casa_medica_material} />
+        </Grupo>
+      )}
+
+      {s.estado_mos && (
+        <Grupo color="neutro" icono={Bone} titulo="Gestión MOS · materiales de osteosíntesis">
+          <div className="col-span-2 rounded-lg bg-white px-1 py-2"><AvanceMos s={s} /></div>
+          <Dato etiqueta="Estado MOS" valor={ESTADOS_MOS_LABEL[s.estado_mos]} ancho />
         </Grupo>
       )}
 

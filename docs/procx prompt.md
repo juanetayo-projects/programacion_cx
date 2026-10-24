@@ -1104,3 +1104,39 @@ Se requiere construir una app que permita
 				   notificado, los registros de material y los correos enviados
 				   (evidencia con adjuntos). Se retiró el icono "Consultar GoMedisys".
 				e) Migraciones: 0021_mos_items_material.sql, 0022_mos_items_registros.sql.
+
+		17.- MOS · Paso 2: proveedores y avance del proceso (2026-10-23)
+			17.1.- Proveedores
+				- Catálogo 'proveedores' (nombre, NIT, dirección, ciudad, teléfono,
+				  contacto, correo) en Catálogos → Proveedores (MOS); 4 proveedores
+				  ficticios (@ejemplo.co) hasta cargar los reales.
+				- En cada ítem (mos_items) se asigna proveedor (solo el nombre en la
+				  tabla; icono "i" abre la ficha con todos los datos) y la fecha
+				  estimada de entrega. "Guardar asignación" guarda sin enviar.
+			17.2.- Correo al proveedor
+				- Edge Function notificar-proveedor: un correo por proveedor con sus
+				  ítems (#, cantidad, descripción, fecha estimada), datos de la
+				  cirugía, asegurador que autoriza y lugar de entrega. Vista previa
+				  por proveedor (pestañas) con la plantilla compartida
+				  supabase/functions/notificar-proveedor/plantilla.ts.
+				- Evidencia en mos_correos (paso 'notificacion_proveedor', datos del
+				  proveedor, HTML, ítems). Cada ítem guarda proveedor_id,
+				  fecha_estimada_entrega, correo_proveedor_id y proveedor_notificado_en.
+				- Requiere la aprobación del asegurador.
+			17.3.- Avance MOS en 5 hitos (components/AvanceMos.tsx)
+				1. Notificación al asegurador · 2. Aprobación / rechazo del asegurador ·
+				3. Notificación al proveedor · 4. Proveedor confirma material ·
+				5. Material en la clínica. Verde = cumplido, ámbar = en espera,
+				rojo = rechazado, gris = pendiente.
+				- Versión compacta bajo el estado en Gestión de solicitudes (clic →
+				  detalle MOS) y en Gestión MOS; versión completa en los paneles y
+				  detalles (incluido "Ver" de Gestión de solicitudes).
+				- Hito 2: icono de escudo → registrar respuesta (aprobado/rechazado +
+				  observaciones) con la función mos_registrar_respuesta (security
+				  definer: el rol MOS no edita solicitudes_cirugia).
+				- Hitos 4 y 5: columnas mos_proveedor_confirmado_en y
+				  mos_material_recibido_en, se registrarán en la fase de entregas.
+				- estado_mos: asegurador_notificado, asegurador_aprobado,
+				  asegurador_rechazado, proveedor_notificado, proveedor_confirmado,
+				  material_recibido. Reenviar al asegurador reinicia su respuesta.
+			17.4.- Migraciones: 0024_mos_proveedores.sql, 0025_mos_hitos_avance.sql

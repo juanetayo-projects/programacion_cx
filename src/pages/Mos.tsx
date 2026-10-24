@@ -4,18 +4,22 @@ import { useAuth } from '../lib/auth'
 import { TituloEnHeader, CampoLinea, CLASE_CAMPO, Boton, Modal, Badge, EstadoVacio, Spinner } from '../components/ui'
 import { PanelLateral, Grupo, Dato } from '../components/PanelLateral'
 import RichTextEditor from '../components/RichTextEditor'
+import { AvanceMos, AvanceMosCompacto, type CamposAvanceMos } from '../components/AvanceMos'
 import { LOGO_CORREO } from '../lib/mensajesNotificacion'
 import {
   plantillaAsegurador, datosDesdeSolicitud, nombreAdjunto, itemsValidos, REMITENTE_MOS,
   type SolicitudMos, type TipoAdjunto, type ItemMaterial,
 } from '../../supabase/functions/notificar-asegurador/plantilla'
 import {
-  ESTADOS_LABEL, ESTADOS_COLOR, ESTADOS_MOS, ESTADOS_MOS_LABEL, ESTADOS_MOS_COLOR, type Estado, type EstadoMos,
+  ESTADOS_LABEL, ESTADOS_COLOR, ESTADOS_MOS, ESTADOS_MOS_LABEL, ESTADOS_MOS_CORTO, ESTADOS_MOS_COLOR, type Estado, type EstadoMos,
 } from '../lib/constantes'
+import {
+  plantillaProveedor, datosParaProveedor, fechaCorta, type ItemProveedor,
+} from '../../supabase/functions/notificar-proveedor/plantilla'
 import {
   Eye, Bone, Search, Eraser, UserRound, ClipboardList, Building2, FileText, Upload, Send, MailCheck,
   CheckCircle2, AlertTriangle, Phone, Mail, Paperclip, Clock, X, History,
-  Plus, Trash2, Stethoscope, MessageSquareText,
+  Plus, Trash2, Stethoscope, MessageSquareText, Truck, Info, Save, MapPin, Hash, ShieldCheck, ShieldX, PackageCheck,
 } from 'lucide-react'
 
 // Las tablas del módulo MOS (aseguradores, mos_correos) son posteriores a
@@ -23,13 +27,14 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const sb = supabase as any
 
-type Solicitud = SolicitudMos & {
+type Solicitud = SolicitudMos & CamposAvanceMos & {
   id: number
   estado: Estado
   fecha_reporte: string
-  estado_mos: 'asegurador_notificado' | null
+  estado_mos: Exclude<EstadoMos, 'pendiente'> | null
   mos_notificado_en: string | null
   mos_asegurador_id: number | null
+  mos_respuesta_obs: string | null
   casa_medica_material: string | null
   hora_programada: string | null
   aseguradores: { nombre: string } | null
@@ -37,18 +42,28 @@ type Solicitud = SolicitudMos & {
 
 type Asegurador = { id: number; nombre: string; contacto: string | null; telefono: string | null; email: string | null }
 
+type Proveedor = {
+  id: number; nombre: string; nit: string | null; direccion: string | null; ciudad: string | null
+  telefono: string | null; contacto: string | null; email: string | null
+}
+
 type Correo = {
   id: number
-  asegurador_nombre: string
+  paso: 'notificacion_asegurador' | 'notificacion_proveedor'
+  asegurador_nombre: string | null
   asegurador_contacto: string | null
   asegurador_telefono: string | null
+  proveedor_nombre: string | null
+  proveedor_nit: string | null
+  proveedor_contacto: string | null
+  proveedor_telefono: string | null
   destinatario: string
   remitente: string
   responder_a: string | null
   asunto: string
   html: string
   observaciones: string | null
-  items: ItemMaterial[]
+  items: (ItemMaterial & { fechaEstimada?: string | null })[]
   adjuntos: { tipo: TipoAdjunto; nombre: string; path: string; bytes: number }[]
   enviado_por_nombre: string | null
   enviado_en: string
@@ -56,7 +71,13 @@ type Correo = {
 
 // Registro independiente de cada ítem de material (tabla mos_items)
 type EstadoItem = 'pendiente_entrega' | 'entregado_parcial' | 'entregado' | 'anulado' | 'reemplazado'
-type RegistroItem = ItemMaterial & { id: number; orden: number; estado: EstadoItem; cantidad_entregada: number }
+type RegistroItem = ItemMaterial & {
+  id: number; orden: number; estado: EstadoItem; cantidad_entregada: number
+  proveedor_id: number | null; fecha_estimada_entrega: string | null; proveedor_notificado_en: string | null
+}
+
+// Destinatario de un correo de evidencia (asegurador en el paso 1, proveedor en el 2)
+const destinoCorreo = (c: Correo) => c.paso === 'notificacion_proveedor' ? c.proveedor_nombre : c.asegurador_nombre
 
 const ESTADO_ITEM_LABEL: Record<EstadoItem, string> = {
   pendiente_entrega: 'Pendiente', entregado_parcial: 'Parcial', entregado: 'Entregado', anulado: 'Anulado', reemplazado: 'Reemplazado',
@@ -76,11 +97,21 @@ const codigo = (id: number) => `SC-${String(id).padStart(6, '0')}`
 const fechaHora = (v: string | null) => (v ? new Date(v).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : '—')
 const tamano = (b: number) => (b >= 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`)
 
+const ICONO_ESTADO_MOS: Record<EstadoMos, React.ReactNode> = {
+  pendiente: <Clock size={13} />,
+  asegurador_notificado: <MailCheck size={13} />,
+  asegurador_aprobado: <ShieldCheck size={13} />,
+  asegurador_rechazado: <ShieldX size={13} />,
+  proveedor_notificado: <Truck size={13} />,
+  proveedor_confirmado: <PackageCheck size={13} />,
+  material_recibido: <CheckCircle2 size={13} />,
+}
+
 function BadgeMos({ s }: { s: Solicitud }) {
   const e = estadoMos(s)
   return (
     <Badge className={ESTADOS_MOS_COLOR[e]}>
-      {e === 'asegurador_notificado' ? <MailCheck size={13} /> : <Clock size={13} />} {ESTADOS_MOS_LABEL[e]}
+      {ICONO_ESTADO_MOS[e]} {ESTADOS_MOS_LABEL[e]}
     </Badge>
   )
 }
@@ -95,7 +126,7 @@ export default function Mos() {
   const [filtroEstadoMos, setFiltroEstadoMos] = useState<'' | EstadoMos>('')
   const [busqueda, setBusqueda] = useState('')
   const [seleccion, setSeleccion] = useState<Solicitud | null>(null)
-  const [modal, setModal] = useState<'' | 'ver' | 'gestion'>('')
+  const [modal, setModal] = useState<'' | 'ver' | 'gestion' | 'proveedor' | 'respuesta'>('')
   const [evidencia, setEvidencia] = useState<Correo | null>(null)
 
   async function cargar() {
@@ -126,15 +157,15 @@ export default function Mos() {
     return r
   }, [base, filtroEstadoMos, busqueda])
 
-  const conteo = useMemo(() => ({
-    total: base.length,
-    pendiente: base.filter((s) => estadoMos(s) === 'pendiente').length,
-    asegurador_notificado: base.filter((s) => estadoMos(s) === 'asegurador_notificado').length,
-  }), [base])
+  const conteo = useMemo(() => {
+    const c = Object.fromEntries(ESTADOS_MOS.map((e) => [e, 0])) as Record<EstadoMos, number>
+    for (const s of base) c[estadoMos(s)]++
+    return { ...c, total: base.length }
+  }, [base])
 
   const hayFiltros = filtroBoleta !== 'con' || !!filtroEstadoMos || !!busqueda
 
-  function abrir(s: Solicitud, m: 'ver' | 'gestion') {
+  function abrir(s: Solicitud, m: 'ver' | 'gestion' | 'proveedor' | 'respuesta') {
     setSeleccion(s)
     setModal(m)
   }
@@ -143,7 +174,7 @@ export default function Mos() {
 
   return (
     <div className="flex h-full flex-col">
-      <TituloEnHeader titulo="Gestión MOS" subtitulo="Materiales de osteosíntesis · notificación al asegurador" />
+      <TituloEnHeader titulo="Gestión MOS" subtitulo="Materiales de osteosíntesis · asegurador y proveedores" />
 
       <div className="neu-card mb-2 flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2">
         <CampoLinea etiqueta="Boleta quirúrgica">
@@ -185,7 +216,7 @@ export default function Mos() {
               onClick={() => setFiltroEstadoMos(filtroEstadoMos === e ? '' : e)}
               className={`rounded-full border px-3 py-1 font-medium ${ESTADOS_MOS_COLOR[e]} ${filtroEstadoMos === e ? 'ring-2 ring-offset-1 ring-[#0D2D6B]/40' : ''}`}
             >
-              {e === 'pendiente' ? 'Pendientes' : 'Asegurador notificado'}: {conteo[e]}
+              {ESTADOS_MOS_CORTO[e]}: {conteo[e]}
             </button>
           ))}
         </div>
@@ -232,15 +263,26 @@ export default function Mos() {
                     </td>
                     <td className="px-4 py-2.5">
                       <BadgeMos s={s} />
-                      {s.estado_mos && (
-                        <div className="mt-0.5 text-[11px] text-slate-400">{s.aseguradores?.nombre} · {fechaHora(s.mos_notificado_en)}</div>
-                      )}
+                      {s.estado_mos && (<>
+                        <div onClick={(e) => e.stopPropagation()}><AvanceMosCompacto s={s} onClick={() => abrir(s, 'ver')} /></div>
+                        <div className="mt-0.5 text-[11px] text-slate-400">{s.aseguradores?.nombre}</div>
+                      </>)}
                     </td>
                     <td className="px-4 py-2.5">
                       <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                         <button title="Ver" onClick={() => abrir(s, 'ver')} className="text-slate-500 hover:text-[#0D2D6B]"><Eye size={15} /></button>
                         {puedeGestionar && tieneBoleta(s) && (
-                          <button title="Gestión MOS" onClick={() => abrir(s, 'gestion')} className="text-slate-500 hover:text-[#0D2D6B]"><Bone size={15} /></button>
+                          <button title="Paso 1 · Notificar al asegurador" onClick={() => abrir(s, 'gestion')} className="text-slate-500 hover:text-[#0D2D6B]"><Bone size={15} /></button>
+                        )}
+                        {puedeGestionar && s.estado_mos && (
+                          <button title="Registrar respuesta del asegurador (aprobado / rechazado)" onClick={() => abrir(s, 'respuesta')} className="text-emerald-600 hover:text-emerald-800"><ShieldCheck size={15} /></button>
+                        )}
+                        {puedeGestionar && s.estado_mos && (
+                          <button
+                            title={s.mos_respuesta_asegurador === 'aprobado' ? 'Paso 2 · Solicitar al proveedor' : 'Paso 2 · Requiere la aprobación del asegurador'}
+                            onClick={() => abrir(s, 'proveedor')}
+                            className={s.mos_respuesta_asegurador === 'aprobado' ? 'text-teal-600 hover:text-teal-800' : 'text-slate-300 hover:text-slate-400'}
+                          ><Truck size={15} /></button>
                         )}
                       </div>
                     </td>
@@ -259,6 +301,8 @@ export default function Mos() {
           puedeGestionar={puedeGestionar}
           onCerrar={() => setModal('')}
           onGestionar={() => setModal('gestion')}
+          onProveedor={() => setModal('proveedor')}
+          onRespuesta={() => setModal('respuesta')}
           onVerCorreo={setEvidencia}
           onAnterior={posSeleccion > 0 ? () => setSeleccion(filtradas[posSeleccion - 1]) : undefined}
           onSiguiente={posSeleccion >= 0 && posSeleccion < filtradas.length - 1 ? () => setSeleccion(filtradas[posSeleccion + 1]) : undefined}
@@ -279,17 +323,91 @@ export default function Mos() {
         />
       )}
 
+      {modal === 'proveedor' && seleccion && (
+        <PanelProveedor
+          s={seleccion}
+          onCerrar={() => setModal('')}
+          onEnviado={async (correoIds) => {
+            await cargar()
+            setModal('')
+            const { data } = await sb.from('mos_correos').select('*').in('id', correoIds).order('id')
+            if (data?.length) setEvidencia(data[0] as Correo)
+          }}
+        />
+      )}
+
+      {modal === 'respuesta' && seleccion && (
+        <ModalRespuestaAsegurador
+          s={seleccion}
+          onCerrar={() => setModal('')}
+          onGuardado={async () => { await cargar(); setModal('') }}
+        />
+      )}
+
       {evidencia && <ModalEvidencia correo={evidencia} onCerrar={() => setEvidencia(null)} />}
     </div>
   )
 }
 
+// --- Hito 2: respuesta del asegurador (aprobado / rechazado) ---
+function ModalRespuestaAsegurador({ s, onCerrar, onGuardado }: { s: Solicitud; onCerrar: () => void; onGuardado: () => void }) {
+  const [respuesta, setRespuesta] = useState<'aprobado' | 'rechazado' | ''>(s.mos_respuesta_asegurador ?? '')
+  const [obs, setObs] = useState(s.mos_respuesta_obs ?? '')
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState('')
+
+  async function guardar() {
+    if (!respuesta) return
+    setGuardando(true)
+    setError('')
+    const { error: e } = await sb.rpc('mos_registrar_respuesta', { p_solicitud: s.id, p_respuesta: respuesta, p_obs: obs })
+    setGuardando(false)
+    if (e) { setError(e.message); return }
+    onGuardado()
+  }
+
+  const opcion = (valor: 'aprobado' | 'rechazado', Icono: typeof ShieldCheck, texto: string, activo: string) => (
+    <button type="button" onClick={() => setRespuesta(valor)}
+      className={`flex flex-1 items-center justify-center gap-2 rounded-xl border-2 px-3 py-3 text-sm font-semibold transition ${respuesta === valor ? activo : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'}`}>
+      <Icono size={18} /> {texto}
+    </button>
+  )
+
+  return (
+    <Modal open onClose={onCerrar} titulo={`Respuesta del asegurador · ${codigo(s.id)}`} ancho="max-w-lg">
+      <div className="space-y-3">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+          <div className="font-medium text-slate-800">{s.nombre_paciente ?? s.documento_paciente}</div>
+          <div className="text-xs text-slate-500">Asegurador: {s.aseguradores?.nombre ?? '—'} · notificado el {fechaHora(s.mos_notificado_en)}</div>
+        </div>
+        <div className="flex gap-2">
+          {opcion('aprobado', ShieldCheck, 'Aprobó los materiales', 'border-emerald-500 bg-emerald-50 text-emerald-700')}
+          {opcion('rechazado', ShieldX, 'Rechazó los materiales', 'border-red-500 bg-red-50 text-red-700')}
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Observaciones {respuesta === 'rechazado' ? '(motivo del rechazo)' : '(n.º de autorización, condiciones…)'}
+          </label>
+          <textarea value={obs} onChange={(e) => setObs(e.target.value)} rows={3} className={`${CLASE_CAMPO} w-full`} />
+        </div>
+        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <Boton variante="secundario" onClick={onCerrar}>Cancelar</Boton>
+          <Boton onClick={guardar} disabled={!respuesta || guardando} className="flex items-center gap-1.5"><Save size={14} /> {guardando ? 'Guardando…' : 'Registrar respuesta'}</Boton>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 // --- Ver: panel lateral con los datos y el historial MOS ---
-function PanelVer({ s, puedeGestionar, onCerrar, onGestionar, onVerCorreo, onAnterior, onSiguiente, posicion }: {
+function PanelVer({ s, puedeGestionar, onCerrar, onGestionar, onProveedor, onRespuesta, onVerCorreo, onAnterior, onSiguiente, posicion }: {
   s: Solicitud
   puedeGestionar: boolean
   onCerrar: () => void
   onGestionar: () => void
+  onProveedor: () => void
+  onRespuesta: () => void
   onVerCorreo: (c: Correo) => void
   onAnterior?: () => void
   onSiguiente?: () => void
@@ -316,9 +434,15 @@ function PanelVer({ s, puedeGestionar, onCerrar, onGestionar, onVerCorreo, onAnt
       onAnterior={onAnterior}
       onSiguiente={onSiguiente}
       posicion={posicion}
-      pie={puedeGestionar && tieneBoleta(s) ? (
-        <Boton onClick={onGestionar} className="flex items-center gap-1.5"><Bone size={14} /> Gestión MOS</Boton>
-      ) : undefined}
+      pie={puedeGestionar && tieneBoleta(s) ? (<>
+        <Boton variante={s.estado_mos ? 'secundario' : 'primario'} onClick={onGestionar} className="flex items-center gap-1.5"><Bone size={14} /> Paso 1 · Asegurador</Boton>
+        {s.estado_mos && (
+          <Boton variante="secundario" onClick={onRespuesta} className="flex items-center gap-1.5"><ShieldCheck size={14} /> Respuesta asegurador</Boton>
+        )}
+        {s.mos_respuesta_asegurador === 'aprobado' && (
+          <Boton onClick={onProveedor} className="flex items-center gap-1.5"><Truck size={14} /> Paso 2 · Proveedor</Boton>
+        )}
+      </>) : undefined}
     >
       <Grupo color="paciente" icono={UserRound} titulo="Datos del paciente">
         <Dato etiqueta="Paciente" valor={s.nombre_paciente} ancho />
@@ -337,10 +461,14 @@ function PanelVer({ s, puedeGestionar, onCerrar, onGestionar, onVerCorreo, onAnt
         <Dato etiqueta="Boleta (GoMedisys)" valor={s.boleta_quirurgica} ancho />
       </Grupo>
       <Grupo color="gestion" icono={History} titulo="Gestión MOS">
+        {s.estado_mos && <div className="col-span-2 rounded-lg bg-white px-2 py-3"><AvanceMos s={s} /></div>}
         <Dato etiqueta="Estado" valor={ESTADOS_MOS_LABEL[estadoMos(s)]} ancho />
+        {s.mos_respuesta_asegurador && (
+          <Dato etiqueta={`Respuesta del asegurador (${s.mos_respuesta_asegurador})`} valor={s.mos_respuesta_obs || '—'} ancho />
+        )}
         {!!registros?.length && (
           <div className="col-span-2">
-            <dt className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Material notificado ({registros.length} registros)</dt>
+            <dt className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Material ({registros.length} registros)</dt>
             <TablaRegistros registros={registros} />
           </div>
         )}
@@ -354,7 +482,7 @@ function PanelVer({ s, puedeGestionar, onCerrar, onGestionar, onVerCorreo, onAnt
                   <button onClick={() => onVerCorreo(c)} className="flex w-full items-center gap-2 rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-left text-xs hover:bg-emerald-50">
                     <MailCheck size={14} className="shrink-0 text-emerald-600" />
                     <span className="min-w-0 flex-1">
-                      <span className="block font-medium text-slate-700">Notificación a {c.asegurador_nombre}</span>
+                      <span className="block font-medium text-slate-700">{c.paso === 'notificacion_proveedor' ? 'Solicitud al proveedor' : 'Notificación al asegurador'} · {destinoCorreo(c)}</span>
                       <span className="block truncate text-slate-400">{fechaHora(c.enviado_en)} · {c.destinatario}</span>
                     </span>
                     <Eye size={14} className="text-slate-400" />
@@ -650,13 +778,344 @@ function PanelGestion({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () =
   )
 }
 
-// --- Registros de material (uno por ítem) con su estado de entrega ---
+// --- Paso 2: solicitud del material al proveedor ---
+// Con la autorización del asegurador, a cada ítem se le asigna proveedor y fecha
+// estimada de entrega; se envía un correo por proveedor (mismo esquema de panel
+// con vista previa que los pasos anteriores).
+type Asignacion = { proveedorId: string; fechaEstimada: string }
+
+const hoyISO = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+
+function PanelProveedor({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () => void; onEnviado: (correoIds: number[]) => void }) {
+  const { perfil } = useAuth()
+  const [items, setItems] = useState<RegistroItem[] | null>(null)
+  const [proveedores, setProveedores] = useState<Proveedor[]>([])
+  const [asignaciones, setAsignaciones] = useState<Record<number, Asignacion>>({})
+  const [observaciones, setObservaciones] = useState('')
+  const [vista, setVista] = useState<number | null>(null)
+  const [ficha, setFicha] = useState<number | null>(null)
+  const [confirmado, setConfirmado] = useState(false)
+  const [guardando, setGuardando] = useState(false)
+  const [enviando, setEnviando] = useState(false)
+  const [aviso, setAviso] = useState('')
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    sb.from('proveedores').select('*').eq('activo', true).order('nombre')
+      .then(({ data }: { data: Proveedor[] | null }) => setProveedores(data ?? []))
+    sb.from('mos_items').select('*').eq('solicitud_id', s.id).not('estado', 'in', '(reemplazado,anulado)').order('orden')
+      .then(({ data }: { data: RegistroItem[] | null }) => {
+        const lista = data ?? []
+        setItems(lista)
+        setAsignaciones(Object.fromEntries(lista.map((i) => [i.id, {
+          proveedorId: i.proveedor_id ? String(i.proveedor_id) : '',
+          fechaEstimada: i.fecha_estimada_entrega ?? '',
+        }])))
+      })
+  }, [s.id])
+
+  // Cualquier cambio obliga a volver a confirmar la vista previa
+  useEffect(() => { setConfirmado(false) }, [asignaciones, observaciones])
+
+  const proveedorDe = (id: string) => proveedores.find((p) => String(p.id) === id) ?? null
+  const lista = items ?? []
+  const completos = lista.filter((i) => asignaciones[i.id]?.proveedorId && asignaciones[i.id]?.fechaEstimada)
+  const sinCorreo = [...new Set(lista.map((i) => asignaciones[i.id]?.proveedorId).filter(Boolean))]
+    .map((id) => proveedorDe(id!)).filter((p) => p && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.email ?? ''))
+  const aprobado = s.mos_respuesta_asegurador === 'aprobado'
+  const listo = aprobado && lista.length > 0 && completos.length === lista.length && sinCorreo.length === 0
+
+  // Un correo por proveedor, con sus ítems
+  const grupos = useMemo(() => {
+    const porProveedor = new Map<number, RegistroItem[]>()
+    for (const i of lista) {
+      const p = asignaciones[i.id]?.proveedorId
+      if (!p) continue
+      porProveedor.set(Number(p), [...(porProveedor.get(Number(p)) ?? []), i])
+    }
+    return [...porProveedor.entries()].map(([id, its]) => {
+      const p = proveedores.find((x) => x.id === id)
+      const itemsCorreo: ItemProveedor[] = its.map((i) => ({ cantidad: i.cantidad, descripcion: i.descripcion, fechaEstimada: asignaciones[i.id]?.fechaEstimada || null }))
+      const correo = p ? plantillaProveedor(datosParaProveedor(s, p, itemsCorreo, {
+        asegurador: s.aseguradores?.nombre ?? null, observacionesHtml: observaciones,
+        gestor: perfil?.nombre ?? null, gestorEmail: perfil?.email ?? null, logoUrl: LOGO_CORREO,
+      })) : null
+      return { id, proveedor: p, items: its, correo }
+    }).filter((g) => g.proveedor)
+  }, [lista, asignaciones, proveedores, observaciones, s, perfil]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const grupoVista = grupos.find((g) => g.id === vista) ?? grupos[0] ?? null
+
+  function asignar(itemId: number, campo: keyof Asignacion, valor: string) {
+    setAviso('')
+    setAsignaciones((a) => ({ ...a, [itemId]: { ...a[itemId], [campo]: valor } }))
+  }
+
+  // Aplica el proveedor / fecha de la primera fila a las que estén vacías
+  function aplicarATodos(campo: keyof Asignacion) {
+    const primero = lista.map((i) => asignaciones[i.id]?.[campo]).find(Boolean)
+    if (!primero) return
+    setAsignaciones((a) => Object.fromEntries(lista.map((i) => [i.id, { ...a[i.id], [campo]: a[i.id]?.[campo] || primero }])))
+  }
+
+  async function guardar() {
+    setGuardando(true)
+    setError('')
+    try {
+      for (const i of lista) {
+        const a = asignaciones[i.id]
+        const p = a?.proveedorId ? proveedorDe(a.proveedorId) : null
+        const { error: e } = await sb.from('mos_items').update({
+          proveedor_id: p?.id ?? null, proveedor: p?.nombre ?? null, fecha_estimada_entrega: a?.fechaEstimada || null,
+        }).eq('id', i.id)
+        if (e) throw new Error(e.message)
+      }
+      setAviso('Asignación guardada. Puede enviar los correos cuando esté lista.')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  async function enviar() {
+    if (!listo || !confirmado) return
+    setEnviando(true)
+    setError('')
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('notificar-proveedor', {
+        body: {
+          solicitudId: s.id, observaciones,
+          asignaciones: lista.map((i) => ({ itemId: i.id, proveedorId: Number(asignaciones[i.id].proveedorId), fechaEstimada: asignaciones[i.id].fechaEstimada })),
+        },
+      })
+      if (fnError) {
+        const detalle = await (fnError as { context?: Response }).context?.json?.().catch(() => null)
+        throw new Error(detalle?.error ?? fnError.message)
+      }
+      if (data?.ok === false) throw new Error(data.error)
+      if (data?.errores?.length) alert(`Algunos correos no se pudieron enviar:\n\n${data.errores.join('\n')}`)
+      onEnviado((data?.enviados ?? []).map((e: { correoId: number | null }) => e.correoId).filter(Boolean))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  const faltan = [
+    !aprobado && 'la aprobación del asegurador',
+    lista.length === 0 && 'ítems de material (notifique primero al asegurador)',
+    lista.length > 0 && completos.length < lista.length && `proveedor y fecha en ${lista.length - completos.length} ítem(s)`,
+    sinCorreo.length > 0 && `correo válido de ${sinCorreo.map((p) => p!.nombre).join(', ')}`,
+  ].filter(Boolean)
+
+  return (
+    <PanelLateral
+      ancho="max-w-4xl"
+      titulo="Solicitar material al proveedor"
+      subtitulo={`${codigo(s.id)} · ${s.nombre_paciente ?? s.documento_paciente} · Asegurador: ${s.aseguradores?.nombre ?? '—'}`}
+      insignias={<>
+        <span className="rounded-full bg-white/15 px-2 py-0.5 font-semibold">Paso 2 · Proveedor</span>
+        <BadgeMos s={s} />
+      </>}
+      onCerrar={onCerrar}
+      pie={<>
+        <label className={`flex w-full items-center gap-2 text-sm ${listo ? 'text-slate-700' : 'text-slate-400'}`}>
+          <input type="checkbox" disabled={!listo} checked={confirmado} onChange={(e) => setConfirmado(e.target.checked)} className="h-4 w-4 accent-[#0D2D6B]" />
+          Confirmo los proveedores, las fechas y el contenido de los correos
+          {!listo && faltan.length > 0 && <span className="text-xs text-amber-700">(falta: {faltan.join(', ')})</span>}
+        </label>
+        <Boton variante="secundario" onClick={onCerrar} disabled={enviando}>Cancelar</Boton>
+        <Boton variante="secundario" onClick={guardar} disabled={guardando || enviando || lista.length === 0} className="flex items-center gap-1.5">
+          <Save size={14} /> {guardando ? 'Guardando…' : 'Guardar asignación'}
+        </Boton>
+        <Boton disabled={!listo || !confirmado || enviando} className="flex flex-1 items-center justify-center gap-1.5" onClick={enviar}>
+          <Send size={14} /> {enviando ? 'Enviando…' : `Enviar ${grupos.length > 1 ? `${grupos.length} correos` : 'correo'} al proveedor${grupos.length > 1 ? 'es' : ''}`}
+        </Boton>
+      </>}
+    >
+      <div className="rounded-xl border border-slate-200 bg-white px-2 py-3"><AvanceMos s={s} /></div>
+
+      {!aprobado && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <ShieldCheck size={16} className="mt-0.5 shrink-0" />
+          {s.mos_respuesta_asegurador === 'rechazado'
+            ? 'El asegurador rechazó los materiales. No se puede solicitar al proveedor; notifique de nuevo al asegurador si corresponde.'
+            : 'Registre primero la aprobación del asegurador (icono de escudo en la lista). Puede ir asignando proveedores y fechas y guardarlos.'}
+        </div>
+      )}
+
+      {s.mos_proveedor_notificado_en && (
+        <div className="flex items-start gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm text-teal-800">
+          <Truck size={16} className="mt-0.5 shrink-0" />
+          Los proveedores ya fueron notificados el {fechaHora(s.mos_proveedor_notificado_en)}. Si envía de nuevo, quedará una nueva evidencia.
+        </div>
+      )}
+
+      <Grupo color="orden" icono={Stethoscope} titulo="Cirugía">
+        <Dato etiqueta="Paciente" valor={`${s.nombre_paciente ?? '—'} · ${s.documento_paciente}`} ancho />
+        <Dato etiqueta="Procedimiento" valor={s.procedimiento} ancho />
+        <Dato etiqueta="Asegurador que autoriza" valor={s.aseguradores?.nombre} />
+        <Dato etiqueta="Programación" valor={s.fecha_programada ? `${s.fecha_programada} ${s.hora_programada?.slice(0, 5) ?? ''}` : null} />
+      </Grupo>
+
+      <Grupo color="boleta" icono={ClipboardList} titulo="Material autorizado · proveedor y fecha estimada de entrega *">
+        <div className="col-span-2 overflow-hidden rounded-lg border border-amber-200 bg-white">
+          {items === null ? <div className="flex justify-center py-6"><Spinner /></div> : lista.length === 0 ? (
+            <p className="px-3 py-4 text-sm text-slate-500">No hay ítems registrados. Primero notifique al asegurador (paso 1).</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-amber-100 text-left text-[10px] font-semibold uppercase tracking-wide text-amber-900">
+                <tr>
+                  <th className="w-8 px-2 py-1.5 text-center">#</th>
+                  <th className="w-12 px-2 py-1.5 text-center">Cant.</th>
+                  <th className="px-2 py-1.5">Descripción</th>
+                  <th className="w-64 px-2 py-1.5">
+                    <span className="flex items-center justify-between gap-1">Proveedor
+                      <button type="button" onClick={() => aplicarATodos('proveedorId')} className="font-medium normal-case text-amber-700 hover:underline">aplicar a todos</button>
+                    </span>
+                  </th>
+                  <th className="w-40 px-2 py-1.5">
+                    <span className="flex items-center justify-between gap-1">Fecha estimada
+                      <button type="button" onClick={() => aplicarATodos('fechaEstimada')} className="font-medium normal-case text-amber-700 hover:underline">a todos</button>
+                    </span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {lista.map((i) => {
+                  const a = asignaciones[i.id] ?? { proveedorId: '', fechaEstimada: '' }
+                  return (
+                    <tr key={i.id} className="border-t border-amber-100 align-top">
+                      <td className="px-2 py-2 text-center text-xs text-slate-400">{i.orden}</td>
+                      <td className="px-2 py-2 text-center font-semibold">{i.cantidad}</td>
+                      <td className="px-2 py-2 text-slate-700">
+                        {i.descripcion}
+                        {i.proveedor_notificado_en && <div className="text-[10px] text-teal-700">Solicitado el {fechaHora(i.proveedor_notificado_en)}</div>}
+                      </td>
+                      <td className="px-1 py-1">
+                        <div className="flex items-center gap-1">
+                          <select value={a.proveedorId} onChange={(e) => asignar(i.id, 'proveedorId', e.target.value)} className={`${CLASE_CAMPO} w-full !px-2`}>
+                            <option value="">Seleccione…</option>
+                            {proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                          </select>
+                          <button type="button" title="Ver datos del proveedor" disabled={!a.proveedorId}
+                            onClick={() => setFicha(Number(a.proveedorId))}
+                            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-[#0D2D6B] disabled:opacity-30"><Info size={15} /></button>
+                        </div>
+                      </td>
+                      <td className="px-1 py-1">
+                        <input type="date" min={hoyISO()} value={a.fechaEstimada} onChange={(e) => asignar(i.id, 'fechaEstimada', e.target.value)} className={`${CLASE_CAMPO} w-full !px-2`} />
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+        <div className="col-span-2 text-[11px] text-slate-500">
+          {completos.length} de {lista.length} ítem(s) con proveedor y fecha · {grupos.length} proveedor(es) · se envía un correo por proveedor
+        </div>
+      </Grupo>
+
+      <Grupo color="gestion" icono={MessageSquareText} titulo="Observaciones para el proveedor (opcional)">
+        <div className="col-span-2">
+          <RichTextEditor value={observaciones} onChange={setObservaciones} placeholder="Indicaciones de entrega, horarios, contacto en sala…" minHeight="70px" />
+        </div>
+      </Grupo>
+
+      {aviso && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{aviso}</p>}
+
+      {/* Vista previa de lo que recibirá cada proveedor */}
+      <section className="rounded-xl border border-slate-200 bg-white p-3">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-[#0D2D6B]">
+            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[#0D2D6B] text-white"><Eye size={14} /></span>
+            Vista previa para el proveedor
+          </h3>
+          <div className="flex flex-wrap gap-1">
+            {grupos.map((g) => (
+              <button key={g.id} onClick={() => setVista(g.id)}
+                className={`rounded-md px-2.5 py-1 text-xs ${grupoVista?.id === g.id ? 'bg-[#0D2D6B] text-white' : 'bg-slate-100 text-slate-600'}`}>
+                {g.proveedor!.nombre} ({g.items.length})
+              </button>
+            ))}
+          </div>
+        </div>
+        {!grupoVista?.correo ? (
+          <p className="py-6 text-center text-sm text-slate-400">Asigne un proveedor a los ítems para ver la vista previa del correo.</p>
+        ) : (
+          <div>
+            <div className="mb-2 space-y-0.5 rounded-lg bg-slate-50 px-3 py-1.5 text-xs text-slate-600">
+              <div><b>De:</b> {REMITENTE_MOS}</div>
+              <div><b>Para:</b> {grupoVista.proveedor!.email || <span className="text-red-600">sin correo registrado</span>}{perfil?.email && <> · <b>Responder a:</b> {perfil.email}</>}</div>
+              <div><b>Asunto:</b> {grupoVista.correo.asunto}</div>
+            </div>
+            <iframe title="Vista previa del correo al proveedor" srcDoc={grupoVista.correo.html} className="h-[520px] w-full rounded-lg border border-slate-200" sandbox="" />
+          </div>
+        )}
+      </section>
+
+      {error && (
+        <p className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" /> {error}
+        </p>
+      )}
+
+      {ficha !== null && <ModalFichaProveedor proveedorId={ficha} onCerrar={() => setFicha(null)} />}
+    </PanelLateral>
+  )
+}
+
+// --- Ficha con todos los datos del proveedor ---
+function ModalFichaProveedor({ proveedorId, onCerrar }: { proveedorId: number; onCerrar: () => void }) {
+  const [p, setP] = useState<Proveedor | null>(null)
+  useEffect(() => {
+    sb.from('proveedores').select('*').eq('id', proveedorId).single().then(({ data }: { data: Proveedor | null }) => setP(data))
+  }, [proveedorId])
+
+  const fila = (Icono: typeof Info, etiqueta: string, valor: React.ReactNode) => (
+    <div className="flex items-start gap-3 border-t border-slate-100 py-2 first:border-t-0">
+      <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#0D2D6B]/10 text-[#0D2D6B]"><Icono size={14} /></span>
+      <div className="min-w-0">
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{etiqueta}</div>
+        <div className={`break-words text-sm ${valor ? 'text-slate-800' : 'text-slate-400'}`}>{valor || '—'}</div>
+      </div>
+    </div>
+  )
+
+  return (
+    <Modal open onClose={onCerrar} titulo="Datos del proveedor" ancho="max-w-md">
+      {!p ? <div className="flex justify-center py-8"><Spinner /></div> : (
+        <div>
+          <div className="mb-2 flex items-center gap-2">
+            <Truck size={18} className="text-teal-600" />
+            <span className="text-base font-semibold text-[#0D2D6B]">{p.nombre}</span>
+          </div>
+          {fila(Hash, 'NIT', p.nit)}
+          {fila(MapPin, 'Dirección', [p.direccion, p.ciudad].filter(Boolean).join(' · '))}
+          {fila(Phone, 'Teléfono', p.telefono && <a href={`tel:${p.telefono.replace(/\s/g, '')}`} className="hover:underline">{p.telefono}</a>)}
+          {fila(UserRound, 'Persona de contacto', p.contacto)}
+          {fila(Mail, 'Correo electrónico', p.email && <a href={`mailto:${p.email}`} className="hover:underline">{p.email}</a>)}
+        </div>
+      )}
+    </Modal>
+  )
+}
+
+// --- Registros de material (uno por ítem) con proveedor, fecha y estado de entrega ---
 function TablaRegistros({ registros }: { registros: RegistroItem[] }) {
+  const [ficha, setFicha] = useState<number | null>(null)
   return (
     <div className="overflow-hidden rounded-lg border border-emerald-200 bg-white">
       <table className="w-full text-xs">
         <thead className="bg-emerald-100 text-left text-[10px] uppercase text-emerald-900">
-          <tr><th className="px-2 py-1">#</th><th className="px-2 py-1">Cant.</th><th className="px-2 py-1">Descripción</th><th className="px-2 py-1">Proveedor</th><th className="px-2 py-1">Entrega</th></tr>
+          <tr>
+            <th className="px-2 py-1">#</th><th className="px-2 py-1">Cant.</th><th className="px-2 py-1">Descripción</th>
+            <th className="px-2 py-1">Proveedor</th><th className="px-2 py-1">Fecha estimada</th><th className="px-2 py-1">Entrega</th>
+          </tr>
         </thead>
         <tbody>
           {registros.map((i) => (
@@ -664,12 +1123,20 @@ function TablaRegistros({ registros }: { registros: RegistroItem[] }) {
               <td className="px-2 py-1 text-slate-400">{i.orden}</td>
               <td className="px-2 py-1 font-semibold">{i.cantidad}</td>
               <td className="px-2 py-1">{i.descripcion}</td>
-              <td className="px-2 py-1 text-slate-500">{i.proveedor || '—'}</td>
+              <td className="px-2 py-1 text-slate-600">
+                {i.proveedor_id ? (
+                  <button onClick={() => setFicha(i.proveedor_id)} title="Ver datos del proveedor" className="inline-flex items-center gap-1 text-left hover:text-[#0D2D6B] hover:underline">
+                    {i.proveedor} <Info size={11} className="shrink-0 text-slate-400" />
+                  </button>
+                ) : '—'}
+              </td>
+              <td className="whitespace-nowrap px-2 py-1 text-slate-600">{fechaCorta(i.fecha_estimada_entrega) ?? '—'}</td>
               <td className="px-2 py-1"><Badge className={ESTADO_ITEM_COLOR[i.estado]}>{ESTADO_ITEM_LABEL[i.estado]}</Badge></td>
             </tr>
           ))}
         </tbody>
       </table>
+      {ficha !== null && <ModalFichaProveedor proveedorId={ficha} onCerrar={() => setFicha(null)} />}
     </div>
   )
 }
@@ -696,12 +1163,12 @@ export function ModalDetalleMos({ solicitudId, onCerrar }: { solicitudId: number
     })
   }, [solicitudId])
 
-  const ultimo = correos[0] ?? null
+  const alAsegurador = correos.find((c) => c.paso !== 'notificacion_proveedor') ?? null
   const unidades = registros.reduce((t, i) => t + i.cantidad, 0)
 
   return (
     <>
-      <Modal open onClose={onCerrar} titulo={`Gestión MOS · ${codigo(solicitudId)}${s ? ` · ${s.nombre_paciente ?? s.documento_paciente}` : ''}`} ancho="max-w-4xl">
+      <Modal open onClose={onCerrar} titulo={`Gestión MOS · ${codigo(solicitudId)}${s ? ` · ${s.nombre_paciente ?? s.documento_paciente}` : ''}`} ancho="max-w-5xl">
         {cargando || !s ? (
           <div className="flex justify-center py-12"><Spinner className="h-7 w-7" /></div>
         ) : (
@@ -709,8 +1176,15 @@ export function ModalDetalleMos({ solicitudId, onCerrar }: { solicitudId: number
             <div className="flex flex-wrap items-center gap-2">
               <BadgeMos s={s} />
               <Badge className={ESTADOS_COLOR[s.estado]}>{ESTADOS_LABEL[s.estado]}</Badge>
-              {s.mos_notificado_en && <span className="text-xs text-slate-500">Notificado el {fechaHora(s.mos_notificado_en)}{ultimo?.enviado_por_nombre && ` por ${ultimo.enviado_por_nombre}`}</span>}
             </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white px-2 py-3"><AvanceMos s={s} /></div>
+            {s.mos_respuesta_asegurador && (
+              <div className={`rounded-lg border px-3 py-2 text-sm ${s.mos_respuesta_asegurador === 'aprobado' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-800'}`}>
+                <b>Respuesta del asegurador: {s.mos_respuesta_asegurador === 'aprobado' ? 'aprobado' : 'rechazado'}</b> · {fechaHora(s.mos_respuesta_en)}
+                {s.mos_respuesta_obs && <div className="mt-0.5">{s.mos_respuesta_obs}</div>}
+              </div>
+            )}
 
             <div className="grid gap-3 md:grid-cols-2">
               <Grupo color="orden" icono={Stethoscope} titulo="Paciente y cirugía">
@@ -720,10 +1194,10 @@ export function ModalDetalleMos({ solicitudId, onCerrar }: { solicitudId: number
                 <Dato etiqueta="Programación" valor={s.fecha_programada ? `${s.fecha_programada} ${s.hora_programada?.slice(0, 5) ?? ''}` : null} />
               </Grupo>
               <Grupo color="paciente" icono={Building2} titulo="Asegurador notificado">
-                <Dato etiqueta="Asegurador" valor={ultimo?.asegurador_nombre ?? s.aseguradores?.nombre} />
-                <Dato etiqueta="Persona de contacto" valor={ultimo?.asegurador_contacto} />
-                <Dato etiqueta="Teléfono" valor={ultimo?.asegurador_telefono} />
-                <Dato etiqueta="Correo" valor={ultimo?.destinatario && <span className="break-all">{ultimo.destinatario}</span>} />
+                <Dato etiqueta="Asegurador" valor={alAsegurador?.asegurador_nombre ?? s.aseguradores?.nombre} />
+                <Dato etiqueta="Persona de contacto" valor={alAsegurador?.asegurador_contacto} />
+                <Dato etiqueta="Teléfono" valor={alAsegurador?.asegurador_telefono} />
+                <Dato etiqueta="Correo" valor={alAsegurador?.destinatario && <span className="break-all">{alAsegurador.destinatario}</span>} />
               </Grupo>
             </div>
 
@@ -741,9 +1215,12 @@ export function ModalDetalleMos({ solicitudId, onCerrar }: { solicitudId: number
                     {correos.map((c) => (
                       <li key={c.id}>
                         <button onClick={() => setEvidencia(c)} className="flex w-full items-center gap-2 rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-left text-xs hover:bg-emerald-50">
-                          <MailCheck size={14} className="shrink-0 text-emerald-600" />
+                          {c.paso === 'notificacion_proveedor' ? <Truck size={14} className="shrink-0 text-teal-600" /> : <MailCheck size={14} className="shrink-0 text-emerald-600" />}
                           <span className="min-w-0 flex-1">
-                            <span className="block font-medium text-slate-700">Notificación a {c.asegurador_nombre} · {c.adjuntos.length} adjuntos</span>
+                            <span className="block font-medium text-slate-700">
+                              {c.paso === 'notificacion_proveedor' ? 'Solicitud al proveedor' : 'Notificación al asegurador'} · {destinoCorreo(c)}
+                              {c.paso === 'notificacion_proveedor' ? ` · ${c.items.length} ítem(s)` : ` · ${c.adjuntos.length} adjuntos`}
+                            </span>
                             <span className="block truncate text-slate-400">{fechaHora(c.enviado_en)} · {c.destinatario} · {c.enviado_por_nombre ?? '—'}</span>
                           </span>
                           <Eye size={14} className="text-slate-400" />
@@ -762,9 +1239,10 @@ export function ModalDetalleMos({ solicitudId, onCerrar }: { solicitudId: number
   )
 }
 
-// --- Evidencia: copia guardada del correo enviado ---
+// --- Evidencia: copia guardada del correo enviado (asegurador o proveedor) ---
 function ModalEvidencia({ correo, onCerrar }: { correo: Correo; onCerrar: () => void }) {
   const [abriendo, setAbriendo] = useState('')
+  const aProveedor = correo.paso === 'notificacion_proveedor'
 
   async function abrirAdjunto(path: string) {
     setAbriendo(path)
@@ -775,25 +1253,32 @@ function ModalEvidencia({ correo, onCerrar }: { correo: Correo; onCerrar: () => 
   }
 
   return (
-    <Modal open onClose={onCerrar} titulo="Evidencia del correo enviado" ancho="max-w-4xl">
+    <Modal open onClose={onCerrar} titulo={aProveedor ? 'Evidencia del correo al proveedor' : 'Evidencia del correo al asegurador'} ancho="max-w-4xl">
       <div className="mb-3 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-        <CheckCircle2 size={16} /> Enviado el {fechaHora(correo.enviado_en)} por {correo.enviado_por_nombre ?? '—'}. Estado: asegurador notificado, en espera de respuesta.
+        <CheckCircle2 size={16} /> Enviado el {fechaHora(correo.enviado_en)} por {correo.enviado_por_nombre ?? '—'}.
       </div>
       <div className="mb-3 grid gap-x-4 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 sm:grid-cols-2">
         <div><span className="font-semibold">De:</span> {correo.remitente}</div>
         <div><span className="font-semibold">Para:</span> {correo.destinatario}</div>
-        <div><span className="font-semibold">Asegurador:</span> {correo.asegurador_nombre}{correo.asegurador_contacto && ` · ${correo.asegurador_contacto}`}</div>
-        <div><span className="font-semibold">Teléfono:</span> {correo.asegurador_telefono ?? '—'}</div>
+        {aProveedor ? (<>
+          <div><span className="font-semibold">Proveedor:</span> {correo.proveedor_nombre}{correo.proveedor_nit && ` · NIT ${correo.proveedor_nit}`}</div>
+          <div><span className="font-semibold">Contacto:</span> {[correo.proveedor_contacto, correo.proveedor_telefono].filter(Boolean).join(' · ') || '—'}</div>
+        </>) : (<>
+          <div><span className="font-semibold">Asegurador:</span> {correo.asegurador_nombre}{correo.asegurador_contacto && ` · ${correo.asegurador_contacto}`}</div>
+          <div><span className="font-semibold">Teléfono:</span> {correo.asegurador_telefono ?? '—'}</div>
+        </>)}
         <div className="sm:col-span-2"><span className="font-semibold">Asunto:</span> {correo.asunto}</div>
-        <div className="flex flex-wrap items-center gap-1.5 sm:col-span-2"><span className="font-semibold">Adjuntos:</span>
-          {correo.adjuntos.map((a) => (
-            <button key={a.path} onClick={() => abrirAdjunto(a.path)} className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-1.5 py-0.5 hover:border-[#0D2D6B] hover:text-[#0D2D6B]">
-              {abriendo === a.path ? <Spinner className="h-3 w-3" /> : <FileText size={12} className="text-red-500" />} {a.nombre} ({tamano(a.bytes)})
-            </button>
-          ))}
-        </div>
+        {correo.adjuntos.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 sm:col-span-2"><span className="font-semibold">Adjuntos:</span>
+            {correo.adjuntos.map((a) => (
+              <button key={a.path} onClick={() => abrirAdjunto(a.path)} className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-1.5 py-0.5 hover:border-[#0D2D6B] hover:text-[#0D2D6B]">
+                {abriendo === a.path ? <Spinner className="h-3 w-3" /> : <FileText size={12} className="text-red-500" />} {a.nombre} ({tamano(a.bytes)})
+              </button>
+            ))}
+          </div>
+        )}
       </div>
-      <iframe title="Correo enviado" srcDoc={correo.html} className="h-[55vh] w-full rounded-lg border border-slate-200 bg-white" />
+      <iframe title="Correo enviado" srcDoc={correo.html} className="h-[55vh] w-full rounded-lg border border-slate-200 bg-white" sandbox="" />
     </Modal>
   )
 }
