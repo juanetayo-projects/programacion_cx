@@ -127,7 +127,7 @@ export const MODULOS_LABEL: Record<Modulo, string> = {
   reportar: 'Reportar cirugía',
   reportar_masivo: 'Reportar cirugía · Consulta masiva GoMedisys',
   solicitudes_reportadas: 'Solicitudes reportadas',
-  solicitudes: 'Gestión de solicitudes',
+  solicitudes: 'Gestión Programación Cx',
   cirugias_realizadas: 'Cirugías realizadas',
   quirofanos: 'Mapa de quirófanos',
   calor: 'Mapa de calor',
@@ -139,7 +139,7 @@ export const MODULOS_LABEL: Record<Modulo, string> = {
   mos: 'Gestión MOS (materiales de osteosíntesis)',
   esterilizacion: 'Recepción de materiales (Esterilización)',
   gestion_clinica: 'Gestión clínica (cobro de materiales y notas)',
-  prequirurgico: 'Gestión prequirúrgica (seguimiento y citas)',
+  prequirurgico: 'Gestión postquirúrgica (seguimiento y citas)',
 }
 
 // Módulo MOS (Materiales de Osteosíntesis): estado propio de la solicitud,

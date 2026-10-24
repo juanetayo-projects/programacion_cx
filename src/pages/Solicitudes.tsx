@@ -6,6 +6,7 @@ import { TituloEnHeader, CampoLinea, CLASE_CAMPO, Boton, Modal, Badge, EstadoVac
 import { PanelLateral, Grupo, Dato } from '../components/PanelLateral'
 import RichTextEditor from '../components/RichTextEditor'
 import { ModalDetalleMos } from './Mos'
+import { ModalCierreCirugia, type CamposCierre } from '../components/CierreCirugia'
 import { AvanceMos, AvanceMosCompacto } from '../components/AvanceMos'
 import FiltroEtapaMos from '../components/FiltroEtapaMos'
 import { filtrarPorEtapaMos } from '../lib/filtrosMos'
@@ -117,6 +118,9 @@ const ICONO_ESTADO: Partial<Record<Estado, React.ReactNode>> = {
 
 // Estados que ya pasaron por una programación y por eso admiten notificar/reprogramar/realizar
 const ESTADOS_PROGRAMADOS: Estado[] = ['programado', 'notificado', 'aplazado', 'suspendido']
+
+// Hoy en hora local (YYYY-MM-DD) para alertar cirugías pasadas sin registrar como realizadas
+const hoyISO = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
 
 export default function Solicitudes() {
   const { session } = useAuth()
@@ -450,23 +454,9 @@ export default function Solicitudes() {
     cargar()
   }
 
-  async function marcarRealizada() {
-    if (!seleccion) return
-    setGuardando(true)
-    setError('')
-    const { error } = await supabase.from('solicitudes_cirugia').update({
-      estado: 'realizado', realizado_en: new Date().toISOString(),
-    }).eq('id', seleccion.id)
-    setGuardando(false)
-    if (error) { setError(error.message); return }
-    await supabase.from('solicitudes_historial').insert({ solicitud_id: seleccion.id, accion: 'realizado', usuario_id: session!.user.id, detalle: {} })
-    cerrar()
-    cargar()
-  }
-
   return (
     <div className="flex h-full flex-col">
-      <TituloEnHeader titulo="Gestión de solicitudes" subtitulo="Solicitudes procesadas en GoMedisys, pendientes de programar / notificar" />
+      <TituloEnHeader titulo="Gestión Programación Cx"subtitulo="Solicitudes procesadas en GoMedisys, pendientes de programar / notificar" />
 
       <div className="shrink-0">
         {/* Filtros en una sola línea */}
@@ -588,6 +578,12 @@ export default function Solicitudes() {
                     </td>
                     <td className="px-4 py-2.5">
                       <Badge className={ESTADOS_COLOR[f.estado]}>{ICONO_ESTADO[f.estado]} {ESTADOS_LABEL[f.estado]}</Badge>
+                      {ESTADOS_PROGRAMADOS.includes(f.estado) && f.fecha_programada && f.fecha_programada < hoyISO && (
+                        <div title="La fecha programada ya pasó y la cirugía no se ha registrado como realizada. Use 'Marcar como realizada' (estetoscopio) para registrar fecha final, cirujano, procedimiento y destino; sin ese cierre no se habilita el seguimiento posquirúrgico."
+                          className="mt-1 inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+                          <AlertTriangle size={11} /> Pendiente registrar realizada
+                        </div>
+                      )}
                       {f.estado_mos && (
                         <div onClick={(e) => e.stopPropagation()}>
                           <AvanceMosCompacto s={f} onClick={() => setDetalleMos(f.id)} />
@@ -690,25 +686,14 @@ export default function Solicitudes() {
         )}
       </Modal>
 
-      {/* MARCAR COMO REALIZADA */}
-      <Modal open={modal === 'realizada'} onClose={cerrar} titulo="Marcar cirugía como realizada" ancho="max-w-md">
-        {seleccion && (
-          <div className="space-y-3">
-            <p className="text-sm text-slate-600">
-              ¿Confirmas que la cirugía <strong>SC-{String(seleccion.id).padStart(6, '0')}</strong> del paciente{' '}
-              <strong>{seleccion.nombre_paciente ?? seleccion.documento_paciente}</strong> ya se realizó? El registro
-              pasará a la vista <strong>Cirugías realizadas</strong>.
-            </p>
-            {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
-            <div className="flex justify-end gap-2 pt-2">
-              <Boton variante="secundario" onClick={cerrar}>Cancelar</Boton>
-              <Boton disabled={guardando} className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700" onClick={marcarRealizada}>
-                <Stethoscope size={14} /> {guardando ? 'Guardando…' : 'Confirmar realizada'}
-              </Boton>
-            </div>
-          </div>
-        )}
-      </Modal>
+      {/* MARCAR COMO REALIZADA: registro completo del cierre de la cirugía */}
+      {modal === 'realizada' && seleccion && (
+        <ModalCierreCirugia
+          s={seleccion as unknown as CamposCierre}
+          onCerrar={cerrar}
+          onGuardado={() => { cerrar(); cargar() }}
+        />
+      )}
 
       {/* CONFLICTO DE PROGRAMACIÓN */}
       <Modal open={modal === 'conflicto'} onClose={cerrar} titulo="Quirófano ocupado" ancho="max-w-lg">

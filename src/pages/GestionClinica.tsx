@@ -284,7 +284,10 @@ function PanelClinico({ s, items, puedeEscribir, onCerrar, onCambio }: {
                   <td className="px-2 py-1.5 font-semibold">{i.cantidad}</td>
                   <td className="px-2 py-1.5">{i.descripcion}</td>
                   <td className="px-2 py-1.5 text-slate-600">{i.proveedor ?? '—'}</td>
-                  <td className="px-2 py-1.5 text-center">{i.cantidad_entregada ?? 0} / {i.cantidad}</td>
+                  <td className="px-2 py-1.5 text-center">
+                    {i.cantidad_entregada ?? 0} / {i.cantidad}
+                    {i.entregado_en && <div className="text-[10px] text-slate-500">Esterilización: {fechaHora(i.entregado_en)}</div>}
+                  </td>
                   <td className="px-2 py-1.5">
                     {i.cobro_responsable
                       ? <span className="font-semibold text-emerald-700">{i.cobro_responsable}</span>
@@ -304,7 +307,7 @@ function PanelClinico({ s, items, puedeEscribir, onCerrar, onCambio }: {
         </div>
       </Grupo>
 
-      <Grupo color="neutro" icono={CalendarClock} titulo="Seguimiento prequirúrgico (consulta)">
+      <Grupo color="neutro" icono={CalendarClock} titulo="Seguimiento postquirúrgico (consulta)">
         <div className="col-span-2">
           <NotasSeguimiento solicitudId={s.id} ambito="prequirurgico" puedeEscribir={false} conCita conGrafico={false} fechaCirugia={s.fecha_programada} />
         </div>
@@ -351,21 +354,14 @@ function ModalItem({ s, item, puedeEscribir, onCerrar, onGuardado }: {
           <div><b>Paciente:</b> {s.nombre_paciente ?? s.documento_paciente}</div>
           <div><b>Cantidad:</b> {item.cantidad}</div>
           <div><b>Proveedor:</b> {item.proveedor ?? '—'}</div>
-          <div><b>Recibido:</b> {item.cantidad_entregada ?? 0} / {item.cantidad}</div>
+          <div><b>Recibido:</b> {item.cantidad_entregada ?? 0} / {item.cantidad}{item.entregado_en && ` · ${fechaHora(item.entregado_en)}`}</div>
         </div>
 
         <section className="rounded-xl border border-amber-200 bg-amber-50 p-3">
           <h3 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-amber-900"><Receipt size={14} /> Cargo del cobro (facturación)</h3>
           <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">¿Quién asume el cobro?</label>
-          <div className="flex gap-2">
-            <input value={cobro} onChange={(e) => setCobro(e.target.value)} disabled={!puedeEscribir}
-              placeholder="Ej.: SURA EPS, paciente, póliza SOAT, ARL…" className={`${CLASE_CAMPO} flex-1`} />
-            {puedeEscribir && (
-              <Boton onClick={guardarCobro} disabled={guardando || (cobro.trim() || null) === guardado.valor} className="flex items-center gap-1.5">
-                <Save size={14} /> {guardando ? 'Guardando…' : 'Guardar'}
-              </Boton>
-            )}
-          </div>
+          <input value={cobro} onChange={(e) => setCobro(e.target.value)} disabled={!puedeEscribir}
+            placeholder="Ej.: SURA EPS, paciente, póliza SOAT, ARL…" className={`${CLASE_CAMPO} w-full`} />
           {guardado.en && (
             <p className="mt-1 text-[11px] text-slate-500">Registrado el {fechaHora(guardado.en)} por {guardado.por ?? '—'}. Cada cambio queda en el historial.</p>
           )}
@@ -376,6 +372,15 @@ function ModalItem({ s, item, puedeEscribir, onCerrar, onGuardado }: {
           <h3 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-[#0D2D6B]"><ClipboardList size={14} /> Notas del ítem</h3>
           <NotasSeguimiento solicitudId={s.id} ambito="gestion_clinica" itemId={item.id} puedeEscribir={puedeEscribir} conGrafico={false} />
         </section>
+
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+          <Boton variante="secundario" onClick={onCerrar}>Cerrar</Boton>
+          {puedeEscribir && (
+            <Boton onClick={guardarCobro} disabled={guardando || (cobro.trim() || null) === guardado.valor} className="flex items-center gap-1.5">
+              <Save size={14} /> {guardando ? 'Guardando…' : 'Guardar cargo del cobro'}
+            </Boton>
+          )}
+        </div>
       </div>
     </Modal>
   )

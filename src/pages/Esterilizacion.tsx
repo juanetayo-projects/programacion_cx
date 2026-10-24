@@ -373,7 +373,13 @@ function PanelRecibo({ s, onCerrar, onRegistrado }: {
                       <td className="px-2 py-2 text-center text-xs text-slate-400">{i.orden}</td>
                       <td className="px-2 py-2 text-slate-700">{i.descripcion}</td>
                       <td className="px-2 py-2 text-center font-semibold">{i.solicitada}</td>
-                      <td className="px-2 py-2 text-center text-slate-500">{i.recibidaAntes}</td>
+                      <td className="px-2 py-2 text-center text-slate-500">
+                        {i.recibidaAntes}
+                        {(() => {
+                          const en = delProveedor.find((x) => x.id === i.itemId)?.entregado_en
+                          return en ? <div className="whitespace-nowrap text-[10px]">{fechaHora(en)}</div> : null
+                        })()}
+                      </td>
                       <td className="px-1 py-1">
                         <input type="number" min={0} max={pendiente} step={1} disabled={pendiente === 0}
                           value={cantidades[i.itemId] ?? '0'} onChange={(e) => setCantidades((c) => ({ ...c, [i.itemId]: e.target.value }))}

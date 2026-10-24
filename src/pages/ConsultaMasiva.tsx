@@ -403,7 +403,7 @@ export default function ConsultaMasiva() {
 
   return (
     <div>
-      <TituloEnHeader titulo="Consulta masiva GoMedisys" subtitulo="Los pacientes marcados pasan a Gestión de solicitudes">
+      <TituloEnHeader titulo="Consulta masiva GoMedisys" subtitulo="Los pacientes marcados pasan a Gestión Programación Cx">
         <ReportarTabs oscuro />
         {otros.length > 0 && (
           <span className="hidden shrink-0 items-center gap-1.5 rounded-full bg-amber-300/90 px-3 py-1 text-xs font-medium text-[#0D2D6B] xl:flex" title={otros.map((o) => o.nombre).join(', ')}>
@@ -660,7 +660,7 @@ export default function ConsultaMasiva() {
       <Modal open={modalMarcar} onClose={() => !marcando && setModalMarcar(false)} titulo={`Marcar ${seleccionadas.length} paciente(s) para gestión`} ancho="max-w-3xl" cerrableFuera={false}>
         <p className="mb-3 text-sm text-slate-600">
           Se crearán las solicitudes con los datos de GoMedisys ya cargados (estado <b>Procesado</b>) y pasarán a
-          <b> Gestión de solicitudes</b>. Dejarán de aparecer en esta consulta para todos los usuarios.
+          <b> Gestión Programación Cx</b>. Dejarán de aparecer en esta consulta para todos los usuarios.
           Confirme la especialidad de cada paciente:
         </p>
         <div className="mb-3 flex items-center gap-2 text-sm">
@@ -730,7 +730,7 @@ export default function ConsultaMasiva() {
           )}
           <div className="flex justify-end gap-2 pt-1">
             <Boton variante="secundario" onClick={() => setResultado(null)}>Seguir marcando</Boton>
-            <Boton onClick={() => navigate('/solicitudes')} className="flex items-center gap-2">Ir a Gestión de solicitudes <ArrowRight size={15} /></Boton>
+            <Boton onClick={() => navigate('/solicitudes')} className="flex items-center gap-2">Ir a Gestión Programación Cx <ArrowRight size={15} /></Boton>
           </div>
         </div>
       </Modal>
@@ -854,7 +854,7 @@ function PanelDetalle({ f, s, seleccionada, otrosSeleccionando, onAlternar, onCe
             </Boton>
           ) : s.tipo === 'tomada' ? (
             <Boton onClick={onIrGestion} variante="secundario" className="flex flex-1 items-center justify-center gap-2">
-              Ver en Gestión de solicitudes <ArrowRight size={15} />
+              Ver en Gestión Programación Cx <ArrowRight size={15} />
             </Boton>
           ) : <div className="flex-1" />}
           <Boton variante="fantasma" onClick={onCerrar}>Cerrar</Boton>

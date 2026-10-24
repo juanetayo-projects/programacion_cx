@@ -54,7 +54,7 @@ function Guard({ modulo, children }: { modulo?: Modulo; children: ReactElement }
 // Orden en que se busca la página de inicio de un rol sin Dashboard
 const RUTA_INICIO: [Modulo, string][] = [
   ['solicitudes', '/solicitudes'], ['gestion_clinica', '/gestion-clinica'], ['mos', '/mos'], ['esterilizacion', '/esterilizacion'],
-  ['prequirurgico', '/prequirurgico'], ['reportar', '/reportar'],
+  ['prequirurgico', '/postquirurgico'], ['reportar', '/reportar'],
   ['cirugias_realizadas', '/cirugias-realizadas'], ['quirofanos', '/quirofanos'], ['reportes', '/reportes'],
 ]
 
@@ -85,7 +85,8 @@ export default function App() {
           <Route path="/mos" element={<Guard modulo="mos"><Mos /></Guard>} />
           <Route path="/esterilizacion" element={<Guard modulo="esterilizacion"><Esterilizacion /></Guard>} />
           <Route path="/gestion-clinica" element={<Guard modulo="gestion_clinica"><GestionClinica /></Guard>} />
-          <Route path="/prequirurgico" element={<Guard modulo="prequirurgico"><Prequirurgico /></Guard>} />
+          <Route path="/prequirurgico" element={<Navigate to="/postquirurgico" replace />} />
+          <Route path="/postquirurgico"element={<Guard modulo="prequirurgico"><Prequirurgico /></Guard>} />
           <Route path="/logs"element={<Guard modulo="logs"><Logs /></Guard>} />
           <Route path="/admin/usuarios" element={<Guard modulo="admin_usuarios"><Usuarios /></Guard>} />
           <Route path="/admin/catalogos" element={<Guard modulo="admin_catalogos"><Catalogos /></Guard>} />

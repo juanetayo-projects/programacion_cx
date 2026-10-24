@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { Boton, Badge, Modal, Spinner, CLASE_CAMPO } from './ui'
+import { ModalRecordatorio } from './RecordatorioCita'
 import {
-  CalendarClock, Eye, FileText, Image as ImageIcon, Paperclip, Plus, Save, StickyNote, Upload, X, Download, BarChart3,
+  CalendarClock, FileText, Image as ImageIcon, Paperclip, Plus, Save, StickyNote, Upload, X, Download, BarChart3, MessageCircle,
 } from 'lucide-react'
 
-// Notas de seguimiento (Gestión clínica y Gestión prequirúrgica): inmutables,
+// Notas de seguimiento (Gestión clínica y Gestión postquirúrgica): inmutables,
 // con fecha, hora, usuario y rol fijados por el servidor, adjuntos con vista
 // previa, cita/evento con control de estado, gráfico y línea de tiempo.
 
@@ -15,7 +16,7 @@ const sb = supabase as any
 
 export type Ambito = 'gestion_clinica' | 'prequirurgico'
 type Fase = 'prequirurgico' | 'posquirurgico' | 'general'
-type EstadoCita = 'programada' | 'cumplida' | 'no_asistio' | 'reprogramada' | 'cancelada'
+type EstadoCita = 'programada' | 'confirmada' | 'cumplida' | 'no_asistio' | 'reprogramada' | 'cancelada'
 type Adjunto = { nombre: string; path: string; bytes: number; tipo: string }
 
 export type Nota = {
@@ -30,6 +31,8 @@ export type Nota = {
   estado_cita: EstadoCita | null
   estado_actualizado_en: string | null
   estado_actualizado_por_nombre: string | null
+  recordatorio_en: string | null
+  recordatorio_por_nombre: string | null
   adjuntos: Adjunto[]
   creado_por_nombre: string | null
   creado_por_rol: string | null
@@ -43,6 +46,7 @@ const MAX_ADJUNTOS = 5
 
 export const ESTADO_CITA: Record<EstadoCita, { label: string; color: string }> = {
   programada: { label: 'Programada', color: 'bg-sky-100 text-sky-700 border-sky-300' },
+  confirmada: { label: 'Confirmada por el paciente', color: 'bg-indigo-100 text-indigo-700 border-indigo-300' },
   cumplida: { label: 'Cumplida', color: 'bg-emerald-100 text-emerald-700 border-emerald-300' },
   no_asistio: { label: 'No asistió', color: 'bg-red-100 text-red-700 border-red-300' },
   reprogramada: { label: 'Reprogramada', color: 'bg-amber-100 text-amber-700 border-amber-300' },
@@ -76,7 +80,8 @@ function fechaSugerida(fechaCirugia: string | null, dias: number | null) {
 
 /** Bloque completo: gráfico, nueva nota y línea de tiempo */
 export default function NotasSeguimiento({
-  solicitudId, ambito, itemId = null, etiquetasItems = {}, puedeEscribir, conCita = false, fechaCirugia = null, conGrafico = true,
+  solicitudId, ambito, itemId = null, etiquetasItems = {}, puedeEscribir, conCita = false, fechaCirugia = null,
+  fechaFinCirugia = null, faltantesCierre = [], paciente = null, conGrafico = true,
 }: {
   solicitudId: number
   ambito: Ambito
@@ -85,7 +90,14 @@ export default function NotasSeguimiento({
   etiquetasItems?: Record<number, string>
   puedeEscribir: boolean
   conCita?: boolean
+  /** Fecha programada: base de las citas prequirúrgicas */
   fechaCirugia?: string | null
+  /** Fin real de la cirugía: base de los controles posquirúrgicos */
+  fechaFinCirugia?: string | null
+  /** Datos del cierre de la cirugía que faltan (bloquean los tipos posquirúrgicos) */
+  faltantesCierre?: string[]
+  /** Para el recordatorio de citas por WhatsApp */
+  paciente?: { nombre: string | null; telefono: string | null; procedimiento: string | null } | null
   conGrafico?: boolean
 }) {
   const [notas, setNotas] = useState<Nota[] | null>(null)
@@ -118,6 +130,7 @@ export default function NotasSeguimiento({
       {nueva && (
         <FormNota
           solicitudId={solicitudId} ambito={ambito} itemId={itemId} tipos={tipos} conCita={conCita} fechaCirugia={fechaCirugia}
+          fechaFinCirugia={fechaFinCirugia} faltantesCierre={faltantesCierre}
           onCancelar={() => setNueva(false)}
           onGuardada={() => { setNueva(false); setRecargar((r) => r + 1) }}
         />
@@ -125,17 +138,20 @@ export default function NotasSeguimiento({
 
       {notas === null ? <div className="flex justify-center py-4"><Spinner /></div> : (<>
         {conGrafico && notas.length > 0 && <GraficoNotas notas={notas} conCita={conCita} />}
-        <LineaTiempo notas={notas} etiquetasItems={etiquetasItems} puedeEscribir={puedeEscribir} onCambio={() => setRecargar((r) => r + 1)} />
+        <LineaTiempo notas={notas} etiquetasItems={etiquetasItems} puedeEscribir={puedeEscribir} paciente={paciente} onCambio={() => setRecargar((r) => r + 1)} />
       </>)}
     </div>
   )
 }
 
 // --- Formulario de nueva nota ---
-function FormNota({ solicitudId, ambito, itemId, tipos, conCita, fechaCirugia, onCancelar, onGuardada }: {
+function FormNota({ solicitudId, ambito, itemId, tipos, conCita, fechaCirugia, fechaFinCirugia, faltantesCierre, onCancelar, onGuardada }: {
   solicitudId: number; ambito: Ambito; itemId: number | null; tipos: TipoSeguimiento[]; conCita: boolean
-  fechaCirugia: string | null; onCancelar: () => void; onGuardada: () => void
+  fechaCirugia: string | null; fechaFinCirugia: string | null; faltantesCierre: string[]; onCancelar: () => void; onGuardada: () => void
 }) {
+  const posquirurgicoBloqueado = faltantesCierre.length > 0
+  // Las citas posquirúrgicas se calculan desde el fin real de la cirugía
+  const baseDe = (t: TipoSeguimiento | null) => (t?.fase === 'posquirurgico' ? fechaFinCirugia : fechaCirugia)
   const [tipoId, setTipoId] = useState('')
   const [descripcion, setDescripcion] = useState('')
   const [conFecha, setConFecha] = useState(false)
@@ -151,7 +167,7 @@ function FormNota({ solicitudId, ambito, itemId, tipos, conCita, fechaCirugia, o
     const t = tipos.find((x) => String(x.id) === id)
     if (t?.requiere_cita) {
       setConFecha(true)
-      setFechaCita(fechaSugerida(fechaCirugia, t.dias_sugeridos))
+      setFechaCita(fechaSugerida(baseDe(t), t.dias_sugeridos))
     } else if (t) {
       setConFecha(false)
       setFechaCita('')
@@ -188,7 +204,7 @@ function FormNota({ solicitudId, ambito, itemId, tipos, conCita, fechaCirugia, o
         fecha_cita: conFecha && fechaCita ? new Date(fechaCita).toISOString() : null,
         adjuntos,
       })
-      if (e) throw new Error(e.message)
+      if (e) throw new Error([e.message, e.hint].filter(Boolean).join(' '))
       onGuardada()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -208,15 +224,20 @@ function FormNota({ solicitudId, ambito, itemId, tipos, conCita, fechaCirugia, o
           <select value={tipoId} onChange={(e) => elegirTipo(e.target.value)} className={`${CLASE_CAMPO} w-full`}>
             <option value="">Seleccione…</option>
             {fases.map((f) => (
-              <optgroup key={f} label={FASE[f].label}>
+              <optgroup key={f} label={f === 'posquirurgico' && posquirurgicoBloqueado ? `${FASE[f].label} — bloqueado: falta el cierre de la cirugía` : FASE[f].label}>
                 {tipos.filter((t) => t.fase === f).map((t) => (
-                  <option key={t.id} value={t.id}>
+                  <option key={t.id} value={t.id} disabled={f === 'posquirurgico' && posquirurgicoBloqueado}>
                     {t.nombre}{t.dias_sugeridos != null ? ` (día ${t.dias_sugeridos > 0 ? '+' : ''}${t.dias_sugeridos})` : ''}
                   </option>
                 ))}
               </optgroup>
             ))}
           </select>
+          {posquirurgicoBloqueado && (
+            <p className="mt-1 text-[11px] text-red-700">
+              Los seguimientos posquirúrgicos están bloqueados hasta que Programación registre la cirugía realizada (falta: {faltantesCierre.join(', ')}).
+            </p>
+          )}
         </div>
       )}
       <div>
@@ -235,8 +256,10 @@ function FormNota({ solicitudId, ambito, itemId, tipos, conCita, fechaCirugia, o
             <input type="datetime-local" value={fechaCita} onChange={(e) => setFechaCita(e.target.value)} className={CLASE_CAMPO} />
           </div>
         )}
-        {conFecha && tipo?.dias_sugeridos != null && fechaCirugia && (
-          <span className="text-[11px] text-slate-500">Sugerida: día {tipo.dias_sugeridos > 0 ? '+' : ''}{tipo.dias_sugeridos} respecto a la cirugía ({fechaCirugia})</span>
+        {conFecha && tipo?.dias_sugeridos != null && baseDe(tipo) && (
+          <span className="text-[11px] text-slate-500">
+            Sugerida: día {tipo.dias_sugeridos > 0 ? '+' : ''}{tipo.dias_sugeridos} respecto a {tipo.fase === 'posquirurgico' ? 'la fecha final de la cirugía' : 'la fecha programada'} ({baseDe(tipo)})
+          </span>
         )}
       </div>
       <div>
@@ -325,10 +348,13 @@ function GraficoNotas({ notas, conCita }: { notas: Nota[]; conCita: boolean }) {
 }
 
 // --- Línea de tiempo de notas ---
-function LineaTiempo({ notas, etiquetasItems, puedeEscribir, onCambio }: {
-  notas: Nota[]; etiquetasItems: Record<number, string>; puedeEscribir: boolean; onCambio: () => void
+function LineaTiempo({ notas, etiquetasItems, puedeEscribir, paciente, onCambio }: {
+  notas: Nota[]; etiquetasItems: Record<number, string>; puedeEscribir: boolean
+  paciente: { nombre: string | null; telefono: string | null; procedimiento: string | null } | null
+  onCambio: () => void
 }) {
   const [adjunto, setAdjunto] = useState<Adjunto | null>(null)
+  const [recordar, setRecordar] = useState<Nota | null>(null)
   const [cambiando, setCambiando] = useState<number | null>(null)
 
   async function cambiarEstado(n: Nota, estado: EstadoCita) {
@@ -376,6 +402,15 @@ function LineaTiempo({ notas, etiquetasItems, puedeEscribir, onCambio }: {
                         {(Object.keys(ESTADO_CITA) as EstadoCita[]).map((e) => <option key={e} value={e}>{ESTADO_CITA[e].label}</option>)}
                       </select>
                     )}
+                    {puedeEscribir && paciente && n.ambito === 'prequirurgico' && ['programada', 'confirmada'].includes(n.estado_cita ?? '') && (
+                      <button onClick={() => setRecordar(n)} title="Recordar la cita al paciente por WhatsApp"
+                        className="flex items-center gap-1 rounded bg-emerald-600 px-1.5 py-0.5 text-[11px] font-medium text-white hover:bg-emerald-700">
+                        <MessageCircle size={12} /> WhatsApp
+                      </button>
+                    )}
+                    {n.recordatorio_en
+                      ? <span className="w-full text-[10px] font-medium text-emerald-700">Paciente notificado el {fechaHora(n.recordatorio_en)} por {n.recordatorio_por_nombre ?? '—'}</span>
+                      : n.estado_cita === 'programada' && <span className="w-full text-[10px] font-medium text-amber-700">Pendiente notificar al paciente</span>}
                     {n.estado_actualizado_en && (
                       <span className="w-full text-[10px] text-slate-400">Estado actualizado el {fechaHora(n.estado_actualizado_en)} por {n.estado_actualizado_por_nombre ?? '—'}</span>
                     )}
@@ -383,12 +418,11 @@ function LineaTiempo({ notas, etiquetasItems, puedeEscribir, onCambio }: {
                 )}
 
                 {n.adjuntos.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
+                  <div className="mt-1.5 flex flex-wrap gap-1">
                     {n.adjuntos.map((a) => (
-                      <button key={a.path} onClick={() => setAdjunto(a)} title="Ver adjunto"
-                        className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-xs text-slate-700 hover:border-[#0D2D6B] hover:text-[#0D2D6B]">
-                        {esImagen(a) ? <ImageIcon size={12} className="text-sky-600" /> : <FileText size={12} className="text-red-500" />}
-                        {a.nombre} <span className="text-slate-400">({tamano(a.bytes)})</span> <Eye size={12} className="text-[#0D2D6B]" />
+                      <button key={a.path} onClick={() => setAdjunto(a)} title={`${a.nombre} (${tamano(a.bytes)}) · clic para ver`}
+                        className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-300 bg-white hover:border-[#0D2D6B] hover:bg-[#0D2D6B]/5">
+                        {esImagen(a) ? <ImageIcon size={14} className="text-sky-600" /> : <FileText size={14} className="text-red-500" />}
                       </button>
                     ))}
                   </div>
@@ -399,6 +433,9 @@ function LineaTiempo({ notas, etiquetasItems, puedeEscribir, onCambio }: {
         })}
       </ol>
       {adjunto && <ModalAdjunto adjunto={adjunto} onCerrar={() => setAdjunto(null)} />}
+      {recordar && paciente && (
+        <ModalRecordatorio cita={recordar} paciente={paciente} onCerrar={() => setRecordar(null)} onCambio={onCambio} />
+      )}
     </>
   )
 }

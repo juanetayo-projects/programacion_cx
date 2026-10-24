@@ -230,7 +230,7 @@ export function avisoProgramacion(d: DatosAviso): { asunto: string; html: string
           </div>
         </td></tr>
         <tr><td align="center" style="padding:20px 28px 24px">
-          <a href="${escapar(d.urlApp)}" style="display:inline-block;background:#0D2D6B;color:#FFFFFF;text-decoration:none;font-weight:bold;font-size:14px;padding:12px 22px;border-radius:10px">Ver en Gestión de solicitudes</a>
+          <a href="${escapar(d.urlApp)}" style="display:inline-block;background:#0D2D6B;color:#FFFFFF;text-decoration:none;font-weight:bold;font-size:14px;padding:12px 22px;border-radius:10px">Ver en Gestión Programación Cx</a>
         </td></tr>`
 
   return {

@@ -1210,3 +1210,30 @@ Se requiere construir una app que permita
 				  operatorio a 30 días (90 con implante).
 				- Agenda: citas de hoy, próximos 7 días y vencidas sin cerrar.
 			19.5.- Migración: 0029_gestion_clinica_prequirurgica.sql
+
+		20.- Ajustes (2026-10-24): cierre de cirugía, recordatorios y nombres
+			20.1.- Nombres: "Gestión de solicitudes" → "Gestión Programación Cx";
+				"Gestión prequirúrgica" → "Gestión postquirúrgica" (ruta
+				#/postquirurgico; #/prequirurgico redirige). El ámbito interno de
+				las notas sigue siendo 'prequirurgico'.
+			20.2.- Cierre de la cirugía (components/CierreCirugia.tsx): "Marcar como
+				realizada" registra inicio y fin reales, cirujano, procedimiento
+				realizado, destino posoperatorio y observaciones. Cirugías
+				realizadas → "Completar registro" para las marcadas antes.
+				- La base de datos rechaza notas de fase posquirúrgica sin cierre
+				  completo (cirugia_cierre_completo en notas_fijar_autor); la UI
+				  bloquea esos tipos y muestra la alerta con motivo y acción.
+				- Alertas "Pendiente registrar realizada" (fecha programada vencida)
+				  en Gestión Programación Cx y "Sin cierre de cirugía" en
+				  Postquirúrgica; las citas posquirúrgicas se proponen desde el fin
+				  real de la cirugía.
+			20.3.- Recordatorios: estado de cita 'confirmada', recordatorio_en /
+				recordatorio_por_nombre (nota_registrar_recordatorio). Alertas en
+				Postquirúrgica: por notificar (N días de anticipación, 1-7), notificadas
+				sin confirmar, hoy, vencidas y cirugías sin cierre; agenda con botón
+				WhatsApp. Plantilla del mensaje en lib/mensajesSeguimiento.ts con
+				indicación por tipo de control y respuesta SI / REPROGRAMAR.
+			20.4.- Tablas de ítems: fecha y hora de recibo en Esterilización.
+				Adjuntos de notas como icono con vista previa. Modal del ítem en
+				Gestión clínica con botones Cerrar y Guardar al final.
+			20.5.- Migración: 0030_cierre_cirugia_y_recordatorios.sql

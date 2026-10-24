@@ -3,7 +3,8 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { PageHeader, Boton, Modal, FilterBar, EstadoVacio, Spinner } from '../components/ui'
 import { ESTADOS_COLOR, ESTADOS_COLOR_HEX } from '../lib/constantes'
-import { Eye, Undo2, X, FileSpreadsheet } from 'lucide-react'
+import { Eye, Undo2, X, FileSpreadsheet, ClipboardCheck, AlertTriangle } from 'lucide-react'
+import { ModalCierreCirugia, faltantesCierre, DESTINOS, type CamposCierre } from '../components/CierreCirugia'
 
 type Realizada = {
   id: number
@@ -48,7 +49,7 @@ export default function CirugiasRealizadas() {
   const [quirofanos, setQuirofanos] = useState<{ id: number; nombre: string; numero: number }[]>([])
 
   const [seleccion, setSeleccion] = useState<Realizada | null>(null)
-  const [modal, setModal] = useState<'' | 'ver' | 'revertir'>('')
+  const [modal, setModal] = useState<'' | 'ver' | 'revertir' | 'cierre'>('')
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
 
@@ -197,7 +198,10 @@ export default function CirugiasRealizadas() {
     setError('')
     const { error } = await supabase.from('solicitudes_cirugia').update({
       estado: 'programado', realizado_en: null,
-    }).eq('id', seleccion.id)
+      // El cierre de la cirugía deja de ser válido: se vuelve a registrar al marcarla realizada
+      cirugia_inicio: null, cirugia_fin: null, cirujano_realizo: null, procedimiento_realizado: null,
+      destino_postoperatorio: null, cierre_observaciones: null, cierre_registrado_por: null, cierre_registrado_en: null,
+    } as never).eq('id', seleccion.id)
     setGuardando(false)
     if (error) { setError(error.message); return }
     await supabase.from('solicitudes_historial').insert({ solicitud_id: seleccion.id, accion: 'quitar_realizado', usuario_id: session!.user.id, detalle: {} })
@@ -307,12 +311,20 @@ export default function CirugiasRealizadas() {
               {cargando ? (
                 <tr><td colSpan={6} className="p-10 text-center"><Spinner className="mx-auto" /></td></tr>
               ) : filtradas.length === 0 ? (
-                <tr><td colSpan={6}><EstadoVacio titulo="Sin cirugías realizadas" descripcion="Ajusta los filtros o marca registros como realizados desde Gestión de solicitudes" /></td></tr>
+                <tr><td colSpan={6}><EstadoVacio titulo="Sin cirugías realizadas" descripcion="Ajusta los filtros o marca registros como realizados desde Gestión Programación Cx" /></td></tr>
               ) : (
                 filtradas.map((f) => (
                   <tr key={f.id} className="border-t border-slate-100">
                     <td className="px-4 py-2.5 font-mono text-xs text-slate-500">SC-{String(f.id).padStart(6, '0')}</td>
-                    <td className="px-4 py-2.5 text-slate-500">{f.realizado_en ? new Date(f.realizado_en).toLocaleDateString('es-CO') : '—'}</td>
+                    <td className="px-4 py-2.5 text-slate-500">
+                      {f.realizado_en ? new Date(f.realizado_en).toLocaleDateString('es-CO') : '—'}
+                      {faltantesCierre(f as unknown as CamposCierre).length > 0 && (
+                        <div title={`Falta: ${faltantesCierre(f as unknown as CamposCierre).join(', ')}. Sin estos datos no se habilita el seguimiento posquirúrgico.`}
+                          className="mt-0.5 inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
+                          <AlertTriangle size={10} /> Registro incompleto
+                        </div>
+                      )}
+                    </td>
                     <td className="px-4 py-2.5">
                       <div className="font-medium text-slate-800">{f.nombre_paciente ?? '—'}</div>
                       <div className="text-xs text-slate-400">Doc: {f.documento_paciente} · Ingreso: {f.numero_ingreso}</div>
@@ -332,6 +344,11 @@ export default function CirugiasRealizadas() {
                     <td className="px-4 py-2.5">
                       <div className="flex justify-end gap-1.5">
                         <button title="Ver" onClick={() => abrir(f, 'ver')} className="text-slate-500 hover:text-[#0D2D6B]"><Eye size={15} /></button>
+                        <button
+                          title={faltantesCierre(f as unknown as CamposCierre).length ? `Completar registro: falta ${faltantesCierre(f as unknown as CamposCierre).join(', ')}` : 'Ver / corregir registro de la cirugía'}
+                          onClick={() => abrir(f, 'cierre')}
+                          className={faltantesCierre(f as unknown as CamposCierre).length ? 'text-red-600 hover:text-red-800' : 'text-emerald-600 hover:text-emerald-800'}
+                        ><ClipboardCheck size={15} /></button>
                         <button title="Quitar marca de realizada" onClick={() => abrir(f, 'revertir')} className="text-slate-500 hover:text-amber-600"><Undo2 size={15} /></button>
                       </div>
                     </td>
@@ -342,6 +359,10 @@ export default function CirugiasRealizadas() {
           </table>
         </div>
       </div>
+
+      {modal === 'cierre' && seleccion && (
+        <ModalCierreCirugia s={seleccion as unknown as CamposCierre} onCerrar={cerrar} onGuardado={() => { cerrar(); cargar() }} />
+      )}
 
       {/* VER */}
       <Modal open={modal === 'ver'} onClose={cerrar} cerrableFuera={false} titulo={`Solicitud SC-${String(seleccion?.id).padStart(6, '0')}`} ancho="max-w-4xl">
@@ -384,6 +405,15 @@ export default function CirugiasRealizadas() {
               <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-sm">
                 <Campo label="Programación" valor={seleccion.fecha_programada ? `${seleccion.quirofanos?.nombre ?? ''} · ${seleccion.fecha_programada} ${seleccion.hora_programada ?? ''}` : null} />
                 <Campo label="Realizada el" valor={seleccion.realizado_en ? new Date(seleccion.realizado_en).toLocaleString('es-CO') : null} />
+                {(() => {
+                  const c = seleccion as unknown as CamposCierre
+                  return (<>
+                    <Campo label="Inicio / fin" valor={c.cirugia_inicio ? `${new Date(c.cirugia_inicio).toLocaleString('es-CO')} → ${c.cirugia_fin ? new Date(c.cirugia_fin).toLocaleString('es-CO') : '—'}` : null} full />
+                    <Campo label="Cirujano que realizó" valor={c.cirujano_realizo} />
+                    <Campo label="Destino posoperatorio" valor={c.destino_postoperatorio ? DESTINOS[c.destino_postoperatorio] : null} />
+                    <Campo label="Procedimiento realizado" valor={c.procedimiento_realizado} full />
+                  </>)
+                })()}
                 <Campo label="Observaciones programación" valor={seleccion.observaciones_programacion} full />
               </div>
             </div>
@@ -398,7 +428,7 @@ export default function CirugiasRealizadas() {
             <p className="text-sm text-slate-600">
               ¿Quitar la marca de "realizada" a la solicitud <strong>SC-{String(seleccion.id).padStart(6, '0')}</strong>
               {' '}del paciente <strong>{seleccion.nombre_paciente ?? seleccion.documento_paciente}</strong>? Volverá a
-              aparecer en <strong>Gestión de solicitudes</strong> con estado "Programado".
+              aparecer en <strong>Gestión Programación Cx</strong> con estado "Programado".
             </p>
             {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2 pt-2">

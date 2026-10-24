@@ -57,6 +57,7 @@ type EstadoItem = 'pendiente_entrega' | 'entregado_parcial' | 'entregado' | 'anu
 export type RegistroItem = ItemMaterial & {
   id: number; orden: number; estado: EstadoItem; cantidad_entregada: number
   proveedor_id: number | null; fecha_estimada_entrega: string | null; proveedor_notificado_en: string | null
+  entregado_en: string | null
 }
 
 const ESTADO_ITEM_LABEL: Record<EstadoItem, string> = {
@@ -1125,7 +1126,7 @@ function TablaRegistros({ registros }: { registros: RegistroItem[] }) {
         <thead className="bg-emerald-100 text-left text-[10px] uppercase text-emerald-900">
           <tr>
             <th className="px-2 py-1">#</th><th className="px-2 py-1">Cant.</th><th className="px-2 py-1">Descripción</th>
-            <th className="px-2 py-1">Proveedor</th><th className="px-2 py-1">Fecha estimada</th><th className="px-2 py-1 text-center">Recibido</th><th className="px-2 py-1">Entrega</th>
+            <th className="px-2 py-1">Proveedor</th><th className="px-2 py-1">Fecha estimada</th><th className="px-2 py-1 text-center">Recibido en Esterilización</th><th className="px-2 py-1">Entrega</th>
           </tr>
         </thead>
         <tbody>
@@ -1142,7 +1143,14 @@ function TablaRegistros({ registros }: { registros: RegistroItem[] }) {
                 ) : '—'}
               </td>
               <td className="whitespace-nowrap px-2 py-1 text-slate-600">{fechaCorta(i.fecha_estimada_entrega) ?? '—'}</td>
-              <td className={`px-2 py-1 text-center font-semibold ${(i.cantidad_entregada ?? 0) >= i.cantidad ? 'text-emerald-700' : 'text-slate-500'}`}>{i.cantidad_entregada ?? 0} / {i.cantidad}</td>
+              <td className={`px-2 py-1 text-center font-semibold ${(i.cantidad_entregada ?? 0) >= i.cantidad ? 'text-emerald-700' : 'text-slate-500'}`}>
+                {i.cantidad_entregada ?? 0} / {i.cantidad}
+                {i.entregado_en && (
+                  <div className="whitespace-nowrap text-[10px] font-normal text-slate-500" title="Fecha y hora en que Esterilización recibió el material">
+                    {new Date(i.entregado_en).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}
+                  </div>
+                )}
+              </td>
               <td className="px-2 py-1"><Badge className={ESTADO_ITEM_COLOR[i.estado]}>{ESTADO_ITEM_LABEL[i.estado]}</Badge></td>
             </tr>
           ))}
