@@ -12,6 +12,8 @@ import { ESTADOS, ESTADOS_LABEL, ESTADOS_MOS_LABEL, type Estado, type EstadoMos 
 import { ESTADOS_AUT, estadoAutorizacion, autorizacionVigente, diasVigencia, type CamposAutorizacion, type EstadoAutEfectivo } from '../lib/autorizacion'
 import { faltantesCierre, type CamposCierre } from '../components/CierreCirugia'
 import MapaCalor from '../components/dashboard/MapaCalor'
+import HeroQuirofano from '../components/dashboard/HeroQuirofano'
+import { useAuth } from '../lib/auth'
 import { useCatalogosGC } from '../components/EstadoGestionClinica'
 import {
   DatabaseZap, ClipboardList, ShieldCheck, CalendarClock, Bone, HeartPulse, PackageCheck, Stethoscope, CalendarCheck,
@@ -104,6 +106,7 @@ export default function Dashboard() {
   const [popover, setPopover] = useState<PopoverState<S>>(null)
   const [mesCal, setMesCal] = useState(() => ({ y: new Date().getFullYear(), m: new Date().getMonth() }))
   const catGC = useCatalogosGC()
+  const { perfil } = useAuth()
 
   useEffect(() => {
     Promise.all([
@@ -321,6 +324,9 @@ export default function Dashboard() {
   return (
     <div className="space-y-4 pb-6">
       <TituloEnHeader titulo="Dashboard de gestión quirúrgica" subtitulo="Indicadores por fase: GoMedisys · Programación · Autorización · MOS · Gestión clínica · Esterilización · PostQx" />
+
+      {/* Card principal: agenda del día sobre la imagen del quirófano */}
+      <HeroQuirofano solicitudes={solicitudes} nombre={perfil?.nombre ?? null} onAbrir={(t, l, e) => abrir(t, l)(e)} />
 
       {/* Filtros */}
       <div className="neu-card flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2">

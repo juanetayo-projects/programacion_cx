@@ -55,8 +55,10 @@ table.tabla-cac tbody tr:hover {
 .mc-celda { animation: mcEntrada .45s cubic-bezier(.2,.8,.2,1) both }
 .mc-pico { animation: mcEntrada .45s cubic-bezier(.2,.8,.2,1) both, mcPico 2.4s ease-in-out .6s infinite }
 .mc-subir { animation: mcSubir .5s ease-out both }
+@keyframes mcZoom { from { transform: scale(1) } to { transform: scale(1.07) } }
+.mc-zoom { animation: mcZoom 18s ease-in-out infinite alternate }
 @media (prefers-reduced-motion: reduce) {
-  .mc-celda, .mc-pico, .mc-subir { animation: none }
+  .mc-celda, .mc-pico, .mc-subir, .mc-zoom { animation: none }
 }
 
 /* Progreso de la consulta masiva a GoMedisys (ProgresoConsulta.tsx) */
