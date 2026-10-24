@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, ClipboardPlus, ListChecks, Stethoscope, CalendarRange, Flame,
-  BarChart3, ScrollText, Settings, ShieldCheck, ChevronDown, LogOut, User, FilePlus2, DatabaseZap, Bone, PackageCheck,
+  BarChart3, ScrollText, Settings, ShieldCheck, ChevronDown, LogOut, User, FilePlus2, DatabaseZap, Bone, PackageCheck, HeartPulse, CalendarCheck,
 } from 'lucide-react'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
@@ -23,6 +23,8 @@ const NAV: ItemNav[] = [
   { to: '/solicitudes', label: 'Gestión de solicitudes', icon: ListChecks, modulo: 'solicitudes' as Modulo },
   { to: '/mos', label: 'Gestión MOS', icon: Bone, modulo: 'mos' as Modulo },
   { to: '/esterilizacion', label: 'Recepción de materiales', icon: PackageCheck, modulo: 'esterilizacion' as Modulo },
+  { to: '/gestion-clinica', label: 'Gestión clínica', icon: HeartPulse, modulo: 'gestion_clinica' as Modulo },
+  { to: '/prequirurgico', label: 'Gestión prequirúrgica', icon: CalendarCheck, modulo: 'prequirurgico' as Modulo },
   { to: '/cirugias-realizadas', label: 'Cirugías realizadas', icon: Stethoscope, modulo: 'cirugias_realizadas' as Modulo },
   { to: '/quirofanos', label: 'Mapa de quirófanos', icon: CalendarRange, modulo: 'quirofanos' as Modulo },
   { to: '/calor', label: 'Mapa de calor', icon: Flame, modulo: 'calor' as Modulo },

@@ -1,4 +1,4 @@
-export const ROLES = ['administrador', 'programador', 'medico', 'visualizador', 'mos', 'esterilizacion'] as const
+export const ROLES = ['administrador', 'programador', 'medico', 'visualizador', 'mos', 'esterilizacion', 'gestor_clinico'] as const
 export type Rol = (typeof ROLES)[number]
 
 export const ROLES_LABEL: Record<Rol, string> = {
@@ -8,6 +8,7 @@ export const ROLES_LABEL: Record<Rol, string> = {
   visualizador: 'Visualizador',
   mos: 'Gestor MOS',
   esterilizacion: 'Esterilización',
+  gestor_clinico: 'Gestor clínico',
 }
 
 export const ESTADOS = [
@@ -111,7 +112,7 @@ export type CanalNotificacion = (typeof CANALES_NOTIFICACION)[number]
 // Módulos de la app — usados por Roles y Permisos para controlar el acceso por rol
 export const MODULOS = [
   'dashboard', 'reportar', 'reportar_masivo', 'solicitudes_reportadas', 'solicitudes', 'cirugias_realizadas', 'quirofanos', 'calor', 'reportes',
-  'logs', 'admin_usuarios', 'admin_catalogos', 'admin_roles', 'mos', 'esterilizacion',
+  'logs', 'admin_usuarios', 'admin_catalogos', 'admin_roles', 'mos', 'esterilizacion', 'gestion_clinica', 'prequirurgico',
 ] as const
 export type Modulo = (typeof MODULOS)[number]
 
@@ -137,6 +138,8 @@ export const MODULOS_LABEL: Record<Modulo, string> = {
   admin_roles: 'Administración · Roles y permisos',
   mos: 'Gestión MOS (materiales de osteosíntesis)',
   esterilizacion: 'Recepción de materiales (Esterilización)',
+  gestion_clinica: 'Gestión clínica (cobro de materiales y notas)',
+  prequirurgico: 'Gestión prequirúrgica (seguimiento y citas)',
 }
 
 // Módulo MOS (Materiales de Osteosíntesis): estado propio de la solicitud,

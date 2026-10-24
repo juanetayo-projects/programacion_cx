@@ -1176,3 +1176,37 @@ Se requiere construir una app que permita
 				(parcial / recibido) · 5. Programación notificada.
 			18.5.- Migraciones: 0026 (rol, recepciones), 0027 (confirmación del
 				proveedor, bloqueo de respuesta), 0028 (lectura de evidencias).
+
+		19.- Gestión clínica y Gestión prequirúrgica (2026-10-24)
+			19.1.- Rol 'gestor_clinico' (Gestor clínico)
+				Consulta: Dashboard, Cirugías realizadas, Gestión MOS (solo lectura),
+				y sus módulos Gestión clínica y Gestión prequirúrgica. Lee toda la
+				gestión MOS (ítems, correos, actas, adjuntos) — puede_ver_gestion().
+			19.2.- Gestión clínica (#/gestion-clinica)
+				- Pacientes con gestión MOS; filtros por etapa MOS y por cobro.
+				- Panel con toda la información del paciente y la cirugía, avance
+				  MOS, evidencias, seguimiento prequirúrgico (consulta) y notas.
+				- Clic en un ítem de material → modal: "Cargo del cobro (facturación)"
+				  en texto abierto (quién asume el cobro) con
+				  mos_item_registrar_cobro (cada cambio queda en el historial) y
+				  notas del ítem.
+			19.3.- Notas (notas_seguimiento, components/NotasSeguimiento.tsx)
+				- Inmutables (sin update/delete): fecha, hora, usuario y rol los fija
+				  el trigger notas_fijar_autor; descripción; hasta 5 adjuntos de 10 MB
+				  en el bucket privado 'notas'; icono de ojo con vista previa (PDF e
+				  imágenes; los demás se descargan).
+				- Gráfico de notas por semana (recharts) y línea de tiempo.
+			19.4.- Gestión prequirúrgica (#/prequirurgico) — Programación y Gestión clínica
+				- Notas con tipo de seguimiento, cita/evento (fecha y hora) y control
+				  de estado (programada, cumplida, no asistió, reprogramada,
+				  cancelada) con nota_actualizar_estado_cita.
+				- Catálogo tipos_seguimiento (Catálogos → Tipos de seguimiento) con
+				  días sugeridos respecto a la cirugía: valoración preanestésica,
+				  paraclínicos, consentimiento, suspensión de anticoagulantes, ayuno,
+				  hemoderivados, cama/UCI, llamada de confirmación; llamada 24-72 h,
+				  curación, retiro de sonda vesical, drenes, puntos, yeso/férula,
+				  agujas/material, control con especialista, patología, control
+				  radiológico, terapia física y vigilancia de infección del sitio
+				  operatorio a 30 días (90 con implante).
+				- Agenda: citas de hoy, próximos 7 días y vencidas sin cerrar.
+			19.5.- Migración: 0029_gestion_clinica_prequirurgica.sql

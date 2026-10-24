@@ -7,6 +7,7 @@ const TABS = [
   { key: 'eps', label: 'EPS' },
   { key: 'aseguradores', label: 'Aseguradores (MOS)' },
   { key: 'proveedores', label: 'Proveedores (MOS)' },
+  { key: 'tipos_seguimiento', label: 'Tipos de seguimiento' },
   { key: 'unidades', label: 'Unidades' },
   { key: 'quirofanos', label: 'Quirófanos' },
   { key: 'recomendaciones_cirugia', label: 'Recomendaciones' },
@@ -78,6 +79,20 @@ export default function Catalogos() {
             { key: 'telefono', label: 'Teléfono', tipo: 'text' },
             { key: 'contacto', label: 'Persona de contacto', tipo: 'text' },
             { key: 'email', label: 'Correo de contacto', tipo: 'text', requerido: true },
+            { key: 'activo', label: 'Activo', tipo: 'boolean' },
+          ]}
+        />
+      )}
+      {tab === 'tipos_seguimiento' && (
+        <CrudTable
+          tabla="tipos_seguimiento"
+          titulo="Tipos de seguimiento pre y posquirúrgico (días sugeridos respecto a la cirugía)"
+          columnas={[
+            { key: 'orden', label: 'Orden', tipo: 'number' },
+            { key: 'nombre', label: 'Nombre', tipo: 'text', requerido: true },
+            { key: 'fase', label: 'Fase', tipo: 'select', opciones: ['prequirurgico', 'posquirurgico', 'general'] },
+            { key: 'dias_sugeridos', label: 'Días sugeridos (− antes / + después)', tipo: 'number' },
+            { key: 'requiere_cita', label: 'Requiere cita', tipo: 'boolean' },
             { key: 'activo', label: 'Activo', tipo: 'boolean' },
           ]}
         />
