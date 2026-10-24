@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { PageHeader, Boton, Modal, EstadoVacio, Badge } from '../../components/ui'
 import { ROLES, ROLES_LABEL, ESPECIALIDADES, type Rol } from '../../lib/constantes'
 import { PasswordStrengthMeter, MensajeConfirmarPassword, passwordEsValida } from '../../components/PasswordStrength'
-import { Plus, KeyRound, UserX, UserCheck } from 'lucide-react'
+import { Plus, KeyRound, UserX, UserCheck, Pencil } from 'lucide-react'
 
 type Perfil = {
   id: string
@@ -41,6 +41,7 @@ export default function Usuarios() {
   const [especialidad, setEspecialidad] = useState('')
   const [nuevaPassword, setNuevaPassword] = useState('')
   const [nuevaPasswordConfirm, setNuevaPasswordConfirm] = useState('')
+  const [editando, setEditando] = useState<(Omit<Perfil, 'especialidad'> & { especialidad: string }) | null>(null)
 
   async function cargar() {
     setCargando(true)
@@ -99,6 +100,32 @@ export default function Usuarios() {
     }
   }
 
+  function abrirEditar(p: Perfil) {
+    setError('')
+    setEditando({ ...p, especialidad: p.especialidad ?? '' })
+  }
+
+  async function guardarEdicion() {
+    if (!editando) return
+    setError('')
+    if (!editando.nombre.trim()) return setError('Escriba el nombre completo.')
+    if (!EMAIL_RE.test(editando.email.trim())) return setError(`El correo "${editando.email}" no es válido.`)
+    if (editando.rol === 'medico' && !editando.especialidad) return setError('Seleccione la especialidad del médico.')
+    setGuardando(true)
+    try {
+      await invocar({
+        accion: 'editar', id: editando.id, email: editando.email.trim().toLowerCase(), nombre: editando.nombre.trim(),
+        rol: editando.rol, especialidad: editando.rol === 'medico' ? editando.especialidad : null,
+      })
+      setEditando(null)
+      cargar()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setGuardando(false)
+    }
+  }
+
   async function toggleActivo(p: Perfil) {
     try {
       await invocar({ accion: 'activar', id: p.id, activo: !p.activo })
@@ -150,6 +177,9 @@ export default function Usuarios() {
                     </Badge>
                   </td>
                   <td className="px-4 py-2.5 text-right">
+                    <button onClick={() => abrirEditar(p)} title="Editar usuario" className="mr-2 text-slate-500 hover:text-[#0D2D6B]">
+                      <Pencil size={15} />
+                    </button>
                     <button onClick={() => setModalReset(p)} title="Restablecer contraseña" className="mr-2 text-slate-500 hover:text-[#0D2D6B]">
                       <KeyRound size={15} />
                     </button>
@@ -209,6 +239,44 @@ export default function Usuarios() {
             </Boton>
           </div>
         </div>
+      </Modal>
+
+      <Modal open={!!editando} onClose={() => setEditando(null)} titulo={`Editar usuario — ${editando?.nombre ?? ''}`}>
+        {editando && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-600">Nombre completo</label>
+                <input value={editando.nombre} onChange={(e) => setEditando({ ...editando, nombre: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-600">Correo (usuario de acceso)</label>
+                <input type="email" value={editando.email} onChange={(e) => setEditando({ ...editando, email: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-600">Rol</label>
+                <select value={editando.rol} onChange={(e) => setEditando({ ...editando, rol: e.target.value as Rol })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                  {ROLES.map((r) => <option key={r} value={r}>{ROLES_LABEL[r]}</option>)}
+                </select>
+              </div>
+              {editando.rol === 'medico' && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-600">Especialidad</label>
+                  <select value={editando.especialidad} onChange={(e) => setEditando({ ...editando, especialidad: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                    <option value="">Seleccionar…</option>
+                    {ESPECIALIDADES.map((e) => <option key={e} value={e}>{e}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-slate-500">La contraseña se cambia con el botón de llave; el estado, con el botón activar/desactivar.</p>
+            {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+            <div className="flex justify-end gap-2 pt-2">
+              <Boton variante="secundario" onClick={() => setEditando(null)}>Cancelar</Boton>
+              <Boton onClick={guardarEdicion} disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar cambios'}</Boton>
+            </div>
+          </div>
+        )}
       </Modal>
 
       <Modal open={!!modalReset} onClose={() => setModalReset(null)} titulo={`Restablecer contraseña — ${modalReset?.nombre}`}>

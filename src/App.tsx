@@ -5,7 +5,6 @@ import Shell from './components/Shell'
 import Login from './pages/Login'
 import Reset from './pages/Reset'
 import Dashboard from './pages/Dashboard'
-import ReportarCirugia from './pages/ReportarCirugia'
 import ConsultaMasiva from './pages/ConsultaMasiva'
 import Solicitudes from './pages/Solicitudes'
 import CirugiasRealizadas from './pages/CirugiasRealizadas'
@@ -21,7 +20,7 @@ import Usuarios from './pages/admin/Usuarios'
 import Catalogos from './pages/admin/Catalogos'
 import Roles from './pages/admin/Roles'
 import type { Modulo } from './lib/constantes'
-import { Spinner } from './components/ui'
+import { Spinner, EstadoVacio } from './components/ui'
 
 function Guard({ modulo, children }: { modulo?: Modulo; children: ReactElement }) {
   const { session, perfil, permisos, loading } = useAuth()
@@ -46,6 +45,8 @@ function Guard({ modulo, children }: { modulo?: Modulo; children: ReactElement }
     // Sin acceso al inicio (p. ej. Esterilización): ir al primer módulo permitido
     const destino = RUTA_INICIO.find(([m]) => permisos.has(m))?.[0]
     if (modulo === 'dashboard' && destino) return <Navigate to={RUTA_INICIO.find(([m]) => m === destino)![1]} replace />
+    // Un rol sin ningún módulo asignado no puede redirigirse a "/" (bucle)
+    if (modulo === 'dashboard') return <Shell><EstadoVacio titulo="Su rol no tiene módulos asignados" descripcion="Solicite al administrador que le asigne módulos en Roles y permisos." /></Shell>
     return <Navigate to="/" replace />
   }
   return <Shell>{children}</Shell>
@@ -54,7 +55,7 @@ function Guard({ modulo, children }: { modulo?: Modulo; children: ReactElement }
 // Orden en que se busca la página de inicio de un rol sin Dashboard
 const RUTA_INICIO: [Modulo, string][] = [
   ['solicitudes', '/solicitudes'], ['gestion_clinica', '/gestion-clinica'], ['mos', '/mos'], ['esterilizacion', '/esterilizacion'],
-  ['prequirurgico', '/postquirurgico'], ['reportar', '/reportar'],
+  ['prequirurgico', '/postquirurgico'], ['reportar_masivo', '/reportar/masiva'],
   ['cirugias_realizadas', '/cirugias-realizadas'], ['quirofanos', '/quirofanos'], ['reportes', '/reportes'],
 ]
 
@@ -73,7 +74,8 @@ export default function App() {
           <Route path="/reset" element={<Reset />} />
 
           <Route path="/" element={<Guard modulo="dashboard"><Dashboard /></Guard>} />
-          <Route path="/reportar" element={<Guard modulo="reportar"><ReportarCirugia /></Guard>} />
+          {/* Reporte individual oculto (oct-2026): se redirige a la consulta masiva */}
+          <Route path="/reportar" element={<Navigate to="/reportar/masiva" replace />} />
           <Route path="/reportar/masiva" element={<Guard modulo="reportar_masivo"><ConsultaMasiva /></Guard>} />
           {/* Solicitudes reportadas quedó oculto (oct-2026): se redirige a Gestión */}
           <Route path="/solicitudes-reportadas" element={<Navigate to="/solicitudes" replace />} />

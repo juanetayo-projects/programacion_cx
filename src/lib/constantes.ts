@@ -120,12 +120,14 @@ export type Modulo = (typeof MODULOS)[number]
 // Oct-2026: "Solicitudes reportadas" quedó oculto — la consulta a GoMedisys
 // ahora es individual (al reportar) o masiva, y los reportes sin validar se
 // gestionan en "Gestión de solicitudes".
-export const MODULOS_OCULTOS: Modulo[] = ['solicitudes_reportadas']
+// Oct-2026: "Reportar cirugía" (reporte individual) también quedó oculto; el
+// ingreso es solo por la consulta masiva.
+export const MODULOS_OCULTOS: Modulo[] = ['solicitudes_reportadas', 'reportar']
 
 export const MODULOS_LABEL: Record<Modulo, string> = {
   dashboard: 'Dashboard',
   reportar: 'Reportar cirugía',
-  reportar_masivo: 'Reportar cirugía · Consulta masiva GoMedisys',
+  reportar_masivo: 'Consulta masiva GoMedisys',
   solicitudes_reportadas: 'Solicitudes reportadas',
   solicitudes: 'Gestión Programación Cx',
   cirugias_realizadas: 'Cirugías realizadas',

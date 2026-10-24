@@ -1,6 +1,6 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
-// Administración de usuarios (solo administradores): crear, eliminar,
+// Administración de usuarios (solo administradores): crear, editar, eliminar,
 // restablecer contraseña y activar/desactivar. Usa service_role.
 
 // supabase-js envía apikey y x-client-info: deben estar permitidos en el
@@ -47,6 +47,26 @@ Deno.serve(async (req) => {
       return json(400, { error: perfilError.message })
     }
     return json(200, { ok: true, id: data.user.id })
+  }
+
+  if (accion === 'editar') {
+    const { id, email, nombre, rol, especialidad } = body
+    if (!ROLES.includes(rol)) return json(400, { error: `Rol inválido: ${rol}` })
+    if (id === user.id && rol !== 'administrador') {
+      return json(400, { error: 'No puede quitarse a sí mismo el rol de administrador' })
+    }
+    const { data: actual } = await admin.from('perfiles').select('email').eq('id', id).single()
+    if (!actual) return json(404, { error: 'Usuario no encontrado' })
+    // El correo es el usuario de acceso: si cambia, se actualiza también en Auth
+    if (email && email !== actual.email) {
+      const { error } = await admin.auth.admin.updateUserById(id, { email, email_confirm: true })
+      if (error) return json(400, { error: error.message })
+    }
+    const { error } = await admin.from('perfiles').update({
+      email, nombre, rol, especialidad: rol === 'medico' ? (especialidad ?? null) : null,
+    }).eq('id', id)
+    if (error) return json(400, { error: error.message })
+    return json(200, { ok: true })
   }
 
   if (accion === 'eliminar') {

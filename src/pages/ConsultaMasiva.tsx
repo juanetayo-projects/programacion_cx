@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { TituloEnHeader, CampoLinea, CLASE_CAMPO, Boton, Modal, Badge, EstadoVacio } from '../components/ui'
-import ReportarTabs from '../components/ReportarTabs'
 import { PanelLateral, Grupo, Dato } from '../components/PanelLateral'
 import ProgresoConsulta, { type Tramo } from '../components/ProgresoConsulta'
 import { consultarGoMedisys, emparejarCatalogo as emparejar, normalizar, camposDeProgramacion, type ProgramacionGM, type EstadoTrabajo } from '../lib/gomedisys'
@@ -404,7 +403,6 @@ export default function ConsultaMasiva() {
   return (
     <div>
       <TituloEnHeader titulo="Consulta masiva GoMedisys" subtitulo="Los pacientes marcados pasan a Gestión Programación Cx">
-        <ReportarTabs oscuro />
         {otros.length > 0 && (
           <span className="hidden shrink-0 items-center gap-1.5 rounded-full bg-amber-300/90 px-3 py-1 text-xs font-medium text-[#0D2D6B] xl:flex" title={otros.map((o) => o.nombre).join(', ')}>
             <Users size={13} /> {otros.length === 1 ? `${otros[0].nombre} también está consultando` : `${otros.length} usuarios más consultando`}

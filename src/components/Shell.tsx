@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
-  LayoutDashboard, ClipboardPlus, ListChecks, Stethoscope, CalendarRange, Flame,
-  BarChart3, ScrollText, Settings, ShieldCheck, ChevronDown, LogOut, User, FilePlus2, DatabaseZap, Bone, PackageCheck, HeartPulse, CalendarCheck,
+  LayoutDashboard, ListChecks, Stethoscope, CalendarRange, Flame,
+  BarChart3, ScrollText, Settings, ShieldCheck, ChevronDown, LogOut, User, DatabaseZap, Bone, PackageCheck, HeartPulse, CalendarCheck,
 } from 'lucide-react'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
@@ -13,13 +13,9 @@ type ItemNav = { to: string; label: string; icon: typeof LayoutDashboard; modulo
 
 const NAV: ItemNav[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, modulo: 'dashboard' as Modulo },
-  {
-    to: '/reportar', label: 'Reportar cirugía', icon: ClipboardPlus, modulo: 'reportar' as Modulo,
-    hijos: [
-      { to: '/reportar', label: 'Reporte individual', icon: FilePlus2, modulo: 'reportar' as Modulo },
-      { to: '/reportar/masiva', label: 'Consulta masiva', icon: DatabaseZap, modulo: 'reportar_masivo' as Modulo },
-    ],
-  },
+  // Oct-2026: "Reportar cirugía" (reporte individual) quedó oculto; el ingreso
+  // es solo por la consulta masiva (administrador y programación de cirugía)
+  { to: '/reportar/masiva', label: 'Consulta masiva', icon: DatabaseZap, modulo: 'reportar_masivo' as Modulo },
   { to: '/solicitudes', label: 'Gestión Programación Cx', icon: ListChecks, modulo: 'solicitudes' as Modulo },
   { to: '/mos', label: 'Gestión MOS', icon: Bone, modulo: 'mos' as Modulo },
   { to: '/esterilizacion', label: 'Recepción de materiales', icon: PackageCheck, modulo: 'esterilizacion' as Modulo },
