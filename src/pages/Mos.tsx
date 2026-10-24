@@ -373,12 +373,12 @@ function PanelVer({ s, puedeGestionar, onCerrar, onGestionar, onVerCorreo, onAnt
 // Mismo esquema que "Notificar al paciente" (Gestión de solicitudes): panel
 // lateral con los datos por grupos, editor de observaciones y vista previa del
 // correo exacto antes de enviar.
-type FilaItem = { cantidad: string; descripcion: string; proveedor: string }
+// El proveedor no se pide al notificar: se registrará en la gestión de la entrega
+type FilaItem = { cantidad: string; descripcion: string }
 
 function PanelGestion({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () => void; onEnviado: (correoId: number) => void }) {
   const { perfil } = useAuth()
-  const proveedorBase = s.casa_medica_material?.trim() ?? ''
-  const filaVacia = (): FilaItem => ({ cantidad: '1', descripcion: '', proveedor: proveedorBase })
+  const filaVacia = (): FilaItem => ({ cantidad: '1', descripcion: '' })
 
   const [aseguradores, setAseguradores] = useState<Asegurador[]>([])
   const [aseguradorId, setAseguradorId] = useState(s.mos_asegurador_id ? String(s.mos_asegurador_id) : '')
@@ -395,7 +395,7 @@ function PanelGestion({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () =
     // Si ya se notificó, se parte de los ítems pendientes de entrega registrados
     sb.from('mos_items').select('*').eq('solicitud_id', s.id).eq('estado', 'pendiente_entrega').order('orden')
       .then(({ data }: { data: RegistroItem[] | null }) => {
-        if (data?.length) setFilasItems(data.map((i) => ({ cantidad: String(i.cantidad), descripcion: i.descripcion, proveedor: i.proveedor })))
+        if (data?.length) setFilasItems(data.map((i) => ({ cantidad: String(i.cantidad), descripcion: i.descripcion })))
       })
   }, [s.id])
 
@@ -482,6 +482,14 @@ function PanelGestion({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () =
         <label className={`flex w-full items-center gap-2 text-sm ${listo ? 'text-slate-700' : 'text-slate-400'}`}>
           <input type="checkbox" disabled={!listo} checked={confirmado} onChange={(e) => setConfirmado(e.target.checked)} className="h-4 w-4 accent-[#0D2D6B]" />
           Confirmo que la información, el material y los documentos son correctos
+          {!listo && <span className="text-xs text-amber-700">(falta: {[
+            !asegurador && 'asegurador',
+            asegurador && !correoValido && 'correo del asegurador',
+            items.length === 0 && 'al menos un ítem',
+            filasIncompletas > 0 && 'corregir cantidades',
+            !archivos.historia_clinica && 'historia clínica PDF',
+            !archivos.boleta && 'boleta PDF',
+          ].filter(Boolean).join(', ')})</span>}
         </label>
         <Boton variante="secundario" onClick={onCerrar} disabled={enviando}>Cancelar</Boton>
         <Boton
@@ -547,7 +555,6 @@ function PanelGestion({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () =
                 <th className="w-8 px-2 py-1.5 text-center">#</th>
                 <th className="w-20 px-2 py-1.5">Cantidad</th>
                 <th className="px-2 py-1.5">Descripción</th>
-                <th className="w-48 px-2 py-1.5">Nombre proveedor</th>
                 <th className="w-8 px-1 py-1.5" />
               </tr>
             </thead>
@@ -560,9 +567,6 @@ function PanelGestion({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () =
                   </td>
                   <td className="px-1 py-1">
                     <input value={f.descripcion} onChange={(e) => cambiarFila(i, 'descripcion', e.target.value)} className={`${CLASE_CAMPO} w-full !px-2`} placeholder="Ej.: Placa bloqueada 3.5 mm de 8 orificios" />
-                  </td>
-                  <td className="px-1 py-1">
-                    <input value={f.proveedor} onChange={(e) => cambiarFila(i, 'proveedor', e.target.value)} className={`${CLASE_CAMPO} w-full !px-2`} placeholder="Casa médica / proveedor" />
                   </td>
                   <td className="px-1 py-1.5 text-center">
                     <button type="button" title="Quitar ítem" disabled={filasItems.length === 1}
@@ -580,7 +584,7 @@ function PanelGestion({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () =
         </div>
         <div className="col-span-2 text-[11px] text-slate-500">
           {items.length} ítem(s) completo(s) · {items.reduce((t, i) => t + i.cantidad, 0)} unidades
-          {filasIncompletas > 0 && <span className="ml-2 text-red-600">Hay {filasIncompletas} fila(s) incompleta(s): cantidad, descripción y proveedor son obligatorios.</span>}
+          {filasIncompletas > 0 && <span className="ml-2 text-red-600">Hay {filasIncompletas} fila(s) con cantidad inválida: debe ser un número entero mayor que 0.</span>}
         </div>
       </Grupo>
 
@@ -660,7 +664,7 @@ function TablaRegistros({ registros }: { registros: RegistroItem[] }) {
               <td className="px-2 py-1 text-slate-400">{i.orden}</td>
               <td className="px-2 py-1 font-semibold">{i.cantidad}</td>
               <td className="px-2 py-1">{i.descripcion}</td>
-              <td className="px-2 py-1 text-slate-500">{i.proveedor}</td>
+              <td className="px-2 py-1 text-slate-500">{i.proveedor || '—'}</td>
               <td className="px-2 py-1"><Badge className={ESTADO_ITEM_COLOR[i.estado]}>{ESTADO_ITEM_LABEL[i.estado]}</Badge></td>
             </tr>
           ))}

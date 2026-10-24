@@ -10,7 +10,8 @@ import {
 // exacto, adjuntos, fecha y hora) y marca la solicitud como
 // estado_mos = 'asegurador_notificado'.
 // Body: { solicitudId, aseguradorId, historiaClinicaPath, boletaPath, items, observaciones }
-// items: [{ cantidad, descripcion, proveedor }] transcritos de la boleta (mínimo uno);
+// items: [{ cantidad, descripcion }] transcritos de la boleta (mínimo uno; el
+// proveedor se registra después, al gestionar la entrega);
 // se guardan uno a uno en mos_items y como copia en mos_correos.items.
 // observaciones: HTML del editor (como las recomendaciones al paciente).
 // Los PDF ya están en el bucket privado 'mos' bajo `${solicitudId}/...`.
@@ -46,7 +47,7 @@ Deno.serve(async (req) => {
 
   const { solicitudId, aseguradorId, historiaClinicaPath, boletaPath, items: itemsBody, observaciones: obsBody } = await req.json()
   const items = itemsValidos(itemsBody)
-  if (!items.length) return json(400, { error: 'Detalle al menos un ítem del material (cantidad, descripción y proveedor)' })
+  if (!items.length) return json(400, { error: 'Detalle al menos un ítem del material (cantidad y descripción)' })
   const observaciones = htmlConTexto(obsBody)
   const rutas: Record<TipoAdjunto, string> = { historia_clinica: historiaClinicaPath, boleta: boletaPath }
   for (const [tipo, ruta] of Object.entries(rutas)) {
@@ -157,7 +158,6 @@ Deno.serve(async (req) => {
     orden: n + 1,
     cantidad: i.cantidad,
     descripcion: i.descripcion,
-    proveedor: i.proveedor,
     creado_por: user.id,
   })))
 

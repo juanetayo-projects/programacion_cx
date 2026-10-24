@@ -65,14 +65,15 @@ export type SolicitudMos = {
 
 export type TipoAdjunto = 'historia_clinica' | 'boleta'
 
-/** Ítem de material de osteosíntesis detallado a partir de la boleta quirúrgica */
-export type ItemMaterial = { cantidad: number; descripcion: string; proveedor: string }
+/** Ítem de material de osteosíntesis transcrito de la boleta quirúrgica.
+ *  El proveedor no se pide al notificar: se registra al gestionar la entrega. */
+export type ItemMaterial = { cantidad: number; descripcion: string; proveedor?: string | null }
 
-/** Ítems completos (descarta filas vacías); cantidad entera mayor que 0 */
+/** Ítems completos (descarta filas sin descripción); cantidad entera mayor que 0 */
 export function itemsValidos(items: Partial<ItemMaterial>[] | null | undefined): ItemMaterial[] {
   return (items ?? [])
-    .map((i) => ({ cantidad: Number(i.cantidad), descripcion: String(i.descripcion ?? '').trim(), proveedor: String(i.proveedor ?? '').trim() }))
-    .filter((i) => Number.isInteger(i.cantidad) && i.cantidad > 0 && i.descripcion && i.proveedor)
+    .map((i) => ({ cantidad: Number(i.cantidad), descripcion: String(i.descripcion ?? '').trim() }))
+    .filter((i) => Number.isInteger(i.cantidad) && i.cantidad > 0 && i.descripcion)
 }
 
 /** Observaciones del editor: vacío si solo quedaron etiquetas sin texto */
@@ -121,7 +122,7 @@ export function datosDesdeSolicitud(
 }
 
 export function asuntoAsegurador(d: Pick<DatosNotificacionAsegurador, 'paciente' | 'documento'>) {
-  return `Notificación de material de osteosíntesis — ${d.paciente ?? 'Paciente'} (${d.documento ?? 's/d'}) — ${CLINICA}`
+  return `Notificación de material de osteosíntesis — ${d.paciente ?? 'Paciente'} (${d.documento ?? 's/d'})`
 }
 
 export function plantillaAsegurador(d: DatosNotificacionAsegurador): { asunto: string; html: string } {
@@ -202,16 +203,14 @@ export function plantillaAsegurador(d: DatosNotificacionAsegurador): { asunto: s
               <th align="center" style="padding:8px 6px;width:34px;border:1px solid #0D2D6B">#</th>
               <th align="center" style="padding:8px 6px;width:70px;border:1px solid #0D2D6B">Cantidad</th>
               <th align="left" style="padding:8px 10px;border:1px solid #0D2D6B">Descripción</th>
-              <th align="left" style="padding:8px 10px;width:30%;border:1px solid #0D2D6B">Proveedor</th>
             </tr>
             ${d.items.length ? d.items.map((i, n) => `
             <tr style="background:${n % 2 ? '#F1F5F9' : '#FFFFFF'}">
               <td align="center" style="padding:7px 6px;border:1px solid #E2E8F0;color:#64748B">${n + 1}</td>
               <td align="center" style="padding:7px 6px;border:1px solid #E2E8F0;color:#0F172A;font-weight:bold">${escapar(i.cantidad)}</td>
               <td style="padding:7px 10px;border:1px solid #E2E8F0;color:#0F172A">${multilinea(i.descripcion)}</td>
-              <td style="padding:7px 10px;border:1px solid #E2E8F0;color:#0F172A">${escapar(i.proveedor)}</td>
             </tr>`).join('') : `
-            <tr><td colspan="4" align="center" style="padding:10px;color:#94A3B8;border:1px solid #E2E8F0">Sin ítems detallados</td></tr>`}
+            <tr><td colspan="3" align="center" style="padding:10px;color:#94A3B8;border:1px solid #E2E8F0">Sin ítems detallados</td></tr>`}
           </table>`)}
 
         ${d.observacionesHtml ? `
