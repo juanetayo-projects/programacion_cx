@@ -14,6 +14,17 @@ type Perfil = {
   activo: boolean
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+// Mensajes de Supabase Auth más comunes, en español
+function traducirError(msg: string): string {
+  const m = msg.toLowerCase()
+  if (m.includes('already') && (m.includes('registered') || m.includes('exists'))) return 'Ya existe un usuario con ese correo.'
+  if (m.includes('invalid') && m.includes('email')) return 'El correo no es válido.'
+  if (m.includes('password')) return `La contraseña no cumple los requisitos: ${msg}`
+  return msg
+}
+
 export default function Usuarios() {
   const [perfiles, setPerfiles] = useState<Perfil[]>([])
   const [cargando, setCargando] = useState(true)
@@ -44,16 +55,25 @@ export default function Usuarios() {
 
   async function invocar(body: Record<string, unknown>) {
     const { data, error } = await supabase.functions.invoke('admin-usuarios', { body })
-    if (error) throw new Error(error.message)
-    if (data?.error) throw new Error(data.error)
+    if (error) {
+      // En respuestas no-2xx el motivo real viene en el cuerpo JSON de la función
+      const detalle = await (error as { context?: Response }).context?.json?.().catch(() => null)
+      throw new Error(traducirError(detalle?.error ?? error.message))
+    }
+    if (data?.error) throw new Error(traducirError(data.error))
     return data
   }
 
   async function crear() {
     setError('')
+    if (!nombre.trim()) return setError('Escriba el nombre completo.')
+    if (!EMAIL_RE.test(email.trim())) {
+      return setError(`El correo "${email}" no es válido. Debe tener la forma usuario@dominio.co (revise que no haya escrito la contraseña en el campo Correo).`)
+    }
+    if (rol === 'medico' && !especialidad) return setError('Seleccione la especialidad del médico.')
     setGuardando(true)
     try {
-      await invocar({ accion: 'crear', email, password, nombre, rol, especialidad: rol === 'medico' ? especialidad : null })
+      await invocar({ accion: 'crear', email: email.trim().toLowerCase(), password, nombre, rol, especialidad: rol === 'medico' ? especialidad : null })
       setModalCrear(false)
       setNombre(''); setEmail(''); setPassword(''); setPasswordConfirm(''); setRol('visualizador'); setEspecialidad('')
       cargar()
