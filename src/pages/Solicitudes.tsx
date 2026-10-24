@@ -7,6 +7,10 @@ import { PanelLateral, Grupo, Dato } from '../components/PanelLateral'
 import RichTextEditor from '../components/RichTextEditor'
 import { ModalDetalleMos } from './Mos'
 import { ModalCierreCirugia, type CamposCierre } from '../components/CierreCirugia'
+import {
+  IndicadorClinico, IndicadorPostquirurgico, IndicadorEsterilizacion, ModalGestionClinica, ModalPostquirurgico, ModalEsterilizacion,
+  cargarResumenSeguimiento, type ResumenNota, type ResumenItem,
+} from '../components/IndicadoresSeguimiento'
 import { AvanceMos, AvanceMosCompacto } from '../components/AvanceMos'
 import FiltroEtapaMos from '../components/FiltroEtapaMos'
 import { filtrarPorEtapaMos } from '../lib/filtrosMos'
@@ -138,6 +142,10 @@ export default function Solicitudes() {
   const [busqueda, setBusqueda] = useState('')
   const [masFiltros, setMasFiltros] = useState(false)
   const [detalleMos, setDetalleMos] = useState<number | null>(null)
+  const [seguimiento, setSeguimiento] = useState<{ id: number; tipo: 'clinica' | 'postquirurgico' | 'esterilizacion'; titulo: string } | null>(null)
+  const [resumen, setResumen] = useState<{ notas: ResumenNota[]; items: ResumenItem[]; actas: Record<number, number> }>({ notas: [], items: [], actas: {} })
+  const notasDe = (id: number) => resumen.notas.filter((n) => n.solicitud_id === id)
+  const itemsDe = (id: number) => resumen.items.filter((i) => i.solicitud_id === id)
   const [envioManual, setEnvioManual] = useState<{ datos: DatosNotificacion; canales: string[]; telefono: string } | null>(null)
   const [especialidades, setEspecialidades] = useState<{ id: number; nombre: string }[]>([])
   const [quirofanos, setQuirofanos] = useState<{ id: number; nombre: string; numero: number }[]>([])
@@ -164,7 +172,12 @@ export default function Solicitudes() {
     if (filtroQuirofano) q = q.eq('quirofano_id', Number(filtroQuirofano))
     if (filtroHora) q = q.eq('hora_programada', filtroHora)
     const { data, error } = await q
-    if (!error) setFilas((data ?? []) as unknown as Solicitud[])
+    if (!error) {
+      const lista = (data ?? []) as unknown as Solicitud[]
+      setFilas(lista)
+      // Resumen de los seguimientos (Esterilización, Gestión clínica, Postquirúrgico) para los indicadores
+      setResumen(await cargarResumenSeguimiento(lista.map((s) => s.id)))
+    }
     setCargando(false)
   }
 
@@ -584,11 +597,17 @@ export default function Solicitudes() {
                           <AlertTriangle size={11} /> Pendiente registrar realizada
                         </div>
                       )}
-                      {f.estado_mos && (
-                        <div onClick={(e) => e.stopPropagation()}>
-                          <AvanceMosCompacto s={f} onClick={() => setDetalleMos(f.id)} />
-                        </div>
-                      )}
+                      {/* Seguimientos: MOS, Esterilización, Gestión clínica y Postquirúrgico (clic → modal de cada uno) */}
+                      <div className="flex flex-wrap items-center gap-x-1" onClick={(e) => e.stopPropagation()}>
+                        {f.estado_mos && <AvanceMosCompacto s={f} onClick={() => setDetalleMos(f.id)} />}
+                        <IndicadorEsterilizacion items={itemsDe(f.id)} actas={resumen.actas[f.id] ?? 0}
+                          onClick={() => setSeguimiento({ id: f.id, tipo: 'esterilizacion', titulo: f.nombre_paciente ?? f.documento_paciente })} />
+                        <IndicadorClinico notas={notasDe(f.id)} items={itemsDe(f.id)}
+                          onClick={() => setSeguimiento({ id: f.id, tipo: 'clinica', titulo: f.nombre_paciente ?? f.documento_paciente })} />
+                        <IndicadorPostquirurgico notas={notasDe(f.id)}
+                          sinCierre={ESTADOS_PROGRAMADOS.includes(f.estado) && !!f.fecha_programada && f.fecha_programada < hoyISO}
+                          onClick={() => setSeguimiento({ id: f.id, tipo: 'postquirurgico', titulo: f.nombre_paciente ?? f.documento_paciente })} />
+                      </div>
                     </td>
                     <td className="px-4 py-2.5 whitespace-nowrap text-slate-500">
                       {f.fecha_programada ? (
@@ -765,6 +784,15 @@ export default function Solicitudes() {
       {envioManual && <ModalEnvioManual {...envioManual} onClose={() => setEnvioManual(null)} />}
 
       {detalleMos !== null && <ModalDetalleMos solicitudId={detalleMos} onCerrar={() => setDetalleMos(null)} />}
+      {seguimiento?.tipo === 'clinica' && (
+        <ModalGestionClinica solicitudId={seguimiento.id} titulo={seguimiento.titulo} onCerrar={() => { setSeguimiento(null); cargar() }} />
+      )}
+      {seguimiento?.tipo === 'postquirurgico' && (
+        <ModalPostquirurgico solicitudId={seguimiento.id} onCerrar={() => { setSeguimiento(null); cargar() }} />
+      )}
+      {seguimiento?.tipo === 'esterilizacion' && (
+        <ModalEsterilizacion solicitudId={seguimiento.id} titulo={seguimiento.titulo} onCerrar={() => setSeguimiento(null)} />
+      )}
 
       {/* CANCELAR */}
       <ModalCancelar open={modal === 'cancelar'} error={error} guardando={guardando} onClose={cerrar} onGuardar={cancelar} />

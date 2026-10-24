@@ -1237,3 +1237,11 @@ Se requiere construir una app que permita
 				Adjuntos de notas como icono con vista previa. Modal del ítem en
 				Gestión clínica con botones Cerrar y Guardar al final.
 			20.5.- Migración: 0030_cierre_cirugia_y_recordatorios.sql
+
+		21.- Indicadores de seguimiento en Gestión Programación Cx (2026-10-24)
+			Junto al avance MOS (components/IndicadoresSeguimiento.tsx), cada uno con
+			tooltip y clic a su modal: ESTERIL. (unidades recibidas/solicitadas y
+			actas; modal con lo recibido por ítem, fechas y actas), CLÍNICA (ítems
+			con cargo de cobro y notas; modal con cobro por ítem y notas) y POSTQX
+			(próxima cita, por notificar, vencidas, cumplidas, sin cierre; modal con
+			citas, notas, WhatsApp y alerta de cierre).
