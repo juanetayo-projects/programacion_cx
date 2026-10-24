@@ -7,6 +7,8 @@ import { PanelLateral, Grupo, Dato } from '../components/PanelLateral'
 import RichTextEditor from '../components/RichTextEditor'
 import { ModalDetalleMos } from './Mos'
 import { AvanceMos, AvanceMosCompacto } from '../components/AvanceMos'
+import FiltroEtapaMos from '../components/FiltroEtapaMos'
+import { filtrarPorEtapaMos } from '../lib/filtrosMos'
 import {
   plantillaCorreo, textoWhatsApp, textoSms, segmentosSms, telefonoWhatsApp, LOGO_CORREO,
   type DatosNotificacion,
@@ -71,6 +73,7 @@ type Solicitud = {
   mos_proveedor_notificado_en: string | null
   mos_proveedor_confirmado_en: string | null
   mos_material_recibido_en: string | null
+  mos_programacion_notificada_en: string | null
   especialidades: { nombre: string } | null
   eps: { nombre: string } | null
   unidades: { nombre: string } | null
@@ -127,6 +130,7 @@ export default function Solicitudes() {
   const [filtroQuirofano, setFiltroQuirofano] = useState('')
   const [filtroHora, setFiltroHora] = useState('')
   const [filtroMedico, setFiltroMedico] = useState('')
+  const [filtroEtapaMos, setFiltroEtapaMos] = useState('')
   const [busqueda, setBusqueda] = useState('')
   const [masFiltros, setMasFiltros] = useState(false)
   const [detalleMos, setDetalleMos] = useState<number | null>(null)
@@ -176,6 +180,7 @@ export default function Solicitudes() {
 
   const filtradas = useMemo(() => {
     let r = filas
+    if (filtroEtapaMos) r = filtrarPorEtapaMos(r, filtroEtapaMos)
     if (filtroMedico) {
       const m = filtroMedico.toLowerCase()
       r = r.filter((f) => medicoDe(f).toLowerCase().includes(m))
@@ -189,7 +194,7 @@ export default function Solicitudes() {
       )
     }
     return r
-  }, [filas, busqueda, filtroMedico])
+  }, [filas, busqueda, filtroMedico, filtroEtapaMos])
 
   // Cards de métricas — reflejan siempre los filtros/búsqueda vigentes
   const porEspecialidad = useMemo(() => {
@@ -216,10 +221,11 @@ export default function Solicitudes() {
     setFiltroQuirofano('')
     setFiltroHora('')
     setFiltroMedico('')
+    setFiltroEtapaMos('')
     setBusqueda('')
   }
 
-  const hayFiltrosActivos = !!(filtroEstado || filtroEspecialidad || filtroDesde || filtroHasta || filtroQuirofano || filtroHora || filtroMedico || busqueda)
+  const hayFiltrosActivos = !!(filtroEstado || filtroEspecialidad || filtroDesde || filtroHasta || filtroQuirofano || filtroHora || filtroMedico || filtroEtapaMos || busqueda)
 
   const filtrosTexto = [
     filtroEstado && `Estado: ${ESTADOS_LABEL[filtroEstado as Estado]}`,
@@ -478,6 +484,10 @@ export default function Solicitudes() {
                 return <option key={e.id} value={e.id}>{e.nombre}{total ? ` (${total})` : ''}</option>
               })}
             </select>
+          </CampoLinea>
+          <CampoLinea etiqueta="MOS">
+            <FiltroEtapaMos valor={filtroEtapaMos} onChange={setFiltroEtapaMos} className="max-w-[210px]"
+              conteo={(c) => filtrarPorEtapaMos(filas, c).length} />
           </CampoLinea>
           <div className="relative min-w-[200px] flex-1">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />

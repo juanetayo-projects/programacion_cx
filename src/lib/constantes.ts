@@ -1,4 +1,4 @@
-export const ROLES = ['administrador', 'programador', 'medico', 'visualizador', 'mos'] as const
+export const ROLES = ['administrador', 'programador', 'medico', 'visualizador', 'mos', 'esterilizacion'] as const
 export type Rol = (typeof ROLES)[number]
 
 export const ROLES_LABEL: Record<Rol, string> = {
@@ -7,6 +7,7 @@ export const ROLES_LABEL: Record<Rol, string> = {
   medico: 'Médico cirujano',
   visualizador: 'Visualizador',
   mos: 'Gestor MOS',
+  esterilizacion: 'Esterilización',
 }
 
 export const ESTADOS = [
@@ -110,7 +111,7 @@ export type CanalNotificacion = (typeof CANALES_NOTIFICACION)[number]
 // Módulos de la app — usados por Roles y Permisos para controlar el acceso por rol
 export const MODULOS = [
   'dashboard', 'reportar', 'reportar_masivo', 'solicitudes_reportadas', 'solicitudes', 'cirugias_realizadas', 'quirofanos', 'calor', 'reportes',
-  'logs', 'admin_usuarios', 'admin_catalogos', 'admin_roles', 'mos',
+  'logs', 'admin_usuarios', 'admin_catalogos', 'admin_roles', 'mos', 'esterilizacion',
 ] as const
 export type Modulo = (typeof MODULOS)[number]
 
@@ -135,6 +136,7 @@ export const MODULOS_LABEL: Record<Modulo, string> = {
   admin_catalogos: 'Administración · Catálogos',
   admin_roles: 'Administración · Roles y permisos',
   mos: 'Gestión MOS (materiales de osteosíntesis)',
+  esterilizacion: 'Recepción de materiales (Esterilización)',
 }
 
 // Módulo MOS (Materiales de Osteosíntesis): estado propio de la solicitud,
@@ -142,7 +144,7 @@ export const MODULOS_LABEL: Record<Modulo, string> = {
 // estado_mos refleja el último hito alcanzado (ver components/AvanceMos.tsx)
 export const ESTADOS_MOS = [
   'pendiente', 'asegurador_notificado', 'asegurador_aprobado', 'asegurador_rechazado',
-  'proveedor_notificado', 'proveedor_confirmado', 'material_recibido',
+  'proveedor_notificado', 'proveedor_confirmado', 'material_parcial', 'material_recibido',
 ] as const
 export type EstadoMos = (typeof ESTADOS_MOS)[number]
 
@@ -153,7 +155,8 @@ export const ESTADOS_MOS_LABEL: Record<EstadoMos, string> = {
   asegurador_rechazado: 'Rechazado por el asegurador',
   proveedor_notificado: 'Proveedor notificado · en espera de confirmación',
   proveedor_confirmado: 'Proveedor confirmó el material · en espera de entrega',
-  material_recibido: 'Material recibido en la clínica',
+  material_parcial: 'Material recibido parcialmente · faltan ítems por llegar',
+  material_recibido: 'Material en la clínica · listo para entregar a sala (Programación)',
 }
 
 export const ESTADOS_MOS_CORTO: Record<EstadoMos, string> = {
@@ -163,7 +166,8 @@ export const ESTADOS_MOS_CORTO: Record<EstadoMos, string> = {
   asegurador_rechazado: 'Rechazado',
   proveedor_notificado: 'Proveedor notificado',
   proveedor_confirmado: 'Proveedor confirmó',
-  material_recibido: 'Material recibido',
+  material_parcial: 'Recibido parcial',
+  material_recibido: 'Material en la clínica',
 }
 
 export const ESTADOS_MOS_COLOR: Record<EstadoMos, string> = {
@@ -173,5 +177,6 @@ export const ESTADOS_MOS_COLOR: Record<EstadoMos, string> = {
   asegurador_rechazado: 'bg-red-100 text-red-700 border-red-300',
   proveedor_notificado: 'bg-teal-100 text-teal-700 border-teal-300',
   proveedor_confirmado: 'bg-cyan-100 text-cyan-700 border-cyan-300',
+  material_parcial: 'bg-amber-100 text-amber-800 border-amber-300',
   material_recibido: 'bg-green-100 text-green-800 border-green-400',
 }

@@ -14,6 +14,7 @@ import Calor from './pages/Calor'
 import Reportes from './pages/Reportes'
 import Logs from './pages/Logs'
 import Mos from './pages/Mos'
+import Esterilizacion from './pages/Esterilizacion'
 import Usuarios from './pages/admin/Usuarios'
 import Catalogos from './pages/admin/Catalogos'
 import Roles from './pages/admin/Roles'
@@ -30,10 +31,29 @@ function Guard({ modulo, children }: { modulo?: Modulo; children: ReactElement }
     )
   }
   if (!session) return <Navigate to="/login" replace />
-  const autorizado = !modulo || perfil?.rol === 'administrador' || permisos.has(modulo)
-  if (!autorizado) return <Navigate to="/" replace />
+  // El perfil y los permisos llegan después de la sesión: esperar evita redirigir antes de tiempo
+  if (!perfil) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#dbe1ec]">
+        <Spinner className="h-8 w-8" />
+      </div>
+    )
+  }
+  const autorizado = !modulo || perfil.rol === 'administrador' || permisos.has(modulo)
+  if (!autorizado) {
+    // Sin acceso al inicio (p. ej. Esterilización): ir al primer módulo permitido
+    const destino = RUTA_INICIO.find(([m]) => permisos.has(m))?.[0]
+    if (modulo === 'dashboard' && destino) return <Navigate to={RUTA_INICIO.find(([m]) => m === destino)![1]} replace />
+    return <Navigate to="/" replace />
+  }
   return <Shell>{children}</Shell>
 }
+
+// Orden en que se busca la página de inicio de un rol sin Dashboard
+const RUTA_INICIO: [Modulo, string][] = [
+  ['solicitudes', '/solicitudes'], ['mos', '/mos'], ['esterilizacion', '/esterilizacion'], ['reportar', '/reportar'],
+  ['cirugias_realizadas', '/cirugias-realizadas'], ['quirofanos', '/quirofanos'], ['reportes', '/reportes'],
+]
 
 function SoloInvitados({ children }: { children: ReactElement }) {
   const { session, loading } = useAuth()
@@ -60,6 +80,7 @@ export default function App() {
           <Route path="/calor" element={<Guard modulo="calor"><Calor /></Guard>} />
           <Route path="/reportes" element={<Guard modulo="reportes"><Reportes /></Guard>} />
           <Route path="/mos" element={<Guard modulo="mos"><Mos /></Guard>} />
+          <Route path="/esterilizacion" element={<Guard modulo="esterilizacion"><Esterilizacion /></Guard>} />
           <Route path="/logs"element={<Guard modulo="logs"><Logs /></Guard>} />
           <Route path="/admin/usuarios" element={<Guard modulo="admin_usuarios"><Usuarios /></Guard>} />
           <Route path="/admin/catalogos" element={<Guard modulo="admin_catalogos"><Catalogos /></Guard>} />

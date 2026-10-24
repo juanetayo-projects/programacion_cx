@@ -5,6 +5,9 @@ import { TituloEnHeader, CampoLinea, CLASE_CAMPO, Boton, Modal, Badge, EstadoVac
 import { PanelLateral, Grupo, Dato } from '../components/PanelLateral'
 import RichTextEditor from '../components/RichTextEditor'
 import { AvanceMos, AvanceMosCompacto, type CamposAvanceMos } from '../components/AvanceMos'
+import { ListaEvidencias, ModalEvidencia, fechaHora, type Correo } from '../components/EvidenciasMos'
+import FiltroEtapaMos from '../components/FiltroEtapaMos'
+import { filtrarPorEtapaMos } from '../lib/filtrosMos'
 import { LOGO_CORREO } from '../lib/mensajesNotificacion'
 import {
   plantillaAsegurador, datosDesdeSolicitud, nombreAdjunto, itemsValidos, REMITENTE_MOS,
@@ -35,6 +38,8 @@ type Solicitud = SolicitudMos & CamposAvanceMos & {
   mos_notificado_en: string | null
   mos_asegurador_id: number | null
   mos_respuesta_obs: string | null
+  mos_proveedor_confirmado_obs: string | null
+  mos_programacion_notificada_en: string | null
   casa_medica_material: string | null
   hora_programada: string | null
   aseguradores: { nombre: string } | null
@@ -47,37 +52,12 @@ type Proveedor = {
   telefono: string | null; contacto: string | null; email: string | null
 }
 
-type Correo = {
-  id: number
-  paso: 'notificacion_asegurador' | 'notificacion_proveedor'
-  asegurador_nombre: string | null
-  asegurador_contacto: string | null
-  asegurador_telefono: string | null
-  proveedor_nombre: string | null
-  proveedor_nit: string | null
-  proveedor_contacto: string | null
-  proveedor_telefono: string | null
-  destinatario: string
-  remitente: string
-  responder_a: string | null
-  asunto: string
-  html: string
-  observaciones: string | null
-  items: (ItemMaterial & { fechaEstimada?: string | null })[]
-  adjuntos: { tipo: TipoAdjunto; nombre: string; path: string; bytes: number }[]
-  enviado_por_nombre: string | null
-  enviado_en: string
-}
-
 // Registro independiente de cada ítem de material (tabla mos_items)
 type EstadoItem = 'pendiente_entrega' | 'entregado_parcial' | 'entregado' | 'anulado' | 'reemplazado'
-type RegistroItem = ItemMaterial & {
+export type RegistroItem = ItemMaterial & {
   id: number; orden: number; estado: EstadoItem; cantidad_entregada: number
   proveedor_id: number | null; fecha_estimada_entrega: string | null; proveedor_notificado_en: string | null
 }
-
-// Destinatario de un correo de evidencia (asegurador en el paso 1, proveedor en el 2)
-const destinoCorreo = (c: Correo) => c.paso === 'notificacion_proveedor' ? c.proveedor_nombre : c.asegurador_nombre
 
 const ESTADO_ITEM_LABEL: Record<EstadoItem, string> = {
   pendiente_entrega: 'Pendiente', entregado_parcial: 'Parcial', entregado: 'Entregado', anulado: 'Anulado', reemplazado: 'Reemplazado',
@@ -94,7 +74,6 @@ const MAX_BYTES = 10 * 1024 * 1024
 const tieneBoleta = (s: Solicitud) => !!s.boleta_quirurgica?.trim()
 const estadoMos = (s: Solicitud): EstadoMos => s.estado_mos ?? 'pendiente'
 const codigo = (id: number) => `SC-${String(id).padStart(6, '0')}`
-const fechaHora = (v: string | null) => (v ? new Date(v).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : '—')
 const tamano = (b: number) => (b >= 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`)
 
 const ICONO_ESTADO_MOS: Record<EstadoMos, React.ReactNode> = {
@@ -104,6 +83,7 @@ const ICONO_ESTADO_MOS: Record<EstadoMos, React.ReactNode> = {
   asegurador_rechazado: <ShieldX size={13} />,
   proveedor_notificado: <Truck size={13} />,
   proveedor_confirmado: <PackageCheck size={13} />,
+  material_parcial: <PackageCheck size={13} />,
   material_recibido: <CheckCircle2 size={13} />,
 }
 
@@ -124,9 +104,10 @@ export default function Mos() {
   const [cargando, setCargando] = useState(true)
   const [filtroBoleta, setFiltroBoleta] = useState<'con' | 'todas'>('con')
   const [filtroEstadoMos, setFiltroEstadoMos] = useState<'' | EstadoMos>('')
+  const [filtroEtapa, setFiltroEtapa] = useState('')
   const [busqueda, setBusqueda] = useState('')
   const [seleccion, setSeleccion] = useState<Solicitud | null>(null)
-  const [modal, setModal] = useState<'' | 'ver' | 'gestion' | 'proveedor' | 'respuesta'>('')
+  const [modal, setModal] = useState<'' | 'ver' | 'gestion' | 'proveedor' | 'respuesta' | 'confirmacion'>('')
   const [evidencia, setEvidencia] = useState<Correo | null>(null)
 
   async function cargar() {
@@ -147,6 +128,7 @@ export default function Mos() {
   const filtradas = useMemo(() => {
     let r = base
     if (filtroEstadoMos) r = r.filter((s) => estadoMos(s) === filtroEstadoMos)
+    if (filtroEtapa) r = filtrarPorEtapaMos(r, filtroEtapa)
     if (busqueda) {
       const b = busqueda.toLowerCase()
       r = r.filter((s) =>
@@ -155,7 +137,7 @@ export default function Mos() {
       )
     }
     return r
-  }, [base, filtroEstadoMos, busqueda])
+  }, [base, filtroEstadoMos, filtroEtapa, busqueda])
 
   const conteo = useMemo(() => {
     const c = Object.fromEntries(ESTADOS_MOS.map((e) => [e, 0])) as Record<EstadoMos, number>
@@ -163,9 +145,9 @@ export default function Mos() {
     return { ...c, total: base.length }
   }, [base])
 
-  const hayFiltros = filtroBoleta !== 'con' || !!filtroEstadoMos || !!busqueda
+  const hayFiltros = filtroBoleta !== 'con' || !!filtroEstadoMos || !!filtroEtapa || !!busqueda
 
-  function abrir(s: Solicitud, m: 'ver' | 'gestion' | 'proveedor' | 'respuesta') {
+  function abrir(s: Solicitud, m: 'ver' | 'gestion' | 'proveedor' | 'respuesta' | 'confirmacion') {
     setSeleccion(s)
     setModal(m)
   }
@@ -183,11 +165,8 @@ export default function Mos() {
             <option value="todas">Todas las solicitudes</option>
           </select>
         </CampoLinea>
-        <CampoLinea etiqueta="Estado MOS">
-          <select value={filtroEstadoMos} onChange={(e) => setFiltroEstadoMos(e.target.value as '' | EstadoMos)} className={CLASE_CAMPO}>
-            <option value="">Todos</option>
-            {ESTADOS_MOS.map((e) => <option key={e} value={e}>{ESTADOS_MOS_LABEL[e]}</option>)}
-          </select>
+        <CampoLinea etiqueta="Etapa MOS">
+          <FiltroEtapaMos valor={filtroEtapa} onChange={setFiltroEtapa} conteo={(c) => filtrarPorEtapaMos(base, c).length} />
         </CampoLinea>
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -200,7 +179,7 @@ export default function Mos() {
         {hayFiltros && (
           <button
             title="Limpiar filtros"
-            onClick={() => { setFiltroBoleta('con'); setFiltroEstadoMos(''); setBusqueda('') }}
+            onClick={() => { setFiltroBoleta('con'); setFiltroEstadoMos(''); setFiltroEtapa(''); setBusqueda('') }}
             className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"
           >
             <Eraser size={16} />
@@ -210,7 +189,7 @@ export default function Mos() {
           <button onClick={() => setFiltroEstadoMos('')} className="rounded-full border border-sky-300 bg-sky-50 px-3 py-1 font-medium text-sky-700">
             {filtroBoleta === 'con' ? 'Con boleta' : 'Solicitudes'}: {conteo.total}
           </button>
-          {ESTADOS_MOS.map((e) => (
+          {ESTADOS_MOS.filter((e) => conteo[e] > 0 || e === 'pendiente').map((e) => (
             <button
               key={e}
               onClick={() => setFiltroEstadoMos(filtroEstadoMos === e ? '' : e)}
@@ -270,19 +249,23 @@ export default function Mos() {
                     </td>
                     <td className="px-4 py-2.5">
                       <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                        <button title="Ver" onClick={() => abrir(s, 'ver')} className="text-slate-500 hover:text-[#0D2D6B]"><Eye size={15} /></button>
-                        {puedeGestionar && tieneBoleta(s) && (
+                        <button title="Ver detalle y evidencias" onClick={() => abrir(s, 'ver')} className="text-slate-500 hover:text-[#0D2D6B]"><Eye size={15} /></button>
+                        {/* Cada paso se puede ejecutar una sola vez; luego solo queda su evidencia */}
+                        {puedeGestionar && tieneBoleta(s) && !s.estado_mos && (
                           <button title="Paso 1 · Notificar al asegurador" onClick={() => abrir(s, 'gestion')} className="text-slate-500 hover:text-[#0D2D6B]"><Bone size={15} /></button>
                         )}
-                        {puedeGestionar && s.estado_mos && (
+                        {puedeGestionar && s.estado_mos && !s.mos_proveedor_notificado_en && (
                           <button title="Registrar respuesta del asegurador (aprobado / rechazado)" onClick={() => abrir(s, 'respuesta')} className="text-emerald-600 hover:text-emerald-800"><ShieldCheck size={15} /></button>
                         )}
-                        {puedeGestionar && s.estado_mos && (
+                        {puedeGestionar && s.estado_mos && !s.mos_proveedor_notificado_en && (
                           <button
-                            title={s.mos_respuesta_asegurador === 'aprobado' ? 'Paso 2 · Solicitar al proveedor' : 'Paso 2 · Requiere la aprobación del asegurador'}
+                            title={s.mos_respuesta_asegurador === 'aprobado' ? 'Paso 2 · Notificar al proveedor' : 'Paso 2 · Requiere la aprobación del asegurador'}
                             onClick={() => abrir(s, 'proveedor')}
                             className={s.mos_respuesta_asegurador === 'aprobado' ? 'text-teal-600 hover:text-teal-800' : 'text-slate-300 hover:text-slate-400'}
                           ><Truck size={15} /></button>
+                        )}
+                        {puedeGestionar && s.mos_proveedor_notificado_en && !s.mos_proveedor_confirmado_en && (
+                          <button title="Registrar que el proveedor aceptó / confirmó el material" onClick={() => abrir(s, 'confirmacion')} className="text-cyan-600 hover:text-cyan-800"><PackageCheck size={15} /></button>
                         )}
                       </div>
                     </td>
@@ -303,7 +286,6 @@ export default function Mos() {
           onGestionar={() => setModal('gestion')}
           onProveedor={() => setModal('proveedor')}
           onRespuesta={() => setModal('respuesta')}
-          onVerCorreo={setEvidencia}
           onAnterior={posSeleccion > 0 ? () => setSeleccion(filtradas[posSeleccion - 1]) : undefined}
           onSiguiente={posSeleccion >= 0 && posSeleccion < filtradas.length - 1 ? () => setSeleccion(filtradas[posSeleccion + 1]) : undefined}
           posicion={posSeleccion >= 0 ? `${posSeleccion + 1} de ${filtradas.length}` : ''}
@@ -344,8 +326,55 @@ export default function Mos() {
         />
       )}
 
+      {modal === 'confirmacion' && seleccion && (
+        <ModalConfirmacionProveedor
+          s={seleccion}
+          onCerrar={() => setModal('')}
+          onGuardado={async () => { await cargar(); setModal('') }}
+        />
+      )}
+
       {evidencia && <ModalEvidencia correo={evidencia} onCerrar={() => setEvidencia(null)} />}
     </div>
+  )
+}
+
+// --- Hito 4: el proveedor aceptó / confirmó la disponibilidad del material ---
+function ModalConfirmacionProveedor({ s, onCerrar, onGuardado }: { s: Solicitud; onCerrar: () => void; onGuardado: () => void }) {
+  const [obs, setObs] = useState('')
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState('')
+
+  async function guardar() {
+    setGuardando(true)
+    setError('')
+    const { error: e } = await sb.rpc('mos_registrar_confirmacion_proveedor', { p_solicitud: s.id, p_obs: obs })
+    setGuardando(false)
+    if (e) { setError(e.message); return }
+    onGuardado()
+  }
+
+  return (
+    <Modal open onClose={onCerrar} titulo={`Confirmación del proveedor · ${codigo(s.id)}`} ancho="max-w-lg">
+      <div className="space-y-3">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+          <div className="font-medium text-slate-800">{s.nombre_paciente ?? s.documento_paciente}</div>
+          <div className="text-xs text-slate-500">Proveedores notificados el {fechaHora(s.mos_proveedor_notificado_en)}</div>
+        </div>
+        <p className="text-sm text-slate-600">
+          Registre que el proveedor respondió confirmando que cuenta con el material y lo entregará. Una vez registrado no se puede modificar.
+        </p>
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Observaciones (quién confirmó, medio, fecha prometida…)</label>
+          <textarea value={obs} onChange={(e) => setObs(e.target.value)} rows={3} className={`${CLASE_CAMPO} w-full`} />
+        </div>
+        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <Boton variante="secundario" onClick={onCerrar}>Cancelar</Boton>
+          <Boton onClick={guardar} disabled={guardando} className="flex items-center gap-1.5"><PackageCheck size={14} /> {guardando ? 'Guardando…' : 'El proveedor aceptó'}</Boton>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -401,26 +430,21 @@ function ModalRespuestaAsegurador({ s, onCerrar, onGuardado }: { s: Solicitud; o
 }
 
 // --- Ver: panel lateral con los datos y el historial MOS ---
-function PanelVer({ s, puedeGestionar, onCerrar, onGestionar, onProveedor, onRespuesta, onVerCorreo, onAnterior, onSiguiente, posicion }: {
+function PanelVer({ s, puedeGestionar, onCerrar, onGestionar, onProveedor, onRespuesta, onAnterior, onSiguiente, posicion }: {
   s: Solicitud
   puedeGestionar: boolean
   onCerrar: () => void
   onGestionar: () => void
   onProveedor: () => void
   onRespuesta: () => void
-  onVerCorreo: (c: Correo) => void
   onAnterior?: () => void
   onSiguiente?: () => void
   posicion: string
 }) {
-  const [correos, setCorreos] = useState<Correo[] | null>(null)
   const [registros, setRegistros] = useState<RegistroItem[] | null>(null)
 
   useEffect(() => {
-    setCorreos(null)
     setRegistros(null)
-    sb.from('mos_correos').select('*').eq('solicitud_id', s.id).order('enviado_en', { ascending: false })
-      .then(({ data }: { data: Correo[] | null }) => setCorreos(data ?? []))
     sb.from('mos_items').select('*').eq('solicitud_id', s.id).neq('estado', 'reemplazado').order('orden')
       .then(({ data }: { data: RegistroItem[] | null }) => setRegistros(data ?? []))
   }, [s.id])
@@ -434,13 +458,16 @@ function PanelVer({ s, puedeGestionar, onCerrar, onGestionar, onProveedor, onRes
       onAnterior={onAnterior}
       onSiguiente={onSiguiente}
       posicion={posicion}
-      pie={puedeGestionar && tieneBoleta(s) ? (<>
-        <Boton variante={s.estado_mos ? 'secundario' : 'primario'} onClick={onGestionar} className="flex items-center gap-1.5"><Bone size={14} /> Paso 1 · Asegurador</Boton>
+      pie={puedeGestionar && tieneBoleta(s) && !s.mos_proveedor_notificado_en ? (<>
+        {/* Los pasos ya enviados no se modifican ni se reenvían: su evidencia queda abajo */}
+        {!s.estado_mos && (
+          <Boton onClick={onGestionar} className="flex items-center gap-1.5"><Bone size={14} /> Paso 1 · Notificar al asegurador</Boton>
+        )}
         {s.estado_mos && (
           <Boton variante="secundario" onClick={onRespuesta} className="flex items-center gap-1.5"><ShieldCheck size={14} /> Respuesta asegurador</Boton>
         )}
         {s.mos_respuesta_asegurador === 'aprobado' && (
-          <Boton onClick={onProveedor} className="flex items-center gap-1.5"><Truck size={14} /> Paso 2 · Proveedor</Boton>
+          <Boton onClick={onProveedor} className="flex items-center gap-1.5"><Truck size={14} /> Paso 2 · Notificar al proveedor</Boton>
         )}
       </>) : undefined}
     >
@@ -472,26 +499,9 @@ function PanelVer({ s, puedeGestionar, onCerrar, onGestionar, onProveedor, onRes
             <TablaRegistros registros={registros} />
           </div>
         )}
-        <div className="col-span-2">
-          {correos === null ? <Spinner /> : correos.length === 0 ? (
-            <p className="text-sm text-slate-400">Aún no se ha notificado al asegurador.</p>
-          ) : (
-            <ul className="space-y-1.5">
-              {correos.map((c) => (
-                <li key={c.id}>
-                  <button onClick={() => onVerCorreo(c)} className="flex w-full items-center gap-2 rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-left text-xs hover:bg-emerald-50">
-                    <MailCheck size={14} className="shrink-0 text-emerald-600" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block font-medium text-slate-700">{c.paso === 'notificacion_proveedor' ? 'Solicitud al proveedor' : 'Notificación al asegurador'} · {destinoCorreo(c)}</span>
-                      <span className="block truncate text-slate-400">{fechaHora(c.enviado_en)} · {c.destinatario}</span>
-                    </span>
-                    <Eye size={14} className="text-slate-400" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      </Grupo>
+      <Grupo color="neutro" icono={History} titulo="Evidencias (correos y actas de recibo)">
+        <div className="col-span-2"><ListaEvidencias solicitudId={s.id} /></div>
       </Grupo>
     </PanelLateral>
   )
@@ -632,7 +642,7 @@ function PanelGestion({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () =
       {s.estado_mos === 'asegurador_notificado' && (
         <div className="flex items-start gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
           <MailCheck size={16} className="mt-0.5 shrink-0" />
-          Ya se notificó a {s.aseguradores?.nombre ?? 'un asegurador'} el {fechaHora(s.mos_notificado_en)}. Si envía de nuevo, quedará una nueva evidencia.
+          Ya se notificó a {s.aseguradores?.nombre ?? 'un asegurador'} el {fechaHora(s.mos_notificado_en)}. La notificación no se puede modificar ni reenviar; consulte su evidencia en el detalle.
         </div>
       )}
 
@@ -830,7 +840,8 @@ function PanelProveedor({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: ()
     const porProveedor = new Map<number, RegistroItem[]>()
     for (const i of lista) {
       const p = asignaciones[i.id]?.proveedorId
-      if (!p) continue
+      // Los ítems ya solicitados (envío anterior parcial) no se vuelven a enviar
+      if (!p || i.proveedor_notificado_en) continue
       porProveedor.set(Number(p), [...(porProveedor.get(Number(p)) ?? []), i])
     }
     return [...porProveedor.entries()].map(([id, its]) => {
@@ -949,7 +960,7 @@ function PanelProveedor({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: ()
       {s.mos_proveedor_notificado_en && (
         <div className="flex items-start gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm text-teal-800">
           <Truck size={16} className="mt-0.5 shrink-0" />
-          Los proveedores ya fueron notificados el {fechaHora(s.mos_proveedor_notificado_en)}. Si envía de nuevo, quedará una nueva evidencia.
+          Los proveedores ya fueron notificados el {fechaHora(s.mos_proveedor_notificado_en)}. La notificación no se puede modificar ni reenviar; consulte su evidencia en el detalle.
         </div>
       )}
 
@@ -996,7 +1007,7 @@ function PanelProveedor({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: ()
                       </td>
                       <td className="px-1 py-1">
                         <div className="flex items-center gap-1">
-                          <select value={a.proveedorId} onChange={(e) => asignar(i.id, 'proveedorId', e.target.value)} className={`${CLASE_CAMPO} w-full !px-2`}>
+                          <select value={a.proveedorId} disabled={!!i.proveedor_notificado_en} onChange={(e) => asignar(i.id, 'proveedorId', e.target.value)} className={`${CLASE_CAMPO} w-full !px-2`}>
                             <option value="">Seleccione…</option>
                             {proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                           </select>
@@ -1006,7 +1017,7 @@ function PanelProveedor({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: ()
                         </div>
                       </td>
                       <td className="px-1 py-1">
-                        <input type="date" min={hoyISO()} value={a.fechaEstimada} onChange={(e) => asignar(i.id, 'fechaEstimada', e.target.value)} className={`${CLASE_CAMPO} w-full !px-2`} />
+                        <input type="date" min={hoyISO()} value={a.fechaEstimada} disabled={!!i.proveedor_notificado_en} onChange={(e) => asignar(i.id, 'fechaEstimada', e.target.value)} className={`${CLASE_CAMPO} w-full !px-2`} />
                       </td>
                     </tr>
                   )
@@ -1114,7 +1125,7 @@ function TablaRegistros({ registros }: { registros: RegistroItem[] }) {
         <thead className="bg-emerald-100 text-left text-[10px] uppercase text-emerald-900">
           <tr>
             <th className="px-2 py-1">#</th><th className="px-2 py-1">Cant.</th><th className="px-2 py-1">Descripción</th>
-            <th className="px-2 py-1">Proveedor</th><th className="px-2 py-1">Fecha estimada</th><th className="px-2 py-1">Entrega</th>
+            <th className="px-2 py-1">Proveedor</th><th className="px-2 py-1">Fecha estimada</th><th className="px-2 py-1 text-center">Recibido</th><th className="px-2 py-1">Entrega</th>
           </tr>
         </thead>
         <tbody>
@@ -1131,6 +1142,7 @@ function TablaRegistros({ registros }: { registros: RegistroItem[] }) {
                 ) : '—'}
               </td>
               <td className="whitespace-nowrap px-2 py-1 text-slate-600">{fechaCorta(i.fecha_estimada_entrega) ?? '—'}</td>
+              <td className={`px-2 py-1 text-center font-semibold ${(i.cantidad_entregada ?? 0) >= i.cantidad ? 'text-emerald-700' : 'text-slate-500'}`}>{i.cantidad_entregada ?? 0} / {i.cantidad}</td>
               <td className="px-2 py-1"><Badge className={ESTADO_ITEM_COLOR[i.estado]}>{ESTADO_ITEM_LABEL[i.estado]}</Badge></td>
             </tr>
           ))}
@@ -1141,144 +1153,82 @@ function TablaRegistros({ registros }: { registros: RegistroItem[] }) {
   )
 }
 
-// --- Detalle de la gestión MOS (se abre desde Gestión de solicitudes) ---
+// --- Detalle de la gestión MOS (Gestión de solicitudes, Recepción de materiales) ---
 export function ModalDetalleMos({ solicitudId, onCerrar }: { solicitudId: number; onCerrar: () => void }) {
   const [s, setS] = useState<Solicitud | null>(null)
-  const [correos, setCorreos] = useState<Correo[]>([])
+  const [alAsegurador, setAlAsegurador] = useState<Correo | null>(null)
   const [registros, setRegistros] = useState<RegistroItem[]>([])
   const [cargando, setCargando] = useState(true)
-  const [evidencia, setEvidencia] = useState<Correo | null>(null)
 
   useEffect(() => {
     setCargando(true)
     Promise.all([
       sb.from('solicitudes_cirugia').select('*, especialidades(nombre), eps(nombre), aseguradores(nombre)').eq('id', solicitudId).single(),
-      sb.from('mos_correos').select('*').eq('solicitud_id', solicitudId).order('enviado_en', { ascending: false }),
+      sb.from('mos_correos').select('*').eq('solicitud_id', solicitudId).eq('paso', 'notificacion_asegurador').order('enviado_en').limit(1),
       sb.from('mos_items').select('*').eq('solicitud_id', solicitudId).neq('estado', 'reemplazado').order('orden'),
     ]).then(([rs, rc, ri]: { data: unknown }[]) => {
       setS(rs.data as Solicitud | null)
-      setCorreos((rc.data ?? []) as Correo[])
+      setAlAsegurador(((rc.data ?? []) as Correo[])[0] ?? null)
       setRegistros((ri.data ?? []) as RegistroItem[])
       setCargando(false)
     })
   }, [solicitudId])
 
-  const alAsegurador = correos.find((c) => c.paso !== 'notificacion_proveedor') ?? null
   const unidades = registros.reduce((t, i) => t + i.cantidad, 0)
+  const recibidas = registros.reduce((t, i) => t + (i.cantidad_entregada ?? 0), 0)
 
   return (
-    <>
-      <Modal open onClose={onCerrar} titulo={`Gestión MOS · ${codigo(solicitudId)}${s ? ` · ${s.nombre_paciente ?? s.documento_paciente}` : ''}`} ancho="max-w-5xl">
-        {cargando || !s ? (
-          <div className="flex justify-center py-12"><Spinner className="h-7 w-7" /></div>
-        ) : (
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <BadgeMos s={s} />
-              <Badge className={ESTADOS_COLOR[s.estado]}>{ESTADOS_LABEL[s.estado]}</Badge>
+    <Modal open onClose={onCerrar} titulo={`Gestión MOS · ${codigo(solicitudId)}${s ? ` · ${s.nombre_paciente ?? s.documento_paciente}` : ''}`} ancho="max-w-5xl">
+      {cargando || !s ? (
+        <div className="flex justify-center py-12"><Spinner className="h-7 w-7" /></div>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <BadgeMos s={s} />
+            <Badge className={ESTADOS_COLOR[s.estado]}>{ESTADOS_LABEL[s.estado]}</Badge>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white px-2 py-3"><AvanceMos s={s} /></div>
+          {s.estado_mos === 'material_recibido' && (
+            <div className="flex items-start gap-2 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-800">
+              <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
+              Proceso MOS finalizado: el material está en la clínica desde el {fechaHora(s.mos_material_recibido_en)} y está listo para entregarse a la sala de cirugía.
             </div>
-
-            <div className="rounded-xl border border-slate-200 bg-white px-2 py-3"><AvanceMos s={s} /></div>
-            {s.mos_respuesta_asegurador && (
-              <div className={`rounded-lg border px-3 py-2 text-sm ${s.mos_respuesta_asegurador === 'aprobado' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-800'}`}>
-                <b>Respuesta del asegurador: {s.mos_respuesta_asegurador === 'aprobado' ? 'aprobado' : 'rechazado'}</b> · {fechaHora(s.mos_respuesta_en)}
-                {s.mos_respuesta_obs && <div className="mt-0.5">{s.mos_respuesta_obs}</div>}
-              </div>
-            )}
-
-            <div className="grid gap-3 md:grid-cols-2">
-              <Grupo color="orden" icono={Stethoscope} titulo="Paciente y cirugía">
-                <Dato etiqueta="Paciente" valor={`${s.nombre_paciente ?? '—'} · ${s.documento_paciente}`} ancho />
-                <Dato etiqueta="Procedimiento" valor={s.procedimiento} ancho />
-                <Dato etiqueta="EPS / Contrato" valor={[s.eps_gomedisys || s.eps?.nombre, s.plan_gomedisys].filter(Boolean).join(' · ')} />
-                <Dato etiqueta="Programación" valor={s.fecha_programada ? `${s.fecha_programada} ${s.hora_programada?.slice(0, 5) ?? ''}` : null} />
-              </Grupo>
-              <Grupo color="paciente" icono={Building2} titulo="Asegurador notificado">
-                <Dato etiqueta="Asegurador" valor={alAsegurador?.asegurador_nombre ?? s.aseguradores?.nombre} />
-                <Dato etiqueta="Persona de contacto" valor={alAsegurador?.asegurador_contacto} />
-                <Dato etiqueta="Teléfono" valor={alAsegurador?.asegurador_telefono} />
-                <Dato etiqueta="Correo" valor={alAsegurador?.destinatario && <span className="break-all">{alAsegurador.destinatario}</span>} />
-              </Grupo>
+          )}
+          {s.mos_respuesta_asegurador && (
+            <div className={`rounded-lg border px-3 py-2 text-sm ${s.mos_respuesta_asegurador === 'aprobado' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-800'}`}>
+              <b>Respuesta del asegurador: {s.mos_respuesta_asegurador === 'aprobado' ? 'aprobado' : 'rechazado'}</b> · {fechaHora(s.mos_respuesta_en)}
+              {s.mos_respuesta_obs && <div className="mt-0.5">{s.mos_respuesta_obs}</div>}
             </div>
+          )}
 
-            <Grupo color="boleta" icono={ClipboardList} titulo={`Material de osteosíntesis · ${registros.length} registros · ${unidades} unidades`}>
-              <div className="col-span-2">
-                {registros.length ? <TablaRegistros registros={registros} /> : <p className="text-sm text-slate-400">Sin ítems registrados.</p>}
-              </div>
-              <Dato etiqueta="Boleta (GoMedisys)" valor={s.boleta_quirurgica} ancho />
+          <div className="grid gap-3 md:grid-cols-2">
+            <Grupo color="orden" icono={Stethoscope} titulo="Paciente y cirugía">
+              <Dato etiqueta="Paciente" valor={`${s.nombre_paciente ?? '—'} · ${s.documento_paciente}`} ancho />
+              <Dato etiqueta="Procedimiento" valor={s.procedimiento} ancho />
+              <Dato etiqueta="EPS / Contrato" valor={[s.eps_gomedisys || s.eps?.nombre, s.plan_gomedisys].filter(Boolean).join(' · ')} />
+              <Dato etiqueta="Programación" valor={s.fecha_programada ? `${s.fecha_programada} ${s.hora_programada?.slice(0, 5) ?? ''}` : null} />
             </Grupo>
-
-            <Grupo color="gestion" icono={History} titulo="Correos enviados (evidencia)">
-              <div className="col-span-2">
-                {correos.length === 0 ? <p className="text-sm text-slate-400">Sin correos registrados.</p> : (
-                  <ul className="space-y-1.5">
-                    {correos.map((c) => (
-                      <li key={c.id}>
-                        <button onClick={() => setEvidencia(c)} className="flex w-full items-center gap-2 rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-left text-xs hover:bg-emerald-50">
-                          {c.paso === 'notificacion_proveedor' ? <Truck size={14} className="shrink-0 text-teal-600" /> : <MailCheck size={14} className="shrink-0 text-emerald-600" />}
-                          <span className="min-w-0 flex-1">
-                            <span className="block font-medium text-slate-700">
-                              {c.paso === 'notificacion_proveedor' ? 'Solicitud al proveedor' : 'Notificación al asegurador'} · {destinoCorreo(c)}
-                              {c.paso === 'notificacion_proveedor' ? ` · ${c.items.length} ítem(s)` : ` · ${c.adjuntos.length} adjuntos`}
-                            </span>
-                            <span className="block truncate text-slate-400">{fechaHora(c.enviado_en)} · {c.destinatario} · {c.enviado_por_nombre ?? '—'}</span>
-                          </span>
-                          <Eye size={14} className="text-slate-400" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+            <Grupo color="paciente" icono={Building2} titulo="Asegurador notificado">
+              <Dato etiqueta="Asegurador" valor={alAsegurador?.asegurador_nombre ?? s.aseguradores?.nombre} />
+              <Dato etiqueta="Persona de contacto" valor={alAsegurador?.asegurador_contacto} />
+              <Dato etiqueta="Teléfono" valor={alAsegurador?.asegurador_telefono} />
+              <Dato etiqueta="Correo" valor={alAsegurador?.destinatario && <span className="break-all">{alAsegurador.destinatario}</span>} />
             </Grupo>
           </div>
-        )}
-      </Modal>
-      {evidencia && <ModalEvidencia correo={evidencia} onCerrar={() => setEvidencia(null)} />}
-    </>
-  )
-}
 
-// --- Evidencia: copia guardada del correo enviado (asegurador o proveedor) ---
-function ModalEvidencia({ correo, onCerrar }: { correo: Correo; onCerrar: () => void }) {
-  const [abriendo, setAbriendo] = useState('')
-  const aProveedor = correo.paso === 'notificacion_proveedor'
+          <Grupo color="boleta" icono={ClipboardList} titulo={`Material de osteosíntesis · ${registros.length} registros · ${recibidas} de ${unidades} unidades recibidas`}>
+            <div className="col-span-2">
+              {registros.length ? <TablaRegistros registros={registros} /> : <p className="text-sm text-slate-400">Sin ítems registrados.</p>}
+            </div>
+            <Dato etiqueta="Boleta (GoMedisys)" valor={s.boleta_quirurgica} ancho />
+          </Grupo>
 
-  async function abrirAdjunto(path: string) {
-    setAbriendo(path)
-    const { data, error } = await supabase.storage.from('mos').createSignedUrl(path, 300)
-    setAbriendo('')
-    if (error || !data) { alert(error?.message ?? 'No se pudo abrir el archivo'); return }
-    window.open(data.signedUrl, '_blank', 'noopener')
-  }
-
-  return (
-    <Modal open onClose={onCerrar} titulo={aProveedor ? 'Evidencia del correo al proveedor' : 'Evidencia del correo al asegurador'} ancho="max-w-4xl">
-      <div className="mb-3 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-        <CheckCircle2 size={16} /> Enviado el {fechaHora(correo.enviado_en)} por {correo.enviado_por_nombre ?? '—'}.
-      </div>
-      <div className="mb-3 grid gap-x-4 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 sm:grid-cols-2">
-        <div><span className="font-semibold">De:</span> {correo.remitente}</div>
-        <div><span className="font-semibold">Para:</span> {correo.destinatario}</div>
-        {aProveedor ? (<>
-          <div><span className="font-semibold">Proveedor:</span> {correo.proveedor_nombre}{correo.proveedor_nit && ` · NIT ${correo.proveedor_nit}`}</div>
-          <div><span className="font-semibold">Contacto:</span> {[correo.proveedor_contacto, correo.proveedor_telefono].filter(Boolean).join(' · ') || '—'}</div>
-        </>) : (<>
-          <div><span className="font-semibold">Asegurador:</span> {correo.asegurador_nombre}{correo.asegurador_contacto && ` · ${correo.asegurador_contacto}`}</div>
-          <div><span className="font-semibold">Teléfono:</span> {correo.asegurador_telefono ?? '—'}</div>
-        </>)}
-        <div className="sm:col-span-2"><span className="font-semibold">Asunto:</span> {correo.asunto}</div>
-        {correo.adjuntos.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 sm:col-span-2"><span className="font-semibold">Adjuntos:</span>
-            {correo.adjuntos.map((a) => (
-              <button key={a.path} onClick={() => abrirAdjunto(a.path)} className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-1.5 py-0.5 hover:border-[#0D2D6B] hover:text-[#0D2D6B]">
-                {abriendo === a.path ? <Spinner className="h-3 w-3" /> : <FileText size={12} className="text-red-500" />} {a.nombre} ({tamano(a.bytes)})
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      <iframe title="Correo enviado" srcDoc={correo.html} className="h-[55vh] w-full rounded-lg border border-slate-200 bg-white" sandbox="" />
+          <Grupo color="gestion" icono={History} titulo="Evidencias (correos y actas de recibo)">
+            <div className="col-span-2"><ListaEvidencias solicitudId={solicitudId} /></div>
+          </Grupo>
+        </div>
+      )}
     </Modal>
   )
 }

@@ -1140,3 +1140,39 @@ Se requiere construir una app que permita
 				  asegurador_rechazado, proveedor_notificado, proveedor_confirmado,
 				  material_recibido. Reenviar al asegurador reinicia su respuesta.
 			17.4.- Migraciones: 0024_mos_proveedores.sql, 0025_mos_hitos_avance.sql
+
+		18.- MOS · Recepción en Esterilización, bloqueos y filtros (2026-10-23)
+			18.1.- Recepción de materiales (rol 'esterilizacion', módulo 'esterilizacion')
+				- Página "Recepción de materiales": pacientes con proveedor notificado
+				  (Pendientes de recibir / Recibidos / Todos), avance por unidades.
+				- Recibo por remisión: proveedor, n.º y fecha de remisión, entregado
+				  por, cantidad recibida por ítem (entera, hasta lo pendiente),
+				  observaciones y datos de quien recibe (nombre, correo, fecha/hora).
+				  Vista previa del acta antes de confirmar.
+				- Edge Function registrar-recepcion: guarda el acta HTML en
+				  mos_recepciones (evidencia), acumula mos_items.cantidad_entregada y
+				  su estado (entregado / entregado_parcial). Si queda todo recibido:
+				  estado_mos = 'material_recibido' (fin del proceso MOS) y correo a
+				  Programación (programadores activos; si no hay, administradores),
+				  guardado en mos_correos ('notificacion_programacion'). Si no:
+				  'material_parcial'. La llegada marca el hito 4 si no estaba.
+				- Sin acceso al Dashboard, el rol entra directo a su módulo (App.tsx).
+			18.2.- Bloqueos
+				- La notificación al asegurador y la del proveedor no se modifican ni
+				  se reenvían (Edge Functions responden 409; la UI solo muestra la
+				  evidencia). Si un correo a proveedor falla, se reintenta solo lo
+				  pendiente; la solicitud queda bloqueada cuando todos salieron.
+				- La respuesta del asegurador y la confirmación del proveedor se
+				  bloquean al avanzar (mos_registrar_respuesta /
+				  mos_registrar_confirmacion_proveedor).
+			18.3.- Evidencias siempre visibles (components/EvidenciasMos.tsx)
+				Línea de tiempo con correos (asegurador, proveedores, Programación) y
+				actas de recibo, con imprimir y adjuntos, en Gestión MOS, en el
+				detalle de Gestión de solicitudes y en Recepción de materiales.
+			18.4.- Filtro por etapa MOS (lib/filtrosMos.ts) en las tres vistas
+				1. Sin gestión (con boleta) · 2. Notificados al asegurador
+				(pendientes / aprobados / rechazados) · 3. Notificados al proveedor
+				(pendientes de respuesta / aceptados) · 4. Material en Esterilización
+				(parcial / recibido) · 5. Programación notificada.
+			18.5.- Migraciones: 0026 (rol, recepciones), 0027 (confirmación del
+				proveedor, bloqueo de respuesta), 0028 (lectura de evidencias).

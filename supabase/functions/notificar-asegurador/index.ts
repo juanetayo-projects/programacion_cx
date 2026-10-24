@@ -62,6 +62,8 @@ Deno.serve(async (req) => {
     .eq('id', solicitudId).single()
   if (!solicitud) return json(404, { error: 'Solicitud no encontrada' })
   if (!String(solicitud.boleta_quirurgica ?? '').trim()) return json(400, { error: 'La solicitud no tiene boleta quirúrgica' })
+  // Una vez enviada, la notificación al asegurador no se modifica ni se reenvía
+  if (solicitud.estado_mos) return json(409, { error: 'El asegurador ya fue notificado; la notificación no se puede modificar ni reenviar' })
 
   const { data: asegurador } = await admin.from('aseguradores').select('*').eq('id', aseguradorId).single()
   if (!asegurador || !asegurador.activo) return json(404, { error: 'Asegurador no encontrado o inactivo' })
@@ -146,17 +148,10 @@ Deno.serve(async (req) => {
     mos_asegurador_id: asegurador.id,
     mos_notificado_en: enviadoEn,
     mos_notificado_por: user.id,
-    // Una nueva notificación espera una nueva respuesta del asegurador
-    mos_respuesta_asegurador: null,
-    mos_respuesta_en: null,
-    mos_respuesta_obs: null,
-    mos_respuesta_por: null,
   }).eq('id', solicitud.id)
 
   // Cada ítem queda como registro independiente (mos_items) para gestionar
-  // luego su entrega. Los pendientes de una notificación anterior se reemplazan.
-  await admin.from('mos_items').update({ estado: 'reemplazado' })
-    .eq('solicitud_id', solicitud.id).eq('estado', 'pendiente_entrega')
+  // luego su entrega.
   const { error: errItems } = await admin.from('mos_items').insert(items.map((i, n) => ({
     solicitud_id: solicitud.id,
     correo_id: correo?.id ?? null,

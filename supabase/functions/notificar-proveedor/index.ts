@@ -50,15 +50,23 @@ Deno.serve(async (req) => {
     .select('*, aseguradores(nombre)').eq('id', solicitudId).single()
   if (!solicitud) return json(404, { error: 'Solicitud no encontrada' })
   if (!solicitud.estado_mos) return json(400, { error: 'Primero se debe notificar al asegurador (paso 1)' })
+  // Una vez enviada, la notificación al proveedor no se modifica ni se reenvía
+  if (solicitud.mos_proveedor_notificado_en) {
+    return json(409, { error: 'Los proveedores ya fueron notificados; la notificación no se puede modificar ni reenviar' })
+  }
   if (solicitud.mos_respuesta_asegurador !== 'aprobado') {
     return json(400, { error: 'Primero registre la aprobación del asegurador para solicitar el material al proveedor' })
   }
 
   const { data: items } = await admin.from('mos_items').select('*').eq('solicitud_id', solicitud.id).order('orden')
-  const activos = (items ?? []).filter((i) => !ESTADOS_INACTIVOS.includes(i.estado))
-  if (!activos.length) return json(400, { error: 'La solicitud no tiene ítems de material registrados' })
+  const vigentes = (items ?? []).filter((i) => !ESTADOS_INACTIVOS.includes(i.estado))
+  if (!vigentes.length) return json(400, { error: 'La solicitud no tiene ítems de material registrados' })
+  // Solo se envían los ítems aún no solicitados: si un envío anterior falló para
+  // algún proveedor, el reintento no duplica los correos que sí salieron.
+  const activos = vigentes.filter((i) => !i.proveedor_notificado_en)
+  if (!activos.length) return json(409, { error: 'Todos los ítems ya fueron solicitados a sus proveedores' })
 
-  // Todos los ítems vigentes deben tener proveedor y fecha estimada válida
+  // Todos los ítems por solicitar deben tener proveedor y fecha estimada válida
   const porItem = new Map(asignaciones.map((a) => [Number(a.itemId), a]))
   for (const i of activos) {
     const a = porItem.get(i.id)
@@ -155,12 +163,15 @@ Deno.serve(async (req) => {
   }
 
   if (enviados.length) {
-    const ahora = new Date().toISOString()
+    // La solicitud queda "proveedor notificado" (y bloqueada) solo cuando todos
+    // los proveedores recibieron su correo; si alguno falló se puede reintentar.
     const todos = enviados.length === ids.length
-    await admin.from('solicitudes_cirugia').update({
-      ...(todos ? { estado_mos: 'proveedor_notificado' } : {}),
-      mos_proveedor_notificado_en: ahora,
-    }).eq('id', solicitud.id)
+    if (todos) {
+      await admin.from('solicitudes_cirugia').update({
+        estado_mos: 'proveedor_notificado',
+        mos_proveedor_notificado_en: new Date().toISOString(),
+      }).eq('id', solicitud.id)
+    }
     await admin.from('solicitudes_historial').insert({
       solicitud_id: solicitud.id,
       accion: 'mos_proveedor_notificado',
