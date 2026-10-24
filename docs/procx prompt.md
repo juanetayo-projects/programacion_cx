@@ -1353,3 +1353,6 @@ Se requiere construir una app que permita
 			cirugías hoy, por iniciar, en curso y realizadas hoy (clic al detalle), y
 			la lista de próximas cirugías. Usa todas las solicitudes, no los filtros.
 			Componente: src/components/dashboard/HeroQuirofano.tsx.
+			Versión previa guardada en la etiqueta git "dashboard-sin-hero" (commit
+			de01b94). Para revertir solo la card: git revert 4e6bc8c (quita el
+			componente, la imagen y la línea del Dashboard sin tocar lo posterior).
