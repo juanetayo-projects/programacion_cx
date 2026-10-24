@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { X } from 'lucide-react'
 
@@ -103,7 +103,7 @@ export function TarjetaFase({ numero, titulo, subtitulo, icono: Icono, color, ch
   numero?: number; titulo: string; subtitulo?: string; icono: LucideIcon; color: string; children: ReactNode; className?: string
 }) {
   return (
-    <section className={`neu-card overflow-hidden ${className}`}>
+    <section className={`neu-card mc-subir overflow-hidden ${className}`}>
       <header className="flex items-center gap-3 border-b border-slate-200 px-4 py-2.5" style={{ background: `linear-gradient(90deg, ${color}1F, transparent)` }}>
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white shadow" style={{ background: color }}>
           <Icono size={18} />
@@ -128,10 +128,32 @@ export function MiniKpi({ etiqueta, valor, ayuda, color = '#0D2D6B', icono: Icon
       <span className="flex items-center gap-1 truncate text-[10px] font-semibold uppercase tracking-wide text-slate-500">
         {Icono && <Icono size={11} style={{ color }} />} {etiqueta}
       </span>
-      <span className="text-xl font-bold tabular-nums" style={{ color }}>{valor}</span>
+      <span className="text-xl font-bold tabular-nums" style={{ color }}>{typeof valor === 'number' ? <NumeroAnimado valor={valor} /> : valor}</span>
       {ayuda && <span className="truncate text-[10px] text-slate-400">{ayuda}</span>}
     </button>
   )
+}
+
+/** Número que cuenta hasta su valor (≈0.7 s, ease-out); sin animación si el usuario la redujo */
+export function NumeroAnimado({ valor, duracion = 700 }: { valor: number; duracion?: number }) {
+  const [mostrado, setMostrado] = useState(valor)
+  const previo = useRef(0)
+  useEffect(() => {
+    const reducir = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    const desde = previo.current
+    previo.current = valor
+    if (reducir || desde === valor) { setMostrado(valor); return }
+    let raf = 0
+    const t0 = performance.now()
+    const paso = (t: number) => {
+      const p = Math.min(1, (t - t0) / duracion)
+      setMostrado(Math.round(desde + (valor - desde) * (1 - Math.pow(1 - p, 3))))
+      if (p < 1) raf = requestAnimationFrame(paso)
+    }
+    raf = requestAnimationFrame(paso)
+    return () => cancelAnimationFrame(raf)
+  }, [valor, duracion])
+  return <>{mostrado}</>
 }
 
 /** Estilo oscuro para los tooltips de Recharts (patrón del skill) */

@@ -1300,3 +1300,23 @@ Se requiere construir una app que permita
 			esquema no expuesto respaldo_20261024 (copia de las tablas y del listado
 			de archivos). La función temporal limpiar-storage-pruebas quedó
 			desactivada (410).
+
+		24.- Ajustes de usuarios, menú y Dashboard (2026-10-24)
+			24.1.- Usuarios: edición de nombre, correo (también en Auth), rol y
+				especialidad; el formulario valida el correo y muestra el motivo real
+				de los errores de la función admin-usuarios.
+			24.2.- Se oculta "Reportar cirugía" (reporte individual): el ingreso es solo
+				por la Consulta masiva GoMedisys, exclusiva de administrador y
+				programación de cirugía (migración 0032). El médico cirujano ve
+				Dashboard, Cirugías realizadas y Mapa de quirófanos (migración 0033).
+			24.3.- Dashboard · Mapa de calor con cuatro vistas y clic al detalle:
+				- Ocupación de quirófanos: quirófano × franja 06–21, % del tiempo
+				  ocupado (duración real del cierre o tiempo estimado, 60 min por defecto).
+				- Programadas / realizadas: día de la semana × hora de inicio.
+				- Actividad por fase: fase × semana (últimas 12).
+				- Pendientes por antigüedad: autorización, asegurador, proveedor,
+				  material, cobro, cierre y postQx por días de espera (cuellos de botella).
+			24.4.- Movimiento: entrada escalonada de celdas y tarjetas, pulso en los picos,
+				botón "Reproducir" (barrido columna por columna), interruptor
+				"Movimiento" (preferencia por usuario) y contadores animados en los KPI.
+				Respeta prefers-reduced-motion.

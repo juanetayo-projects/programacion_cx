@@ -3,7 +3,7 @@
 Aplicación para la gestión del ciclo completo de una cirugía, desde la
 consulta en GoMedisys hasta el seguimiento postquirúrgico:
 
-1. **GoMedisys** — reporte individual o consulta masiva de cirugías programadas.
+1. **GoMedisys** — consulta masiva de cirugías programadas (administrador y programación).
 2. **Gestión Programación Cx** — validación, programación en quirófano,
    notificación al paciente, cierre de la cirugía realizada.
 3. **Gestión clínica** — **autorización del asegurador** (requisito para todo
@@ -11,7 +11,8 @@ consulta en GoMedisys hasta el seguimiento postquirúrgico:
 4. **Gestión MOS** — materiales de osteosíntesis: asegurador → proveedores.
 5. **Esterilización** — recepción del material por remisión y acta.
 6. **Gestión postquirúrgica** — controles, citas y recordatorios por WhatsApp.
-7. **Dashboard** — indicadores por fase con detalle al clic.
+7. **Dashboard** — indicadores por fase, mapa de calor (ocupación de quirófanos,
+   agenda, actividad y pendientes por fase) y animaciones, con detalle al clic.
 
 ## Stack
 
@@ -27,7 +28,8 @@ src/
 │                  AvanceMos.tsx (5 hitos MOS), Autorizacion.tsx (autorización del asegurador),
 │                  CierreCirugia.tsx (registro de cirugía realizada), NotasSeguimiento.tsx,
 │                  RecordatorioCita.tsx (WhatsApp), EvidenciasMos.tsx, IndicadoresSeguimiento.tsx,
-│                  FiltroEtapaMos.tsx, dashboard/Graficos.tsx (gauges, anillos, popover al clic)
+│                  FiltroEtapaMos.tsx, dashboard/Graficos.tsx (gauges, anillos, popover al clic),
+│                  dashboard/MapaCalor.tsx (mapa de calor multivista con movimiento)
 ├── lib/           supabase.ts, auth.tsx, constantes.ts, autorizacion.ts, filtrosMos.ts,
 │                  mensajesNotificacion.ts, mensajesSeguimiento.ts, gomedisys.ts
 ├── pages/         Dashboard, ReportarCirugia, ConsultaMasiva, Solicitudes (Gestión Programación Cx),
@@ -36,7 +38,7 @@ src/
 sql/               consultas T-SQL de GoMedisys
 scripts/gomedisys/ runner de las consultas (GitHub Actions)
 supabase/
-├── migrations/    0001-0031 (esquema, RLS, MOS, recepción, notas, autorización…)
+├── migrations/    0001-0033 (esquema, RLS, MOS, recepción, notas, autorización…)
 └── functions/     admin-usuarios, consulta-gomedisys, notificar-paciente,
                    notificar-asegurador, notificar-proveedor, registrar-recepcion
 docs/

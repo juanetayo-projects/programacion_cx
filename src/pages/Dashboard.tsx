@@ -11,10 +11,11 @@ import {
 import { ESTADOS, ESTADOS_LABEL, ESTADOS_MOS_LABEL, type Estado, type EstadoMos } from '../lib/constantes'
 import { ESTADOS_AUT, estadoAutorizacion, autorizacionVigente, diasVigencia, type CamposAutorizacion, type EstadoAutEfectivo } from '../lib/autorizacion'
 import { faltantesCierre, type CamposCierre } from '../components/CierreCirugia'
+import MapaCalor from '../components/dashboard/MapaCalor'
 import {
   DatabaseZap, ClipboardList, ShieldCheck, CalendarClock, Bone, HeartPulse, PackageCheck, Stethoscope, CalendarCheck,
   Activity, Timer, AlertTriangle, Eraser, Hospital, Ambulance, Users, Receipt, Truck, BellRing, ClipboardX, ShieldAlert,
-  ChevronLeft, ChevronRight, Siren, TrendingUp, Workflow,
+  ChevronLeft, ChevronRight, Siren, TrendingUp, Workflow, Flame,
 } from 'lucide-react'
 
 // Dashboard de gestión quirúrgica por fases del proceso:
@@ -630,6 +631,12 @@ export default function Dashboard() {
           </div>
         </TarjetaFase>
       </div>
+
+      {/* Mapa de calor: ocupación, agenda, actividad y pendientes por fase */}
+      <TarjetaFase titulo="Mapa de calor" subtitulo="Ocupación de quirófanos, cirugías programadas/realizadas y comportamiento de cada fase" icono={Flame} color="#E8590C">
+        <MapaCalor solicitudes={F} items={It} notas={N} recepciones={R} sinCierre={sinCierre} colores={FASE}
+          onAbrir={(titulo, lista, e) => abrir(titulo, lista)(e)} />
+      </TarjetaFase>
 
       {/* Alertas combinadas */}
       <TarjetaFase titulo="Alertas de gestión" subtitulo="Situaciones que bloquean o retrasan el proceso · clic para ver los pacientes" icono={AlertTriangle} color="#E11D48">
