@@ -39,6 +39,7 @@ type Solicitud = SolicitudMos & CamposAvanceMos & CamposAutorizacion & {
   estado_mos: Exclude<EstadoMos, 'pendiente'> | null
   mos_notificado_en: string | null
   mos_asegurador_id: number | null
+  contrato_id: number | null
   mos_respuesta_obs: string | null
   mos_proveedor_confirmado_obs: string | null
   mos_programacion_notificada_en: string | null
@@ -527,7 +528,9 @@ function PanelGestion({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () =
   const filaVacia = (): FilaItem => ({ cantidad: '1', descripcion: '' })
 
   const [aseguradores, setAseguradores] = useState<Asegurador[]>([])
-  const [aseguradorId, setAseguradorId] = useState(s.mos_asegurador_id ? String(s.mos_asegurador_id) : '')
+  // Por defecto, el contrato que Gestión clínica registró para el paciente
+  const sugerido = s.mos_asegurador_id ?? s.contrato_id
+  const [aseguradorId, setAseguradorId] = useState(sugerido ? String(sugerido) : '')
   const [filasItems, setFilasItems] = useState<FilaItem[]>(() => [filaVacia()])
   const [archivos, setArchivos] = useState<Record<TipoAdjunto, File | null>>({ historia_clinica: null, boleta: null })
   const [observaciones, setObservaciones] = useState('')
@@ -669,6 +672,12 @@ function PanelGestion({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () =
             <option value="">Seleccione el asegurador…</option>
             {aseguradores.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
           </select>
+          {!s.mos_asegurador_id && s.contrato_id && String(s.contrato_id) === aseguradorId && (
+            <p className="mt-1 text-[11px] text-sky-700">Sugerido: contrato registrado por Gestión clínica.</p>
+          )}
+          {asegurador && !correoValido && (
+            <p className="mt-1 text-[11px] text-amber-700">Este asegurador no tiene correo de contacto: regístrelo en Administración → Catálogos → Aseguradores / contratos.</p>
+          )}
         </div>
         {asegurador && (<>
           <Dato etiqueta="Nombre asegurador" valor={asegurador.nombre} />

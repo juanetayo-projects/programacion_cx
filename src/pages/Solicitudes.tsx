@@ -14,6 +14,7 @@ import {
   cargarResumenSeguimiento, type ResumenNota, type ResumenItem,
 } from '../components/IndicadoresSeguimiento'
 import { AvanceMos, AvanceMosCompacto } from '../components/AvanceMos'
+import { useCatalogosGC } from '../components/EstadoGestionClinica'
 import FiltroEtapaMos from '../components/FiltroEtapaMos'
 import { filtrarPorEtapaMos } from '../lib/filtrosMos'
 import {
@@ -41,6 +42,7 @@ type Solicitud = CamposAutorizacion & {
   nombre_paciente: string | null
   edad: number | null
   cama: string | null
+  estado_gc_id: number | null
   procedimiento: string | null
   valoracion_preanestesica: string | null
   boleta_quirurgica: string | null
@@ -130,6 +132,7 @@ const hoyISO = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toI
 
 export default function Solicitudes() {
   const { session, perfil } = useAuth()
+  const catGC = useCatalogosGC()
   const [filas, setFilas] = useState<Solicitud[]>([])
   const [cargando, setCargando] = useState(true)
   const [exportando, setExportando] = useState(false)
@@ -612,7 +615,7 @@ export default function Solicitudes() {
                         {f.estado_mos && <AvanceMosCompacto s={f} onClick={() => setDetalleMos(f.id)} />}
                         <IndicadorEsterilizacion items={itemsDe(f.id)} actas={resumen.actas[f.id] ?? 0}
                           onClick={() => setSeguimiento({ id: f.id, tipo: 'esterilizacion', titulo: f.nombre_paciente ?? f.documento_paciente })} />
-                        <IndicadorClinico notas={notasDe(f.id)} items={itemsDe(f.id)}
+                        <IndicadorClinico notas={notasDe(f.id)} items={itemsDe(f.id)} estado={catGC?.estados.find((e) => e.id === f.estado_gc_id)}
                           onClick={() => setSeguimiento({ id: f.id, tipo: 'clinica', titulo: f.nombre_paciente ?? f.documento_paciente })} />
                         <IndicadorPostquirurgico notas={notasDe(f.id)}
                           sinCierre={ESTADOS_PROGRAMADOS.includes(f.estado) && !!f.fecha_programada && f.fecha_programada < hoyISO}

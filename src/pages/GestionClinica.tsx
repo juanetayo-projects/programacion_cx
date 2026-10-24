@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { TituloEnHeader, CampoLinea, CLASE_CAMPO, Boton, Badge, EstadoVacio, Spinner, Modal } from '../components/ui'
 import { PanelLateral, Grupo, Dato } from '../components/PanelLateral'
-import { AvanceMos, AvanceMosCompacto, type CamposAvanceMos } from '../components/AvanceMos'
+import { AvanceMos, type CamposAvanceMos } from '../components/AvanceMos'
 import { ListaEvidencias } from '../components/EvidenciasMos'
 import NotasSeguimiento, { fechaHora } from '../components/NotasSeguimiento'
 import FiltroEtapaMos from '../components/FiltroEtapaMos'
@@ -12,8 +12,10 @@ import type { RegistroItem } from './Mos'
 import { ESTADOS_LABEL, ESTADOS_COLOR, ESTADOS_MOS_LABEL, ESTADOS_MOS_COLOR, type Estado, type EstadoMos } from '../lib/constantes'
 import { IndicadorAutorizacion, PanelAutorizacion } from '../components/Autorizacion'
 import { ESTADOS_AUT, estadoAutorizacion, diasVigencia, type CamposAutorizacion, type EstadoAutEfectivo } from '../lib/autorizacion'
+import { PanelEstadoGC, InsigniaEstadoGC, useCatalogosGC } from '../components/EstadoGestionClinica'
+import { separarProcedimientos } from '../lib/cups'
 import {
-  Stethoscope, Search, Eraser, Eye, UserRound, ClipboardList, Receipt, History, StickyNote, Save, Bone, CalendarClock, ShieldCheck,
+  Stethoscope, Search, Eraser, Eye, UserRound, ClipboardList, Receipt, History, StickyNote, Save, Bone, CalendarClock, ShieldCheck, ClipboardCheck,
 } from 'lucide-react'
 
 // Gestión clínica: el gestor clínico gestiona la AUTORIZACIÓN del asegurador
@@ -53,6 +55,18 @@ type Solicitud = CamposAvanceMos & CamposFiltroMos & CamposAutorizacion & {
   eps: { nombre: string } | null
   quirofanos: { nombre: string } | null
   aseguradores: { nombre: string } | null
+  unidades: { nombre: string } | null
+  cama: string | null
+  fecha_reporte: string
+  destino: string | null
+  fecha_ingreso: string | null
+  fecha_ordenamiento: string | null
+  autorizacion_numero: string | null
+  estado_gc_id: number | null
+  estado_gc_observacion: string | null
+  contrato_id: number | null
+  plan_paciente_id: number | null
+  tipo_afiliado_id: number | null
 }
 
 type ItemClinico = RegistroItem & {
@@ -63,6 +77,20 @@ type ItemClinico = RegistroItem & {
 }
 
 const codigo = (id: number) => `SC-${String(id).padStart(6, '0')}`
+const DIA = 86400000
+// Orden de la planilla del área de Gestión clínica
+const COLUMNAS = ['Destino', 'Nombre e identificación', 'Admisión', 'Ubicación', 'Fecha de ingreso', 'Contrato', 'Tipo afiliado', 'Plan',
+  'Procedimiento', 'Códigos CUPS', 'Observación de gestión', 'Fecha de ordenamiento', 'N.º autorización', 'Quién reporta',
+  'Fecha reporte', 'Días', 'Estado', '']
+const fechaCorta = (v: string | null) => (v ? new Date(v.length === 10 ? `${v}T12:00` : v).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—')
+const fechaHoraCorta = (v: string | null) => (v ? new Date(v).toLocaleString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '—')
+/** Días entre la fecha de ordenamiento y la fecha del reporte */
+function diasOrdenReporte(s: { fecha_ordenamiento: string | null; fecha_reporte: string }) {
+  if (!s.fecha_ordenamiento) return null
+  const orden = new Date(`${s.fecha_ordenamiento}T00:00`).getTime()
+  const reporte = new Date(new Date(s.fecha_reporte).toDateString()).getTime()
+  return Math.round((reporte - orden) / DIA)
+}
 
 function cumpleFiltroAut(s: CamposAutorizacion & { estado: Estado }, f: string) {
   const e = estadoAutorizacion(s)
@@ -83,12 +111,15 @@ export default function GestionClinica() {
   const [filtroCobro, setFiltroCobro] = useState<'' | 'pendiente' | 'completo'>('')
   const [filtroAut, setFiltroAut] = useState<string>('')
   const [busqueda, setBusqueda] = useState('')
+  const [filtroEstadoGC, setFiltroEstadoGC] = useState('')
   const [seleccion, setSeleccion] = useState<Solicitud | null>(null)
+  const cat = useCatalogosGC()
+  const nombreDe = (lista: { id: number; nombre: string }[] | undefined, id: number | null) => (id ? lista?.find((o) => o.id === id)?.nombre ?? null : null)
 
   async function cargar() {
     setCargando(true)
     const { data } = await sb.from('solicitudes_cirugia')
-      .select('*, especialidades(nombre), eps(nombre), quirofanos(nombre), aseguradores!mos_asegurador_id(nombre)')
+      .select('*, especialidades(nombre), eps(nombre), quirofanos(nombre), unidades(nombre), aseguradores!mos_asegurador_id(nombre)')
       .neq('estado', 'cancelado')
       .order('fecha_reporte', { ascending: false })
     const lista = (data ?? []) as Solicitud[]
@@ -117,13 +148,15 @@ export default function GestionClinica() {
     let r = filtroEtapa ? filtrarPorEtapaMos(filas, filtroEtapa) : filas
     if (filtroCobro) r = r.filter((s) => (filtroCobro === 'completo') === cobroCompleto(s.id))
     if (filtroAut) r = r.filter((s) => cumpleFiltroAut(s, filtroAut))
+    if (filtroEstadoGC) r = r.filter((s) => (filtroEstadoGC === 'sin' ? !s.estado_gc_id : String(s.estado_gc_id) === filtroEstadoGC))
     if (busqueda) {
       const b = busqueda.toLowerCase()
-      r = r.filter((s) => [s.documento_paciente, s.numero_ingreso, s.nombre_paciente, s.procedimiento, codigo(s.id)]
+      r = r.filter((s) => [s.documento_paciente, s.numero_ingreso, s.nombre_paciente, s.procedimiento, codigo(s.id),
+        nombreDe(cat?.contratos, s.contrato_id), s.eps_gomedisys, s.autorizacion_numero, s.estado_gc_observacion]
         .some((v) => (v ?? '').toLowerCase().includes(b)))
     }
     return r
-  }, [filas, filtroEtapa, filtroCobro, filtroAut, busqueda, items]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [filas, filtroEtapa, filtroCobro, filtroAut, filtroEstadoGC, busqueda, items, cat]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const pendientesCobro = filas.filter((s) => itemsDe(s.id).length > 0 && !cobroCompleto(s.id)).length
   const pendientesAut = filas.filter((s) => cumpleFiltroAut(s, 'pendientes')).length
@@ -134,6 +167,13 @@ export default function GestionClinica() {
       <TituloEnHeader titulo="Gestión clínica" subtitulo="Autorización del asegurador · consulta del paciente y del proceso MOS · cobro por ítem y notas" />
 
       <div className="neu-card mb-2 flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2">
+        <CampoLinea etiqueta="Estado">
+          <select value={filtroEstadoGC} onChange={(e) => setFiltroEstadoGC(e.target.value)} className={CLASE_CAMPO}>
+            <option value="">Todos</option>
+            <option value="sin">Sin estado ({filas.filter((s) => !s.estado_gc_id).length})</option>
+            {cat?.estados.map((e) => <option key={e.id} value={e.id}>{e.nombre} ({filas.filter((s) => s.estado_gc_id === e.id).length})</option>)}
+          </select>
+        </CampoLinea>
         <CampoLinea etiqueta="Autorización">
           <select value={filtroAut} onChange={(e) => setFiltroAut(e.target.value)} className={CLASE_CAMPO}>
             <option value="">Todas</option>
@@ -154,10 +194,10 @@ export default function GestionClinica() {
         </CampoLinea>
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Paciente, documento, ingreso, procedimiento…" className={`${CLASE_CAMPO} w-72 pl-8`} />
+          <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Paciente, documento, ingreso, contrato, autorización…" className={`${CLASE_CAMPO} w-72 pl-8`} />
         </div>
-        {(filtroEtapa || filtroCobro || filtroAut || busqueda) && (
-          <button title="Limpiar filtros" onClick={() => { setFiltroEtapa(''); setFiltroCobro(''); setFiltroAut(''); setBusqueda('') }} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"><Eraser size={16} /></button>
+        {(filtroEtapa || filtroCobro || filtroAut || filtroEstadoGC || busqueda) && (
+          <button title="Limpiar filtros" onClick={() => { setFiltroEtapa(''); setFiltroCobro(''); setFiltroAut(''); setFiltroEstadoGC(''); setBusqueda('') }} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"><Eraser size={16} /></button>
         )}
         <div className="ml-auto flex items-center gap-2 text-xs">
           <span className="rounded-full border border-sky-300 bg-sky-50 px-3 py-1 font-medium text-sky-700">Cirugías: {filas.length}</span>
@@ -178,60 +218,59 @@ export default function GestionClinica() {
 
       <div className="neu-card flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="min-h-0 flex-1 overflow-auto">
-          <table className="tabla-cac w-full text-sm">
-            <thead className="text-left text-xs font-semibold uppercase text-white">
+          <table className="tabla-cac w-full text-xs">
+            <thead className="text-left text-[10px] font-semibold uppercase text-white">
               <tr>
-                <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">ID</th>
-                <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Paciente</th>
-                <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Cirugía</th>
-                <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Autorización</th>
-                <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Estado MOS</th>
-                <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Cobro de ítems</th>
-                <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5 text-center">Notas</th>
-                <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5 text-right">Acciones</th>
+                {COLUMNAS.map((t, i) => (
+                  <th key={i} className={`sticky top-0 z-10 whitespace-nowrap bg-[#0D2D6B] px-2.5 py-2.5 ${t === 'Días' ? 'text-center' : ''}`}
+                    title={t === 'Días' ? 'Fecha reporte − fecha de ordenamiento' : undefined}>{t}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {cargando ? (
-                <tr><td colSpan={8} className="p-10 text-center"><Spinner className="mx-auto" /></td></tr>
+                <tr><td colSpan={COLUMNAS.length} className="p-10 text-center"><Spinner className="mx-auto" /></td></tr>
               ) : filtradas.length === 0 ? (
-                <tr><td colSpan={8}><EstadoVacio icono={<Stethoscope size={28} />} titulo="Sin pacientes" descripcion="Ajuste los filtros" /></td></tr>
+                <tr><td colSpan={COLUMNAS.length}><EstadoVacio icono={<Stethoscope size={28} />} titulo="Sin pacientes" descripcion="Ajuste los filtros" /></td></tr>
               ) : filtradas.map((s) => {
-                const its = itemsDe(s.id)
-                const conCobro = its.filter((i) => i.cobro_responsable).length
-                const e = (s.estado_mos ?? 'pendiente') as EstadoMos
+                const proc = separarProcedimientos(s.procedimiento)
+                const dias = diasOrdenReporte(s)
+                const contrato = nombreDe(cat?.contratos, s.contrato_id)
                 return (
-                  <tr key={s.id} onClick={() => setSeleccion(s)} className={`cursor-pointer border-t border-slate-100 ${seleccion?.id === s.id ? '!bg-amber-50' : ''}`}>
-                    <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{codigo(s.id)}</td>
-                    <td className="px-4 py-2.5">
+                  <tr key={s.id} onClick={() => setSeleccion(s)} className={`cursor-pointer border-t border-slate-100 align-top ${seleccion?.id === s.id ? '!bg-amber-50' : ''}`}>
+                    <td className="px-2.5 py-2 font-medium text-slate-700">{s.destino ?? '—'}</td>
+                    <td className="min-w-[180px] px-2.5 py-2">
                       <div className="font-medium text-slate-800">{s.nombre_paciente ?? '—'}</div>
-                      <div className="text-xs text-slate-400">Doc: {s.documento_paciente} · {s.eps_gomedisys || s.eps?.nombre || 'Sin EPS'}</div>
+                      <div className="text-[11px] text-slate-500">{s.documento_paciente}</div>
+                      <div className="font-mono text-[10px] text-slate-400">{codigo(s.id)}</div>
                     </td>
-                    <td className="px-4 py-2.5">
-                      <div className="line-clamp-2 max-w-xs">{s.procedimiento ?? '—'}</div>
-                      <div className="text-xs text-slate-400">{s.fecha_programada ? `${s.fecha_programada} ${s.hora_programada?.slice(0, 5) ?? ''}` : 'Sin programar'}</div>
+                    <td className="whitespace-nowrap px-2.5 py-2 font-mono">{s.numero_ingreso}</td>
+                    <td className="whitespace-nowrap px-2.5 py-2">{[s.unidades?.nombre, s.cama].filter(Boolean).join(' · ') || '—'}</td>
+                    <td className="whitespace-nowrap px-2.5 py-2">{fechaHoraCorta(s.fecha_ingreso)}</td>
+                    <td className="min-w-[160px] px-2.5 py-2">
+                      {contrato ? <span className="font-medium">{contrato}</span> : <span className="text-amber-700">Sin definir</span>}
+                      {!contrato && s.eps_gomedisys && <div className="text-[10px] text-slate-400">GoMedisys: {s.eps_gomedisys}</div>}
                     </td>
-                    <td className="px-4 py-2.5">
-                      <Badge className={ESTADOS_COLOR[s.estado]}>{ESTADOS_LABEL[s.estado]}</Badge>
+                    <td className="whitespace-nowrap px-2.5 py-2">{nombreDe(cat?.tipos, s.tipo_afiliado_id) ?? '—'}</td>
+                    <td className="whitespace-nowrap px-2.5 py-2">{nombreDe(cat?.planes, s.plan_paciente_id) ?? '—'}</td>
+                    <td className="min-w-[220px] px-2.5 py-2"><div className="line-clamp-3">{proc.nombres.join(' · ') || '—'}</div></td>
+                    <td className="whitespace-nowrap px-2.5 py-2 font-mono">{proc.codigos.length ? proc.codigos.map((c) => <div key={c}>{c}</div>) : '—'}</td>
+                    <td className="min-w-[200px] px-2.5 py-2"><div className="line-clamp-3 whitespace-pre-wrap text-slate-600">{s.estado_gc_observacion ?? '—'}</div></td>
+                    <td className="whitespace-nowrap px-2.5 py-2">{fechaCorta(s.fecha_ordenamiento)}</td>
+                    <td className="whitespace-nowrap px-2.5 py-2">
+                      <div className="font-mono">{s.autorizacion_numero ?? '—'}</div>
                       <div onClick={(ev) => ev.stopPropagation()}><IndicadorAutorizacion s={s} onClick={() => setSeleccion(s)} /></div>
                     </td>
-                    <td className="px-4 py-2.5">
-                      {s.estado_mos ? (<>
-                        <Badge className={ESTADOS_MOS_COLOR[e]}>{ESTADOS_MOS_LABEL[e]}</Badge>
-                        <div onClick={(ev) => ev.stopPropagation()}><AvanceMosCompacto s={s} onClick={() => setSeleccion(s)} /></div>
-                      </>) : <span className="text-xs text-slate-400">{s.boleta_quirurgica?.trim() ? 'Con boleta · sin gestión MOS' : 'Sin MOS'}</span>}
+                    <td className="min-w-[140px] px-2.5 py-2">{s.nombre_medico_reporta || s.especialista_ordena || '—'}</td>
+                    <td className="whitespace-nowrap px-2.5 py-2">{fechaCorta(s.fecha_reporte)}</td>
+                    <td className="px-2.5 py-2 text-center">
+                      {dias === null ? <span className="text-slate-400">—</span> : (
+                        <span className={`inline-flex min-w-[28px] justify-center rounded-full px-1.5 py-0.5 font-bold ${dias > 30 ? 'bg-red-100 text-red-700' : dias > 15 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'}`}>{dias}</span>
+                      )}
                     </td>
-                    <td className="px-4 py-2.5">
-                      <span className={`text-xs font-semibold ${its.length && conCobro === its.length ? 'text-emerald-700' : 'text-amber-700'}`}>
-                        {its.length ? `${conCobro} de ${its.length} ítems con cobro` : '—'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-center">
-                      <span className={`inline-flex min-w-[28px] justify-center rounded-full px-2 py-0.5 text-xs font-semibold ${notasPorSolicitud[s.id] ? 'bg-[#0D2D6B] text-white' : 'bg-slate-100 text-slate-400'}`}>
-                        {notasPorSolicitud[s.id] ?? 0}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
+                    <td className="whitespace-nowrap px-2.5 py-2"><InsigniaEstadoGC estado={cat?.estados.find((e) => e.id === s.estado_gc_id)} /></td>
+                    <td className="whitespace-nowrap px-2.5 py-2 text-right">
+                      {notasPorSolicitud[s.id] ? <span title="Notas" className="mr-1.5 inline-flex min-w-[20px] justify-center rounded-full bg-[#0D2D6B] px-1.5 text-[10px] font-semibold text-white">{notasPorSolicitud[s.id]}</span> : null}
                       <button title="Abrir gestión clínica" onClick={(ev) => { ev.stopPropagation(); setSeleccion(s) }} className="text-slate-500 hover:text-[#0D2D6B]"><Eye size={15} /></button>
                     </td>
                   </tr>
@@ -275,6 +314,12 @@ function PanelClinico({ s, items, puedeEscribir, onCerrar, onCambio }: {
       </>}
       onCerrar={onCerrar}
     >
+      <Grupo color="gestion" icono={ClipboardCheck} titulo="Estado de la gestión y datos del paciente">
+        <div className="col-span-2">
+          <PanelEstadoGC solicitudId={s.id} puedeEscribir={puedeEscribir} onCambio={onCambio} />
+        </div>
+      </Grupo>
+
       <Grupo color="gestion" icono={ShieldCheck} titulo="Autorización del asegurador (requisito para toda la gestión de la cirugía)">
         <div className="col-span-2">
           <PanelAutorizacion solicitudId={s.id} s={s} puedeEscribir={puedeEscribir} onCambio={onCambio} />

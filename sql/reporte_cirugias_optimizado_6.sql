@@ -180,6 +180,7 @@ SELECT
     up.telecom                                                   AS Telefono1,
     ing.identifier                                               AS NumeroIngreso,
     ing.inferido                                                 AS IngresoInferido,
+    CONVERT(VARCHAR(16), ing.dateStart, 120)                     AS FechaIngreso,
     cs.name                                                      AS ContratoIngresoCirugia,
     cp.name                                                      AS [Plan(Aseguradora)],
     diag.DiagnosticoPreoperatorio,
@@ -216,7 +217,7 @@ LEFT  JOIN #evt                      AS evt  ON evt.idProgramming = p.idProgramm
 
 /* Ingreso: el de la programación → el de la cirugía → el último del paciente */
 OUTER APPLY (
-    SELECT TOP (1) x.idEncounter, x.identifier, x.inferido
+    SELECT TOP (1) x.idEncounter, x.identifier, x.inferido, x.dateStart
     FROM (
         SELECT e1.idEncounter, e1.identifier, 0 AS inferido, 1 AS prioridad, e1.dateStart
         FROM #enc AS e1 WHERE e1.idEncounter = p.idEncounter

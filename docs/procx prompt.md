@@ -1320,3 +1320,30 @@ Se requiere construir una app que permita
 				botón "Reproducir" (barrido columna por columna), interruptor
 				"Movimiento" (preferencia por usuario) y contadores animados en los KPI.
 				Respeta prefers-reduced-motion.
+
+		25.- Gestión clínica según la planilla del área (2026-10-24)
+			25.1.- Estados de la gestión clínica (catálogo editable, con color y "gestión
+				terminada"): TRAMITADO, PDTE AUT, PDTE COT, PDTE VoBo, PDTE LLAMAR,
+				PDTE FORMATO, PDTE LECTURA, REMISION, CITA, DIFERIDO, HALLAZGO QX, P D T E.
+				Cada cambio guarda observación, usuario y fecha en un historial inmutable
+				(RPC registrar_estado_gestion_clinica; solo gestor clínico y administrador).
+			25.2.- Datos del paciente: contrato (catálogo de aseguradores, 38 contratos
+				oficiales), plan (ARL, SOAT, PÓLIZA, PARTICULAR, EVENTO, MEDIANA, ALTA,
+				PREPAGADA, PGP, RETIRADO, SUSPENDIDO, ESPECIAL), tipo de afiliado
+				(cotizante/beneficiario rango A-C, subsidiado nivel 1-3/N/A, contributivo,
+				beneficiario), destino y ubicación (unidad + cama)
+				(RPC registrar_datos_gestion_clinica).
+			25.3.- Desde la consulta masiva se guardan destino (boleta), fecha de ingreso
+				y fecha de ordenamiento de GoMedisys; el contrato se asigna solo si el
+				nombre de GoMedisys coincide exactamente con el catálogo.
+			25.4.- Tabla de Gestión clínica en el orden de la planilla: Destino, Nombre e
+				identificación, Admisión, Ubicación, Fecha de ingreso, Contrato, Tipo
+				afiliado, Plan, Procedimiento, Códigos CUPS (separados del procedimiento
+				de GoMedisys), Observación de gestión (la del último estado), Fecha de
+				ordenamiento, N.º autorización, Quién reporta, Fecha reporte, Días
+				(fecha reporte − fecha de ordenamiento) y Estado; filtro por estado.
+			25.5.- MOS sugiere como asegurador el contrato registrado; Programación Cx
+				muestra el estado en el indicador CLÍNICA y su modal; el Dashboard
+				muestra la distribución por estado con clic al detalle.
+			25.6.- Migraciones 0034-0036. Nota: con dos FK a aseguradores, los embeds
+				usan aseguradores!mos_asegurador_id(nombre).

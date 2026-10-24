@@ -5,9 +5,12 @@ import { CrudTable } from '../../components/CrudTable'
 const TABS = [
   { key: 'especialidades', label: 'Especialidades' },
   { key: 'eps', label: 'EPS' },
-  { key: 'aseguradores', label: 'Aseguradores (MOS)' },
+  { key: 'aseguradores', label: 'Aseguradores / contratos' },
   { key: 'proveedores', label: 'Proveedores (MOS)' },
   { key: 'tipos_seguimiento', label: 'Tipos de seguimiento' },
+  { key: 'estados_gestion_clinica', label: 'Estados gestión clínica' },
+  { key: 'planes_paciente', label: 'Planes' },
+  { key: 'tipos_afiliado', label: 'Tipos de afiliado' },
   { key: 'unidades', label: 'Unidades' },
   { key: 'quirofanos', label: 'Quirófanos' },
   { key: 'recomendaciones_cirugia', label: 'Recomendaciones' },
@@ -20,7 +23,7 @@ export default function Catalogos() {
     <div>
       <PageHeader titulo="Catálogos" subtitulo="Tablas maestras usadas en toda la aplicación" />
 
-      <div className="mb-4 flex gap-2 border-b border-slate-200">
+      <div className="mb-4 flex flex-wrap gap-x-2 border-b border-slate-200">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -93,6 +96,42 @@ export default function Catalogos() {
             { key: 'fase', label: 'Fase', tipo: 'select', opciones: ['prequirurgico', 'posquirurgico', 'general'] },
             { key: 'dias_sugeridos', label: 'Días sugeridos (− antes / + después)', tipo: 'number' },
             { key: 'requiere_cita', label: 'Requiere cita', tipo: 'boolean' },
+            { key: 'activo', label: 'Activo', tipo: 'boolean' },
+          ]}
+        />
+      )}
+      {tab === 'estados_gestion_clinica' && (
+        <CrudTable
+          tabla="estados_gestion_clinica"
+          titulo="Estados de la gestión clínica (en MAYÚSCULAS; color en hexadecimal, p. ej. #10B981)"
+          columnas={[
+            { key: 'orden', label: 'Orden', tipo: 'number' },
+            { key: 'nombre', label: 'Estado', tipo: 'text', requerido: true },
+            { key: 'descripcion', label: 'Descripción', tipo: 'text' },
+            { key: 'color', label: 'Color', tipo: 'text' },
+            { key: 'es_final', label: 'Gestión terminada', tipo: 'boolean' },
+            { key: 'activo', label: 'Activo', tipo: 'boolean' },
+          ]}
+        />
+      )}
+      {tab === 'planes_paciente' && (
+        <CrudTable
+          tabla="planes_paciente"
+          titulo="Planes del paciente (complementario al asegurador)"
+          columnas={[
+            { key: 'orden', label: 'Orden', tipo: 'number' },
+            { key: 'nombre', label: 'Plan', tipo: 'text', requerido: true },
+            { key: 'activo', label: 'Activo', tipo: 'boolean' },
+          ]}
+        />
+      )}
+      {tab === 'tipos_afiliado' && (
+        <CrudTable
+          tabla="tipos_afiliado"
+          titulo="Tipos de afiliado del paciente"
+          columnas={[
+            { key: 'orden', label: 'Orden', tipo: 'number' },
+            { key: 'nombre', label: 'Tipo de afiliado', tipo: 'text', requerido: true },
             { key: 'activo', label: 'Activo', tipo: 'boolean' },
           ]}
         />

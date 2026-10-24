@@ -46,6 +46,8 @@ export type ProgramacionGM = {
   Telefono1: string | null
   NumeroIngreso: number | string | null
   IngresoInferido: number | boolean | null
+  /** yyyy-mm-dd hh:mi — inicio del ingreso */
+  FechaIngreso?: string | null
   ContratoIngresoCirugia: string | null
   'Plan(Aseguradora)': string | null
   DiagnosticoPreoperatorio: string | null
@@ -138,6 +140,13 @@ export function emparejarCatalogo(texto: string | null | undefined, catalogo: { 
 export { normalizar }
 
 const texto = (v: unknown) => (v === null || v === undefined || v === '' ? null : String(v))
+/** dd/MM/yyyy (GoMedisys) o yyyy-MM-dd → yyyy-MM-dd; null si no se reconoce */
+const fechaISO = (v: string | null) => {
+  const t = (v ?? '').trim()
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(t)
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`
+  return /^\d{4}-\d{2}-\d{2}/.test(t) ? t.slice(0, 10) : null
+}
 const entero = (v: unknown) => { const n = Number(v); return v !== null && v !== undefined && v !== '' && Number.isFinite(n) ? Math.round(n) : null }
 
 /** Campos de una programación de GoMedisys tal como se guardan en solicitudes_cirugia */
@@ -156,6 +165,9 @@ export function camposDeProgramacion(p: ProgramacionGM) {
     fecha_programada_gomedisys: p.FechaProgramadaISO ? `${p.FechaProgramadaISO}T${p.HoraProgramada ?? '00:00'}:00` : null,
     estado_gomedisys: texto(p.Estado),
     tipo_orden: texto(p.TipoOrden),
+    destino: texto(p.DestinoBoleta),
+    fecha_ingreso: texto(p.FechaIngreso),
+    fecha_ordenamiento: fechaISO(p.FechaOrdenamiento),
   }
 }
 

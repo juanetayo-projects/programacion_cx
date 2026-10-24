@@ -38,7 +38,7 @@ src/
 sql/               consultas T-SQL de GoMedisys
 scripts/gomedisys/ runner de las consultas (GitHub Actions)
 supabase/
-├── migrations/    0001-0033 (esquema, RLS, MOS, recepción, notas, autorización…)
+├── migrations/    0001-0036 (esquema, RLS, MOS, recepción, notas, autorización…)
 └── functions/     admin-usuarios, consulta-gomedisys, notificar-paciente,
                    notificar-asegurador, notificar-proveedor, registrar-recepcion
 docs/

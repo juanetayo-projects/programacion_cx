@@ -12,6 +12,7 @@ import { ESTADOS, ESTADOS_LABEL, ESTADOS_MOS_LABEL, type Estado, type EstadoMos 
 import { ESTADOS_AUT, estadoAutorizacion, autorizacionVigente, diasVigencia, type CamposAutorizacion, type EstadoAutEfectivo } from '../lib/autorizacion'
 import { faltantesCierre, type CamposCierre } from '../components/CierreCirugia'
 import MapaCalor from '../components/dashboard/MapaCalor'
+import { useCatalogosGC } from '../components/EstadoGestionClinica'
 import {
   DatabaseZap, ClipboardList, ShieldCheck, CalendarClock, Bone, HeartPulse, PackageCheck, Stethoscope, CalendarCheck,
   Activity, Timer, AlertTriangle, Eraser, Hospital, Ambulance, Users, Receipt, Truck, BellRing, ClipboardX, ShieldAlert,
@@ -41,6 +42,7 @@ type S = CamposAutorizacion & CamposCierre & {
   programado_en: string | null
   realizado_en: string | null
   estado_mos: EstadoMos | null
+  estado_gc_id: number | null
   mos_notificado_en: string | null
   mos_respuesta_asegurador: string | null
   mos_proveedor_notificado_en: string | null
@@ -101,6 +103,7 @@ export default function Dashboard() {
   const [origen, setOrigen] = useState('')
   const [popover, setPopover] = useState<PopoverState<S>>(null)
   const [mesCal, setMesCal] = useState(() => ({ y: new Date().getFullYear(), m: new Date().getMonth() }))
+  const catGC = useCatalogosGC()
 
   useEffect(() => {
     Promise.all([
@@ -514,6 +517,31 @@ export default function Dashboard() {
               <MiniKpi etiqueta="Ítems" valor={It.length} ayuda={`${itemsConCobro.length} con cobro`} icono={Receipt} color={FASE.clinica} />
               <MiniKpi etiqueta="Notas" valor={notasClinicas.length} ayuda={`${new Set(notasClinicas.map((n) => n.solicitud_id)).size} pacientes`} icono={Users} color="#0D2D6B" />
             </div>
+          </div>
+          <p className="mb-1 mt-3 text-[10px] font-semibold uppercase text-slate-500">Estado de la gestión clínica · clic para ver</p>
+          {(() => {
+            const datos = [
+              ...(catGC?.estados ?? []).map((e) => ({ nombre: e.nombre, color: e.color, lista: activas.filter((s) => s.estado_gc_id === e.id) })),
+              { nombre: 'SIN ESTADO', color: '#CBD5E1', lista: activas.filter((s) => !s.estado_gc_id) },
+            ].filter((d) => d.lista.length)
+            return datos.length ? (
+              <div className="flex h-3 w-full overflow-hidden rounded-full bg-slate-100">
+                {datos.map((d) => (
+                  <button key={d.nombre} title={`${d.nombre}: ${d.lista.length}`} onClick={(e) => abrir(`Gestión clínica · ${d.nombre}`, d.lista)(e)}
+                    className="h-full transition-[flex-grow] duration-700 hover:opacity-80" style={{ flexGrow: d.lista.length, background: d.color }} />
+                ))}
+              </div>
+            ) : null
+          })()}
+          <div className="mt-1.5 max-h-28 overflow-y-auto">
+            <Leyenda items={[
+              ...(catGC?.estados ?? []).map((e) => ({ nombre: e.nombre, color: e.color, valor: activas.filter((s) => s.estado_gc_id === e.id).length })),
+              { nombre: 'SIN ESTADO', color: '#CBD5E1', valor: activas.filter((s) => !s.estado_gc_id).length },
+            ].filter((x) => x.valor)}
+              onClick={(nombre, e) => {
+                const est = catGC?.estados.find((x) => x.nombre === nombre)
+                abrir(`Gestión clínica · ${nombre}`, activas.filter((s) => (est ? s.estado_gc_id === est.id : !s.estado_gc_id)))(e)
+              }} />
           </div>
           <p className="mb-1 mt-3 text-[10px] font-semibold uppercase text-slate-500">¿Quién asume el cobro?</p>
           {porResponsable.length ? (

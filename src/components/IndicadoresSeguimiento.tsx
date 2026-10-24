@@ -5,6 +5,7 @@ import { Modal, Spinner, Badge } from './ui'
 import NotasSeguimiento, { fechaHora } from './NotasSeguimiento'
 import { AlertaCierre, faltantesCierre, fechaBasePosquirurgica, DESTINOS, type CamposCierre } from './CierreCirugia'
 import { ModalActa, type Recepcion } from './EvidenciasMos'
+import { PanelEstadoGC, type EstadoGC } from './EstadoGestionClinica'
 import { Receipt, StickyNote, CalendarClock, AlertTriangle, BellRing, HeartPulse, CheckCircle2, PackageCheck, FileText, Eye } from 'lucide-react'
 
 // Indicadores compactos (como el de MOS) de Gestión clínica y Gestión
@@ -46,16 +47,17 @@ export async function cargarResumenSeguimiento(ids: number[]) {
 const contenedor = 'mt-1 inline-flex items-center gap-1 rounded-full border bg-white px-1.5 py-0.5 hover:shadow-sm cursor-pointer'
 
 /** Gestión clínica: cobro de los ítems de material y notas */
-export function IndicadorClinico({ notas, items, onClick }: { notas: ResumenNota[]; items: ResumenItem[]; onClick: () => void }) {
+export function IndicadorClinico({ notas, items, estado, onClick }: { notas: ResumenNota[]; items: ResumenItem[]; estado?: EstadoGC | null; onClick: () => void }) {
   const n = notas.filter((x) => x.ambito === 'gestion_clinica').length
-  if (!n && !items.length) return null
+  if (!n && !items.length && !estado) return null
   const conCobro = items.filter((i) => i.cobro_responsable).length
   const colorCobro = !items.length ? 'text-slate-300' : conCobro === items.length ? 'text-emerald-600' : conCobro ? 'text-amber-600' : 'text-red-500'
   return (
     <button type="button" onClick={onClick}
-      title={`Gestión clínica\nCobro asignado: ${conCobro} de ${items.length} ítems\nNotas: ${n}\nClic para ver`}
+      title={`Gestión clínica${estado ? `\nEstado: ${estado.nombre}` : ''}\nCobro asignado: ${conCobro} de ${items.length} ítems\nNotas: ${n}\nClic para ver`}
       className={`${contenedor} border-teal-200 hover:border-teal-400`}>
       <span className="text-[9px] font-bold tracking-wide text-teal-700">CLÍNICA</span>
+      {estado && <span className="rounded-full px-1 text-[9px] font-bold text-white" style={{ background: estado.color }}>{estado.nombre}</span>}
       <Receipt size={11} className={colorCobro} />
       {items.length > 0 && <span className={`text-[10px] font-semibold ${colorCobro}`}>{conCobro}/{items.length}</span>}
       <StickyNote size={11} className={n ? 'text-[#0D2D6B]' : 'text-slate-300'} />
@@ -211,6 +213,7 @@ export function ModalGestionClinica({ solicitudId, titulo, onCerrar }: { solicit
   return (
     <Modal open onClose={onCerrar} titulo={`Gestión clínica · ${titulo}`} ancho="max-w-4xl">
       <div className="space-y-3">
+        <PanelEstadoGC solicitudId={solicitudId} puedeEscribir={puedeEscribir} />
         <section className="rounded-xl border border-amber-200 bg-amber-50 p-3">
           <h3 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-amber-900"><Receipt size={14} /> Cargo del cobro por ítem</h3>
           {items === null ? <Spinner /> : items.length === 0 ? <p className="text-sm text-slate-500">Sin ítems de material.</p> : (
