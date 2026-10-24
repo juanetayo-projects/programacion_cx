@@ -47,7 +47,7 @@ Deno.serve(async (req) => {
   const observaciones = htmlConTexto(obsBody)
 
   const { data: solicitud } = await admin.from('solicitudes_cirugia')
-    .select('*, aseguradores(nombre)').eq('id', solicitudId).single()
+    .select('*, aseguradores!mos_asegurador_id(nombre)').eq('id', solicitudId).single()
   if (!solicitud) return json(404, { error: 'Solicitud no encontrada' })
   if (!solicitud.estado_mos) return json(400, { error: 'Primero se debe notificar al asegurador (paso 1)' })
   // Una vez enviada, la notificación al proveedor no se modifica ni se reenvía

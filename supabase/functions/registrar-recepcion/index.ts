@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
   if (!FECHA_RE.test(fechaRemision)) return json(400, { error: 'Falta la fecha de la remisión' })
 
   const { data: solicitud } = await admin.from('solicitudes_cirugia')
-    .select('*, aseguradores(nombre), quirofanos(nombre)').eq('id', body.solicitudId).single()
+    .select('*, aseguradores!mos_asegurador_id(nombre), quirofanos(nombre)').eq('id', body.solicitudId).single()
   if (!solicitud) return json(404, { error: 'Solicitud no encontrada' })
   if (!ESTADOS_RECIBIBLES.includes(solicitud.estado_mos)) {
     return json(400, { error: 'Esta solicitud no tiene material pendiente de recibir (el proveedor aún no ha sido notificado o ya se recibió todo)' })

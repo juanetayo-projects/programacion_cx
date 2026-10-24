@@ -117,7 +117,7 @@ export default function Mos() {
     setCargando(true)
     const { data, error } = await sb
       .from('solicitudes_cirugia')
-      .select('*, especialidades(nombre), eps(nombre), aseguradores(nombre)')
+      .select('*, especialidades(nombre), eps(nombre), aseguradores!mos_asegurador_id(nombre)')
       .neq('estado', 'cancelado')
       .order('fecha_reporte', { ascending: false })
     if (!error) setFilas((data ?? []) as Solicitud[])
@@ -1180,7 +1180,7 @@ export function ModalDetalleMos({ solicitudId, onCerrar }: { solicitudId: number
   useEffect(() => {
     setCargando(true)
     Promise.all([
-      sb.from('solicitudes_cirugia').select('*, especialidades(nombre), eps(nombre), aseguradores(nombre)').eq('id', solicitudId).single(),
+      sb.from('solicitudes_cirugia').select('*, especialidades(nombre), eps(nombre), aseguradores!mos_asegurador_id(nombre)').eq('id', solicitudId).single(),
       sb.from('mos_correos').select('*').eq('solicitud_id', solicitudId).eq('paso', 'notificacion_asegurador').order('enviado_en').limit(1),
       sb.from('mos_items').select('*').eq('solicitud_id', solicitudId).neq('estado', 'reemplazado').order('orden'),
     ]).then(([rs, rc, ri]: { data: unknown }[]) => {

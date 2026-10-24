@@ -88,7 +88,7 @@ export default function GestionClinica() {
   async function cargar() {
     setCargando(true)
     const { data } = await sb.from('solicitudes_cirugia')
-      .select('*, especialidades(nombre), eps(nombre), quirofanos(nombre), aseguradores(nombre)')
+      .select('*, especialidades(nombre), eps(nombre), quirofanos(nombre), aseguradores!mos_asegurador_id(nombre)')
       .neq('estado', 'cancelado')
       .order('fecha_reporte', { ascending: false })
     const lista = (data ?? []) as Solicitud[]

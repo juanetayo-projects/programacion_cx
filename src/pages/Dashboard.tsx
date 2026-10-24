@@ -104,7 +104,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     Promise.all([
-      sb.from('solicitudes_cirugia').select('*, especialidades(nombre), quirofanos(nombre), aseguradores(nombre)'),
+      sb.from('solicitudes_cirugia').select('*, especialidades(nombre), quirofanos(nombre), aseguradores!mos_asegurador_id(nombre)'),
       sb.from('mos_items').select('solicitud_id, cantidad, cantidad_entregada, cobro_responsable, entregado_en, fecha_estimada_entrega, proveedor, proveedor_notificado_en').not('estado', 'in', '(reemplazado,anulado)'),
       sb.from('notas_seguimiento').select('solicitud_id, ambito, fase, estado_cita, fecha_cita, recordatorio_en, created_at, tipo_nombre'),
       sb.from('mos_recepciones').select('solicitud_id, recibido_en, completa, proveedor_nombre'),

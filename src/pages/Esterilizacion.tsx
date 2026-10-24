@@ -58,7 +58,7 @@ export default function Esterilizacion() {
   async function cargar() {
     setCargando(true)
     const { data } = await sb.from('solicitudes_cirugia')
-      .select('*, aseguradores(nombre)')
+      .select('*, aseguradores!mos_asegurador_id(nombre)')
       .not('mos_proveedor_notificado_en', 'is', null)
       .order('fecha_programada', { ascending: true, nullsFirst: false })
     const lista = (data ?? []) as Solicitud[]
