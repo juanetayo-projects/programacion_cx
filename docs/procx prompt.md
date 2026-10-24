@@ -1245,3 +1245,48 @@ Se requiere construir una app que permita
 			con cargo de cobro y notas; modal con cobro por ítem y notas) y POSTQX
 			(próxima cita, por notificar, vencidas, cumplidas, sin cierre; modal con
 			citas, notas, WhatsApp y alerta de cierre).
+
+		22.- Autorización del asegurador y Dashboard por fases (2026-10-24)
+			22.1.- Autorización del asegurador (responsable: Gestor clínico)
+				- Práctica del sector (Colombia): la IPS solicita la autorización de
+				  servicios electivos a la EPS/aseguradora (Anexo técnico 3, actualizado
+				  por la Res. 2335/2023), la aseguradora responde autorizando (n.º de
+				  autorización, servicios/CUPS, vigencia — Anexo 4), negando o
+				  devolviendo por información; la atención inicial de urgencias no
+				  requiere autorización previa (Decreto 4747/2007).
+				- Tabla autorizaciones_cirugia (historial inmutable) y estado vigente
+				  en solicitudes_cirugia.autorizacion_* . Estados: sin gestionar,
+				  solicitada, devuelta, autorizada, negada, vencida (derivado de la
+				  vigencia), no requiere (urgencia). Registro con
+				  registrar_autorizacion() y soportes en el bucket 'notas'.
+				- REGLA: sin autorización vigente no se programa, reprograma ni se
+				  registra la cirugía como realizada (trigger exigir_autorizacion_cirugia)
+				  ni se inicia MOS (notificar-asegurador). En consecuencia tampoco hay
+				  Esterilización ni seguimiento posquirúrgico.
+				- UI: Gestión clínica lista todas las cirugías activas con filtro de
+				  autorización (pendientes, por vencer, por estado) y panel con estado,
+				  historial y registro; indicador AUT en Gestión Programación Cx y Gestión
+				  MOS; al intentar programar sin autorización se abre el aviso con motivo
+				  y acción.
+			22.2.- Dashboard por fases (src/pages/Dashboard.tsx, patrón Panel Ejecutivo)
+				- Filtros: fecha de reporte, especialidad, tipo de orden, origen.
+				- KPIs: solicitudes, programadas, realizadas, % autorización vigente,
+				  gestión MOS, alertas activas (clic → pacientes).
+				- Flujo del proceso: ingresadas → validadas GoMedisys → autorizadas →
+				  programadas → con MOS → material recibido → realizadas → con
+				  seguimiento PostQx (conteo y % de cada fase).
+				- Tarjetas por fase: 1 GoMedisys (validadas, fallidas, consultas
+				  masivas, tipo de orden, origen) · 2 Programación (estados,
+				  especialidad, quirófanos, tiempos reporte→programación y →cirugía,
+				  canceladas, sin cierre) · 3 Autorización (% vigentes, estados, tiempo
+				  de respuesta de la EPS, por vencer, sin respuesta >5 días) · 4 MOS
+				  (anillos por hito, ciclo notificación→material, rechazos, por
+				  asegurador) · 5 Gestión clínica (% ítems con cobro, quién asume el
+				  cobro, notas) · 6 Esterilización (% unidades recibidas, entrega a
+				  tiempo, actas, atrasados, por proveedor) · 7 PostQx (asistencia,
+				  citas por estado y tipo, por notificar, vencidas).
+				- Tendencia semanal (12 semanas), agenda quirúrgica mensual y alertas
+				  combinadas; clic en cualquier dato abre el detalle de pacientes.
+			22.3.- Migraciones: 0031_autorizacion_asegurador.sql (+ ajuste NULL = no vigente)
+			22.4.- Documentación: README actualizado y docs/PROMPT_FLUJO_INFOGRAFIA.md
+				(prompt paso a paso del proceso para diseñar la infografía).

@@ -1,32 +1,54 @@
 # Programación de Cirugías — CAC Santa Bárbara
 
-Aplicación para la gestión del ciclo completo de programación de cirugías:
-reporte del médico cirujano, gestión de solicitudes, consulta en vivo a
-GoMedisys, programación en quirófano, notificación al paciente y reportes.
+Aplicación para la gestión del ciclo completo de una cirugía, desde la
+consulta en GoMedisys hasta el seguimiento postquirúrgico:
+
+1. **GoMedisys** — reporte individual o consulta masiva de cirugías programadas.
+2. **Gestión Programación Cx** — validación, programación en quirófano,
+   notificación al paciente, cierre de la cirugía realizada.
+3. **Gestión clínica** — **autorización del asegurador** (requisito para todo
+   el proceso), cargo del cobro de los materiales y notas.
+4. **Gestión MOS** — materiales de osteosíntesis: asegurador → proveedores.
+5. **Esterilización** — recepción del material por remisión y acta.
+6. **Gestión postquirúrgica** — controles, citas y recordatorios por WhatsApp.
+7. **Dashboard** — indicadores por fase con detalle al clic.
 
 ## Stack
 
 React 19 + Vite + TypeScript + Tailwind CSS v4, Supabase (Postgres + Auth +
-RLS + Edge Functions), despliegue en GitHub Pages.
+RLS + Edge Functions + Storage), Resend (correo), Recharts, ExcelJS/pdfmake,
+despliegue en GitHub Pages (HashRouter).
 
 ## Estructura
 
 ```
 src/
-├── components/    ui.tsx (Card, Modal, FilterBar…), CrudTable.tsx, Shell.tsx,
-│                  ProgresoConsulta.tsx (reloj/termómetro de consultas), ReportarTabs.tsx
-├── lib/           supabase.ts, auth.tsx, constantes.ts, data.ts, database.types.ts,
-│                  gomedisys.ts (consultas a GoMedisys como trabajos)
-├── pages/         Login, Dashboard, ReportarCirugia, ConsultaMasiva, Solicitudes, admin/…
-sql/               paciente.sql, reporte_cirugias_optimizado_6.sql (T-SQL de GoMedisys)
-scripts/gomedisys/ runner de las consultas (lo ejecuta GitHub Actions)
-.github/workflows/ deploy.yml (Pages), gomedisys-consulta.yml (consultas bajo demanda)
+├── components/    ui.tsx, Shell.tsx, PanelLateral.tsx, CrudTable.tsx,
+│                  AvanceMos.tsx (5 hitos MOS), Autorizacion.tsx (autorización del asegurador),
+│                  CierreCirugia.tsx (registro de cirugía realizada), NotasSeguimiento.tsx,
+│                  RecordatorioCita.tsx (WhatsApp), EvidenciasMos.tsx, IndicadoresSeguimiento.tsx,
+│                  FiltroEtapaMos.tsx, dashboard/Graficos.tsx (gauges, anillos, popover al clic)
+├── lib/           supabase.ts, auth.tsx, constantes.ts, autorizacion.ts, filtrosMos.ts,
+│                  mensajesNotificacion.ts, mensajesSeguimiento.ts, gomedisys.ts
+├── pages/         Dashboard, ReportarCirugia, ConsultaMasiva, Solicitudes (Gestión Programación Cx),
+│                  CirugiasRealizadas, GestionClinica, Mos, Esterilizacion, Prequirurgico
+│                  (Gestión postquirúrgica), Quirofanos, Calor, Reportes, Logs, admin/…
+sql/               consultas T-SQL de GoMedisys
+scripts/gomedisys/ runner de las consultas (GitHub Actions)
 supabase/
-├── migrations/    esquema, RLS, catálogos, trabajos GoMedisys (0001-0017)
-└── functions/     admin-usuarios, consulta-gomedisys, notificar-paciente
+├── migrations/    0001-0031 (esquema, RLS, MOS, recepción, notas, autorización…)
+└── functions/     admin-usuarios, consulta-gomedisys, notificar-paciente,
+                   notificar-asegurador, notificar-proveedor, registrar-recepcion
 docs/
-└── procx prompt.md   especificación funcional + adenda de decisiones
+├── procx prompt.md            especificación funcional + adendas de decisiones (§1-§22)
+└── PROMPT_FLUJO_INFOGRAFIA.md prompt paso a paso para diseñar la infografía del flujo
 ```
+
+## Roles
+
+Administrador · Programador de cirugía · Médico cirujano · Visualizador ·
+Gestor MOS · Esterilización · Gestor clínico. Los módulos por rol se
+configuran en Administración → Roles y permisos.
 
 ## Desarrollo local
 
@@ -35,36 +57,23 @@ npm install
 npm run dev
 ```
 
-Requiere `.env.local` (no versionado) con:
+Requiere `.env.local` (no versionado) con `VITE_SUPABASE_URL` y
+`VITE_SUPABASE_ANON_KEY`.
 
-```
-VITE_SUPABASE_URL=...
-VITE_SUPABASE_ANON_KEY=...
-```
-
-## Estado del proyecto
-
-Módulos funcionales: autenticación y roles, reporte de cirugía, gestión de
-solicitudes (ver/editar/programar/notificar/reprogramar/cancelar), dashboard,
-administración de usuarios y catálogos, 94 registros históricos migrados
-desde el tracker manual en Excel.
-
-Integración con GoMedisys (oct-2026): autocompletado del paciente en el
-reporte individual, consulta masiva de cirugías programadas con marcación
-anti-duplicados entre usuarios, y consulta de las solicitudes reportadas.
-Las consultas corren en GitHub Actions (el firewall de la réplica no acepta
-conexiones desde Supabase); ver `docs/procx prompt.md` §15.
-
-Configuración de la integración:
+## Configuración
 
 - Secrets de GitHub: `GOMEDISYS_HOST/PORT/DATABASE/USERNAME/PASSWORD`,
-  `GM_RUNNER_KEY` (su sha256 va en `gomedisys_runner_config`),
-  `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
-- Secret de Supabase (Edge Functions): `GITHUB_DISPATCH_TOKEN` — token
-  fine-grained solo para este repo con permiso "Actions: Read and write".
-- Las credenciales locales (`db/`) nunca van al repo.
+  `GM_RUNNER_KEY`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
+- Secrets de Supabase (Edge Functions): `RESEND_API_KEY` (correo, dominio
+  `cacsantabarbara.co`), `GITHUB_DISPATCH_TOKEN` (consultas a GoMedisys).
+- Datos clínicos (Ley 1581): RLS por rol en todas las tablas; buckets
+  privados `soportes`, `mos` y `notas`; credenciales locales (`db/`) fuera de git.
 
-Pendiente: envío de SMS/WhatsApp.
+## Reglas de negocio validadas en la base de datos
 
-Ver las adendas en `docs/procx prompt.md` (secciones 7 a 15) para el detalle
-de las decisiones de diseño tomadas durante el desarrollo.
+- Sin **autorización vigente del asegurador** no se programa, reprograma ni
+  registra como realizada la cirugía, ni se inicia MOS.
+- Sin **cierre de la cirugía** (inicio/fin reales, cirujano, procedimiento,
+  destino) no se registran seguimientos posquirúrgicos.
+- Las notificaciones (asegurador, proveedor) no se modifican ni se reenvían;
+  notas, correos y actas son evidencia inmutable para auditoría.
