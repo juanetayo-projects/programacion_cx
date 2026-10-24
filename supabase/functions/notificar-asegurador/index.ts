@@ -1,7 +1,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { encodeBase64 } from 'jsr:@std/encoding@1/base64'
 import {
-  plantillaAsegurador, datosDesdeSolicitud, nombreAdjunto, REMITENTE_MOS, type TipoAdjunto,
+  plantillaAsegurador, datosDesdeSolicitud, nombreAdjunto, itemsValidos, htmlConTexto, REMITENTE_MOS, type TipoAdjunto,
 } from './plantilla.ts'
 
 // MOS · Paso 1: notifica al asegurador por correo (Resend) el requerimiento de
@@ -9,7 +9,10 @@ import {
 // PDF como adjuntos obligatorios. Guarda la evidencia en mos_correos (HTML
 // exacto, adjuntos, fecha y hora) y marca la solicitud como
 // estado_mos = 'asegurador_notificado'.
-// Body: { solicitudId, aseguradorId, historiaClinicaPath, boletaPath, observaciones }
+// Body: { solicitudId, aseguradorId, historiaClinicaPath, boletaPath, items, observaciones }
+// items: [{ cantidad, descripcion, proveedor }] transcritos de la boleta (mínimo uno);
+// se guardan uno a uno en mos_items y como copia en mos_correos.items.
+// observaciones: HTML del editor (como las recomendaciones al paciente).
 // Los PDF ya están en el bucket privado 'mos' bajo `${solicitudId}/...`.
 // Secret: RESEND_API_KEY (secret de la función o Supabase Vault).
 
@@ -41,7 +44,10 @@ Deno.serve(async (req) => {
     return json(403, { error: 'Solo el gestor MOS o el administrador pueden notificar al asegurador' })
   }
 
-  const { solicitudId, aseguradorId, historiaClinicaPath, boletaPath, observaciones } = await req.json()
+  const { solicitudId, aseguradorId, historiaClinicaPath, boletaPath, items: itemsBody, observaciones: obsBody } = await req.json()
+  const items = itemsValidos(itemsBody)
+  if (!items.length) return json(400, { error: 'Detalle al menos un ítem del material (cantidad, descripción y proveedor)' })
+  const observaciones = htmlConTexto(obsBody)
   const rutas: Record<TipoAdjunto, string> = { historia_clinica: historiaClinicaPath, boleta: boletaPath }
   for (const [tipo, ruta] of Object.entries(rutas)) {
     if (!ruta || typeof ruta !== 'string' || !ruta.startsWith(`${solicitudId}/`) || !ruta.toLowerCase().endsWith('.pdf')) {
@@ -85,7 +91,8 @@ Deno.serve(async (req) => {
   }
 
   const { asunto, html } = plantillaAsegurador(datosDesdeSolicitud(solicitud, asegurador, {
-    observaciones: observaciones ?? null,
+    items,
+    observacionesHtml: observaciones,
     adjuntos: adjuntos.map((a) => a.nombre),
     gestor: perfil.nombre,
     gestorEmail: perfil.email,
@@ -124,7 +131,8 @@ Deno.serve(async (req) => {
     responder_a: perfil.email,
     asunto,
     html,
-    observaciones: observaciones?.trim() || null,
+    observaciones,
+    items,
     adjuntos: adjuntos.map(({ tipo, nombre, path, bytes }) => ({ tipo, nombre, path, bytes })),
     resend_id: resendId,
     enviado_por: user.id,
@@ -139,6 +147,20 @@ Deno.serve(async (req) => {
     mos_notificado_por: user.id,
   }).eq('id', solicitud.id)
 
+  // Cada ítem queda como registro independiente (mos_items) para gestionar
+  // luego su entrega. Los pendientes de una notificación anterior se reemplazan.
+  await admin.from('mos_items').update({ estado: 'reemplazado' })
+    .eq('solicitud_id', solicitud.id).eq('estado', 'pendiente_entrega')
+  const { error: errItems } = await admin.from('mos_items').insert(items.map((i, n) => ({
+    solicitud_id: solicitud.id,
+    correo_id: correo?.id ?? null,
+    orden: n + 1,
+    cantidad: i.cantidad,
+    descripcion: i.descripcion,
+    proveedor: i.proveedor,
+    creado_por: user.id,
+  })))
+
   await admin.from('solicitudes_historial').insert({
     solicitud_id: solicitud.id,
     accion: 'mos_asegurador_notificado',
@@ -146,8 +168,9 @@ Deno.serve(async (req) => {
     usuario_id: user.id,
   })
 
-  if (errCorreo) {
-    return json(200, { ok: true, advertencia: `El correo se envió, pero no se pudo guardar la evidencia: ${errCorreo.message}` })
+  if (errCorreo || errItems) {
+    const detalle = [errCorreo && `evidencia: ${errCorreo.message}`, errItems && `ítems: ${errItems.message}`].filter(Boolean).join(' · ')
+    return json(200, { ok: true, correoId: correo?.id ?? null, advertencia: `El correo se envió, pero no se pudo guardar todo (${detalle})` })
   }
   return json(200, { ok: true, correoId: correo.id, enviadoEn })
 })

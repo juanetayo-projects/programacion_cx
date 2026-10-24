@@ -1083,3 +1083,24 @@ Se requiere construir una app que permita
 				Aseguradores EMSSANAR, ASMET SALUD, S.O.S, SURA y SURA ARL con
 				contactos y correos ficticios (@ejemplo.co) hasta cargar los reales.
 			16.5.- Migración: 0020_modulo_mos.sql
+
+			16.6.- Ajustes (2026-10-23, ronda 2)
+				a) La notificación al asegurador usa el mismo esquema que
+				   "Notificar al paciente": panel lateral derecho con grupos
+				   (Cirugía, Asegurador, Material, Documentos, Observaciones con
+				   editor enriquecido) y vista previa del correo exacto; pie con
+				   confirmación y "Enviar correo al asegurador".
+				b) Material de osteosíntesis: el gestor MOS transcribe cada ítem de
+				   la boleta (texto libre) como un registro: cantidad, descripción y
+				   nombre del proveedor (por defecto la casa médica de la solicitud),
+				   con icono para agregar más registros. Van en el correo como tabla.
+				c) Cada ítem se guarda como registro independiente en mos_items
+				   (estado de entrega: pendiente_entrega / entregado_parcial /
+				   entregado / anulado; 'reemplazado' si se vuelve a notificar), para
+				   gestionar después la entrega del proveedor. Copia en
+				   mos_correos.items como parte de la evidencia.
+				d) Gestión de solicitudes: icono MOS (hueso, morado) en los pacientes
+				   con gestión MOS; abre un modal con el estado, el asegurador
+				   notificado, los registros de material y los correos enviados
+				   (evidencia con adjuntos). Se retiró el icono "Consultar GoMedisys".
+				e) Migraciones: 0021_mos_items_material.sql, 0022_mos_items_registros.sql.

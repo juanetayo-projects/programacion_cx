@@ -5,21 +5,20 @@ import type { Json } from '../lib/database.types'
 import { TituloEnHeader, CampoLinea, CLASE_CAMPO, Boton, Modal, Badge, EstadoVacio, Spinner } from '../components/ui'
 import { PanelLateral, Grupo, Dato } from '../components/PanelLateral'
 import RichTextEditor from '../components/RichTextEditor'
-import ProgresoConsulta, { type Tramo } from '../components/ProgresoConsulta'
-import { procesarSolicitudGoMedisys, type EstadoTrabajo } from '../lib/gomedisys'
+import { ModalDetalleMos } from './Mos'
 import {
   plantillaCorreo, textoWhatsApp, textoSms, segmentosSms, telefonoWhatsApp, LOGO_CORREO,
   type DatosNotificacion,
 } from '../lib/mensajesNotificacion'
 import {
-  ESTADOS, ESTADOS_LABEL, ESTADOS_COLOR, ESTADOS_COLOR_HEX, ESTADOS_COLOR_SOLIDO, ESTADOS_NOTIFICABLES, CANALES_NOTIFICACION,
+  ESTADOS, ESTADOS_LABEL, ESTADOS_COLOR, ESTADOS_MOS_LABEL, ESTADOS_COLOR_HEX, ESTADOS_COLOR_SOLIDO, ESTADOS_NOTIFICABLES, CANALES_NOTIFICACION,
   type Estado, type EstadoNotificable,
 } from '../lib/constantes'
 import {
   Eye, Pencil, CalendarClock, BellRing, RefreshCw, Ban, Undo2, Stethoscope,
   CheckCircle2, Clock, Send, Repeat, PauseCircle, CircleSlash, FileSpreadsheet, AlertTriangle,
   Search, SlidersHorizontal, Eraser, UserRound, ClipboardList, ShieldCheck, Save, LayoutGrid,
-  Zap, FileWarning, XCircle, Mail, MessageCircle, Smartphone, Copy, ExternalLink, Eye as EyeIcon,
+  Bone, FileWarning, XCircle, Mail, MessageCircle, Smartphone, Copy, ExternalLink, Eye as EyeIcon,
 } from 'lucide-react'
 
 type Solicitud = {
@@ -64,6 +63,7 @@ type Solicitud = {
   tipo_orden: string | null
   gomedisys_consultado_en: string | null
   notificado_en: string | null
+  estado_mos: 'asegurador_notificado' | null
   especialidades: { nombre: string } | null
   eps: { nombre: string } | null
   unidades: { nombre: string } | null
@@ -90,7 +90,7 @@ function minutosDesdeHora(hora: string) {
 // Todos los estados salvo los ya realizados (viven en "Cirugías realizadas").
 // Oct-2026: "Solicitudes reportadas" quedó oculto; los reportes que no se
 // validaron contra GoMedisys (reportado / consulta fallida) también se
-// gestionan aquí, con la acción "Consultar GoMedisys".
+// gestionan aquí. (Oct-2026: se retiró la acción "Consultar GoMedisys" de la fila.)
 const ESTADOS_GESTION = ESTADOS.filter((e) => e !== 'realizado')
 
 const ICONO_ESTADO: Partial<Record<Estado, React.ReactNode>> = {
@@ -122,7 +122,7 @@ export default function Solicitudes() {
   const [filtroMedico, setFiltroMedico] = useState('')
   const [busqueda, setBusqueda] = useState('')
   const [masFiltros, setMasFiltros] = useState(false)
-  const [avanceGM, setAvanceGM] = useState<{ estado: EstadoTrabajo; tramos: Tramo[]; inicio: number } | null>(null)
+  const [detalleMos, setDetalleMos] = useState<number | null>(null)
   const [envioManual, setEnvioManual] = useState<{ datos: DatosNotificacion; canales: string[]; telefono: string } | null>(null)
   const [especialidades, setEspecialidades] = useState<{ id: number; nombre: string }[]>([])
   const [quirofanos, setQuirofanos] = useState<{ id: number; nombre: string; numero: number }[]>([])
@@ -418,19 +418,6 @@ export default function Solicitudes() {
     }
   }
 
-  async function consultarGoMedisysFila(fila: Solicitud) {
-    const inicio = Date.now()
-    setAvanceGM({ estado: 'pendiente', tramos: [], inicio })
-    try {
-      const r = await procesarSolicitudGoMedisys(fila.id, session!.user.id, (t) =>
-        setAvanceGM({ estado: t.estado, tramos: Array.isArray(t.progreso) ? t.progreso : [], inicio }))
-      if (!r.ok) alert(`No fue posible consultar GoMedisys:\n\n${r.error}`)
-    } finally {
-      setAvanceGM(null)
-      cargar()
-    }
-  }
-
   function proximoEstadoAlReactivar(fila: Solicitud): Estado {
     return fila.fecha_programada ? 'programado' : fila.gomedisys_resultado ? 'procesado' : 'reportado'
   }
@@ -597,8 +584,12 @@ export default function Solicitudes() {
                       <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                         <button title="Ver" onClick={() => abrir(f, 'ver')} className="text-slate-500 hover:text-[#0D2D6B]"><Eye size={15} /></button>
                         <button title="Editar" onClick={() => abrir(f, 'editar')} className="text-slate-500 hover:text-[#0D2D6B]"><Pencil size={15} /></button>
-                        {(f.estado === 'reportado' || f.estado === 'fallido') && (
-                          <button title="Consultar GoMedisys" onClick={() => consultarGoMedisysFila(f)} className="text-slate-500 hover:text-[#0D2D6B]"><Zap size={15} /></button>
+                        {f.estado_mos && (
+                          <button
+                            title={`Gestión MOS: ${ESTADOS_MOS_LABEL[f.estado_mos]}`}
+                            onClick={() => setDetalleMos(f.id)}
+                            className="text-indigo-500 hover:text-indigo-700"
+                          ><Bone size={15} /></button>
                         )}
                         {!ESTADOS_PROGRAMADOS.includes(f.estado) && f.estado !== 'realizado' && f.estado !== 'cancelado' && (
                           <button title="Programar" onClick={() => abrir(f, 'programar')} className="text-slate-500 hover:text-[#0D2D6B]"><CalendarClock size={15} /></button>
@@ -766,7 +757,7 @@ export default function Solicitudes() {
       {/* Envío manual por WhatsApp / SMS */}
       {envioManual && <ModalEnvioManual {...envioManual} onClose={() => setEnvioManual(null)} />}
 
-      {avanceGM && <ProgresoConsulta tramos={avanceGM.tramos} inicio={avanceGM.inicio} estado={avanceGM.estado} titulo="Consultando paciente en GoMedisys" />}
+      {detalleMos !== null && <ModalDetalleMos solicitudId={detalleMos} onCerrar={() => setDetalleMos(null)} />}
 
       {/* CANCELAR */}
       <ModalCancelar open={modal === 'cancelar'} error={error} guardando={guardando} onClose={cerrar} onGuardar={cancelar} />

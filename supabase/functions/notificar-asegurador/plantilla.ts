@@ -19,7 +19,8 @@ export type DatosNotificacionAsegurador = {
   especialista: string | null
   fechaProgramada: string | null // YYYY-MM-DD
   boleta: string | null
-  observaciones: string | null
+  items: ItemMaterial[]
+  observacionesHtml: string | null // HTML del editor (contenido interno de la clínica)
   adjuntos: string[]
   gestor: string | null
   gestorEmail: string | null
@@ -64,6 +65,22 @@ export type SolicitudMos = {
 
 export type TipoAdjunto = 'historia_clinica' | 'boleta'
 
+/** Ítem de material de osteosíntesis detallado a partir de la boleta quirúrgica */
+export type ItemMaterial = { cantidad: number; descripcion: string; proveedor: string }
+
+/** Ítems completos (descarta filas vacías); cantidad entera mayor que 0 */
+export function itemsValidos(items: Partial<ItemMaterial>[] | null | undefined): ItemMaterial[] {
+  return (items ?? [])
+    .map((i) => ({ cantidad: Number(i.cantidad), descripcion: String(i.descripcion ?? '').trim(), proveedor: String(i.proveedor ?? '').trim() }))
+    .filter((i) => Number.isInteger(i.cantidad) && i.cantidad > 0 && i.descripcion && i.proveedor)
+}
+
+/** Observaciones del editor: vacío si solo quedaron etiquetas sin texto */
+export function htmlConTexto(html: string | null | undefined) {
+  const v = (html ?? '').trim()
+  return v.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim() ? v : null
+}
+
 /** Nombre con el que el asegurador recibe cada PDF */
 export function nombreAdjunto(tipo: TipoAdjunto, documento: string | null) {
   const doc = (documento ?? '').replace(/[^0-9A-Za-z]/g, '') || 'paciente'
@@ -74,7 +91,10 @@ export function nombreAdjunto(tipo: TipoAdjunto, documento: string | null) {
 export function datosDesdeSolicitud(
   s: SolicitudMos,
   asegurador: { nombre: string; contacto: string | null },
-  extra: { observaciones: string | null; adjuntos: string[]; gestor: string | null; gestorEmail: string | null; logoUrl: string },
+  extra: {
+    items: ItemMaterial[]; observacionesHtml: string | null; adjuntos: string[]
+    gestor: string | null; gestorEmail: string | null; logoUrl: string
+  },
 ): DatosNotificacionAsegurador {
   return {
     asegurador: asegurador.nombre,
@@ -91,7 +111,8 @@ export function datosDesdeSolicitud(
     especialista: s.especialista_opera || s.especialista_ordena || s.nombre_medico_reporta,
     fechaProgramada: s.fecha_programada,
     boleta: s.boleta_quirurgica,
-    observaciones: extra.observaciones?.trim() || null,
+    items: extra.items,
+    observacionesHtml: htmlConTexto(extra.observacionesHtml),
     adjuntos: extra.adjuntos,
     gestor: extra.gestor,
     gestorEmail: extra.gestorEmail,
@@ -175,11 +196,29 @@ export function plantillaAsegurador(d: DatosNotificacionAsegurador): { asunto: s
           </div>
         </td></tr>` : ''}
 
-        ${d.observaciones ? `
+        ${seccion('Material de osteosíntesis requerido', `
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:8px;border:1px solid #CBD5E1;border-collapse:collapse;font-size:13px">
+            <tr style="background:#0D2D6B;color:#FFFFFF">
+              <th align="center" style="padding:8px 6px;width:34px;border:1px solid #0D2D6B">#</th>
+              <th align="center" style="padding:8px 6px;width:70px;border:1px solid #0D2D6B">Cantidad</th>
+              <th align="left" style="padding:8px 10px;border:1px solid #0D2D6B">Descripción</th>
+              <th align="left" style="padding:8px 10px;width:30%;border:1px solid #0D2D6B">Proveedor</th>
+            </tr>
+            ${d.items.length ? d.items.map((i, n) => `
+            <tr style="background:${n % 2 ? '#F1F5F9' : '#FFFFFF'}">
+              <td align="center" style="padding:7px 6px;border:1px solid #E2E8F0;color:#64748B">${n + 1}</td>
+              <td align="center" style="padding:7px 6px;border:1px solid #E2E8F0;color:#0F172A;font-weight:bold">${escapar(i.cantidad)}</td>
+              <td style="padding:7px 10px;border:1px solid #E2E8F0;color:#0F172A">${multilinea(i.descripcion)}</td>
+              <td style="padding:7px 10px;border:1px solid #E2E8F0;color:#0F172A">${escapar(i.proveedor)}</td>
+            </tr>`).join('') : `
+            <tr><td colspan="4" align="center" style="padding:10px;color:#94A3B8;border:1px solid #E2E8F0">Sin ítems detallados</td></tr>`}
+          </table>`)}
+
+        ${d.observacionesHtml ? `
         <tr><td style="padding:18px 28px 0">
-          <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:14px 18px">
+          <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:14px 18px;color:#334155;font-size:14px;line-height:1.6">
             <div style="color:#0D2D6B;font-size:13px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Observaciones</div>
-            <div style="color:#334155;font-size:14px;line-height:1.6">${multilinea(d.observaciones)}</div>
+            ${d.observacionesHtml}
           </div>
         </td></tr>` : ''}
 

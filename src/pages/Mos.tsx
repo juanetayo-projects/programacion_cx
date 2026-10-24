@@ -3,9 +3,11 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { TituloEnHeader, CampoLinea, CLASE_CAMPO, Boton, Modal, Badge, EstadoVacio, Spinner } from '../components/ui'
 import { PanelLateral, Grupo, Dato } from '../components/PanelLateral'
+import RichTextEditor from '../components/RichTextEditor'
 import { LOGO_CORREO } from '../lib/mensajesNotificacion'
 import {
-  plantillaAsegurador, datosDesdeSolicitud, nombreAdjunto, REMITENTE_MOS, type SolicitudMos, type TipoAdjunto,
+  plantillaAsegurador, datosDesdeSolicitud, nombreAdjunto, itemsValidos, REMITENTE_MOS,
+  type SolicitudMos, type TipoAdjunto, type ItemMaterial,
 } from '../../supabase/functions/notificar-asegurador/plantilla'
 import {
   ESTADOS_LABEL, ESTADOS_COLOR, ESTADOS_MOS, ESTADOS_MOS_LABEL, ESTADOS_MOS_COLOR, type Estado, type EstadoMos,
@@ -13,6 +15,7 @@ import {
 import {
   Eye, Bone, Search, Eraser, UserRound, ClipboardList, Building2, FileText, Upload, Send, MailCheck,
   CheckCircle2, AlertTriangle, Phone, Mail, Paperclip, Clock, X, History,
+  Plus, Trash2, Stethoscope, MessageSquareText,
 } from 'lucide-react'
 
 // Las tablas del módulo MOS (aseguradores, mos_correos) son posteriores a
@@ -26,6 +29,8 @@ type Solicitud = SolicitudMos & {
   fecha_reporte: string
   estado_mos: 'asegurador_notificado' | null
   mos_notificado_en: string | null
+  mos_asegurador_id: number | null
+  casa_medica_material: string | null
   hora_programada: string | null
   aseguradores: { nombre: string } | null
 }
@@ -43,9 +48,25 @@ type Correo = {
   asunto: string
   html: string
   observaciones: string | null
+  items: ItemMaterial[]
   adjuntos: { tipo: TipoAdjunto; nombre: string; path: string; bytes: number }[]
   enviado_por_nombre: string | null
   enviado_en: string
+}
+
+// Registro independiente de cada ítem de material (tabla mos_items)
+type EstadoItem = 'pendiente_entrega' | 'entregado_parcial' | 'entregado' | 'anulado' | 'reemplazado'
+type RegistroItem = ItemMaterial & { id: number; orden: number; estado: EstadoItem; cantidad_entregada: number }
+
+const ESTADO_ITEM_LABEL: Record<EstadoItem, string> = {
+  pendiente_entrega: 'Pendiente', entregado_parcial: 'Parcial', entregado: 'Entregado', anulado: 'Anulado', reemplazado: 'Reemplazado',
+}
+const ESTADO_ITEM_COLOR: Record<EstadoItem, string> = {
+  pendiente_entrega: 'bg-amber-100 text-amber-700 border-amber-300',
+  entregado_parcial: 'bg-sky-100 text-sky-700 border-sky-300',
+  entregado: 'bg-emerald-100 text-emerald-700 border-emerald-300',
+  anulado: 'bg-neutral-200 text-neutral-600 border-neutral-400',
+  reemplazado: 'bg-neutral-100 text-neutral-500 border-neutral-300',
 }
 
 const MAX_BYTES = 10 * 1024 * 1024
@@ -246,7 +267,7 @@ export default function Mos() {
       )}
 
       {modal === 'gestion' && seleccion && (
-        <ModalGestion
+        <PanelGestion
           s={seleccion}
           onCerrar={() => setModal('')}
           onEnviado={async (correoId) => {
@@ -275,11 +296,15 @@ function PanelVer({ s, puedeGestionar, onCerrar, onGestionar, onVerCorreo, onAnt
   posicion: string
 }) {
   const [correos, setCorreos] = useState<Correo[] | null>(null)
+  const [registros, setRegistros] = useState<RegistroItem[] | null>(null)
 
   useEffect(() => {
     setCorreos(null)
+    setRegistros(null)
     sb.from('mos_correos').select('*').eq('solicitud_id', s.id).order('enviado_en', { ascending: false })
       .then(({ data }: { data: Correo[] | null }) => setCorreos(data ?? []))
+    sb.from('mos_items').select('*').eq('solicitud_id', s.id).neq('estado', 'reemplazado').order('orden')
+      .then(({ data }: { data: RegistroItem[] | null }) => setRegistros(data ?? []))
   }, [s.id])
 
   return (
@@ -313,6 +338,12 @@ function PanelVer({ s, puedeGestionar, onCerrar, onGestionar, onVerCorreo, onAnt
       </Grupo>
       <Grupo color="gestion" icono={History} titulo="Gestión MOS">
         <Dato etiqueta="Estado" valor={ESTADOS_MOS_LABEL[estadoMos(s)]} ancho />
+        {!!registros?.length && (
+          <div className="col-span-2">
+            <dt className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Material notificado ({registros.length} registros)</dt>
+            <TablaRegistros registros={registros} />
+          </div>
+        )}
         <div className="col-span-2">
           {correos === null ? <Spinner /> : correos.length === 0 ? (
             <p className="text-sm text-slate-400">Aún no se ha notificado al asegurador.</p>
@@ -339,10 +370,19 @@ function PanelVer({ s, puedeGestionar, onCerrar, onGestionar, onVerCorreo, onAnt
 }
 
 // --- Paso 1: notificación al asegurador ---
-function ModalGestion({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () => void; onEnviado: (correoId: number) => void }) {
+// Mismo esquema que "Notificar al paciente" (Gestión de solicitudes): panel
+// lateral con los datos por grupos, editor de observaciones y vista previa del
+// correo exacto antes de enviar.
+type FilaItem = { cantidad: string; descripcion: string; proveedor: string }
+
+function PanelGestion({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () => void; onEnviado: (correoId: number) => void }) {
   const { perfil } = useAuth()
+  const proveedorBase = s.casa_medica_material?.trim() ?? ''
+  const filaVacia = (): FilaItem => ({ cantidad: '1', descripcion: '', proveedor: proveedorBase })
+
   const [aseguradores, setAseguradores] = useState<Asegurador[]>([])
-  const [aseguradorId, setAseguradorId] = useState('')
+  const [aseguradorId, setAseguradorId] = useState(s.mos_asegurador_id ? String(s.mos_asegurador_id) : '')
+  const [filasItems, setFilasItems] = useState<FilaItem[]>(() => [filaVacia()])
   const [archivos, setArchivos] = useState<Record<TipoAdjunto, File | null>>({ historia_clinica: null, boleta: null })
   const [observaciones, setObservaciones] = useState('')
   const [confirmado, setConfirmado] = useState(false)
@@ -352,26 +392,38 @@ function ModalGestion({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () =
   useEffect(() => {
     sb.from('aseguradores').select('id, nombre, contacto, telefono, email').eq('activo', true).order('nombre')
       .then(({ data }: { data: Asegurador[] | null }) => setAseguradores(data ?? []))
-  }, [])
+    // Si ya se notificó, se parte de los ítems pendientes de entrega registrados
+    sb.from('mos_items').select('*').eq('solicitud_id', s.id).eq('estado', 'pendiente_entrega').order('orden')
+      .then(({ data }: { data: RegistroItem[] | null }) => {
+        if (data?.length) setFilasItems(data.map((i) => ({ cantidad: String(i.cantidad), descripcion: i.descripcion, proveedor: i.proveedor })))
+      })
+  }, [s.id])
 
   const asegurador = aseguradores.find((a) => String(a.id) === aseguradorId) ?? null
   const correoValido = !!asegurador?.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(asegurador.email)
-  const listo = !!asegurador && correoValido && !!archivos.historia_clinica && !!archivos.boleta
+  const items = useMemo(() => itemsValidos(filasItems.map((f) => ({ ...f, cantidad: Number(f.cantidad) }))), [filasItems])
+  const filasIncompletas = filasItems.filter((f) => f.descripcion.trim() && !itemsValidos([{ ...f, cantidad: Number(f.cantidad) }]).length).length
+  const listo = !!asegurador && correoValido && !!archivos.historia_clinica && !!archivos.boleta && items.length > 0 && filasIncompletas === 0
 
   // Cualquier cambio obliga a volver a confirmar la vista previa
-  useEffect(() => { setConfirmado(false) }, [aseguradorId, archivos, observaciones])
+  useEffect(() => { setConfirmado(false) }, [aseguradorId, archivos, observaciones, filasItems])
 
   const correo = useMemo(() => plantillaAsegurador(datosDesdeSolicitud(
     s,
     asegurador ?? { nombre: '[Seleccione el asegurador]', contacto: null },
     {
-      observaciones,
+      items,
+      observacionesHtml: observaciones,
       adjuntos: (['historia_clinica', 'boleta'] as TipoAdjunto[]).filter((t) => archivos[t]).map((t) => nombreAdjunto(t, s.documento_paciente)),
       gestor: perfil?.nombre ?? null,
       gestorEmail: perfil?.email ?? null,
       logoUrl: LOGO_CORREO,
     },
-  )), [s, asegurador, observaciones, archivos, perfil])
+  )), [s, asegurador, items, observaciones, archivos, perfil])
+
+  function cambiarFila(i: number, campo: keyof FilaItem, valor: string) {
+    setFilasItems((fs) => fs.map((f, n) => (n === i ? { ...f, [campo]: valor } : f)))
+  }
 
   function elegirArchivo(tipo: TipoAdjunto, f: File | null) {
     setError('')
@@ -396,10 +448,11 @@ function ModalGestion({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () =
       const { data, error: fnError } = await supabase.functions.invoke('notificar-asegurador', {
         body: {
           solicitudId: s.id, aseguradorId: asegurador.id,
-          historiaClinicaPath: rutas.historia_clinica, boletaPath: rutas.boleta, observaciones,
+          historiaClinicaPath: rutas.historia_clinica, boletaPath: rutas.boleta, items, observaciones,
         },
       })
       if (fnError) {
+        // La Edge Function responde 4xx con { error } (p. ej. falta RESEND_API_KEY)
         const detalle = await (fnError as { context?: Response }).context?.json?.().catch(() => null)
         throw new Error(detalle?.error ?? fnError.message)
       }
@@ -413,111 +466,295 @@ function ModalGestion({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () =
     }
   }
 
-  return (
-    <Modal open onClose={onCerrar} titulo={`Gestión MOS · ${codigo(s.id)} · ${s.nombre_paciente ?? s.documento_paciente}`} ancho="max-w-6xl" cerrableFuera={false}>
-      {/* Pasos del proceso MOS */}
-      <ol className="mb-4 flex flex-wrap items-center gap-2 text-xs">
-        <li className="flex items-center gap-1.5 rounded-full bg-[#0D2D6B] px-3 py-1 font-semibold text-white">
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[#0D2D6B]">1</span>
-          Notificación al asegurador
-        </li>
-        <li className="text-slate-300">›</li>
-        <li className="rounded-full border border-dashed border-slate-300 px-3 py-1 text-slate-400">Respuesta del asegurador (próximo paso)</li>
-      </ol>
+  const campo = `${CLASE_CAMPO} w-full`
 
+  return (
+    <PanelLateral
+      ancho="max-w-3xl"
+      titulo="Notificar al asegurador"
+      subtitulo={`${codigo(s.id)} · ${s.nombre_paciente ?? s.documento_paciente} · ${s.especialidades?.nombre ?? ''}`}
+      insignias={<>
+        <span className="rounded-full bg-white/15 px-2 py-0.5 font-semibold">Paso 1 · Notificación al asegurador</span>
+        <BadgeMos s={s} />
+      </>}
+      onCerrar={onCerrar}
+      pie={<>
+        <label className={`flex w-full items-center gap-2 text-sm ${listo ? 'text-slate-700' : 'text-slate-400'}`}>
+          <input type="checkbox" disabled={!listo} checked={confirmado} onChange={(e) => setConfirmado(e.target.checked)} className="h-4 w-4 accent-[#0D2D6B]" />
+          Confirmo que la información, el material y los documentos son correctos
+        </label>
+        <Boton variante="secundario" onClick={onCerrar} disabled={enviando}>Cancelar</Boton>
+        <Boton
+          disabled={!listo || !confirmado || enviando}
+          className="flex flex-1 items-center justify-center gap-1.5"
+          onClick={enviar}
+        >
+          <Send size={14} /> {enviando ? 'Enviando…' : 'Enviar correo al asegurador'}
+        </Boton>
+      </>}
+    >
       {s.estado_mos === 'asegurador_notificado' && (
-        <div className="mb-3 flex items-start gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
+        <div className="flex items-start gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
           <MailCheck size={16} className="mt-0.5 shrink-0" />
-          Este paciente ya fue notificado a {s.aseguradores?.nombre ?? 'un asegurador'} el {fechaHora(s.mos_notificado_en)}. Si envía de nuevo, quedará una nueva evidencia.
+          Ya se notificó a {s.aseguradores?.nombre ?? 'un asegurador'} el {fechaHora(s.mos_notificado_en)}. Si envía de nuevo, quedará una nueva evidencia.
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-        <div className="space-y-3">
-          <Grupo color="neutro" icono={Building2} titulo="Asegurador">
-            <div className="col-span-2">
-              <select value={aseguradorId} onChange={(e) => setAseguradorId(e.target.value)} className={`${CLASE_CAMPO} w-full`}>
-                <option value="">Seleccione el asegurador…</option>
-                {aseguradores.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
-              </select>
-            </div>
-            {asegurador && (<>
-              <Dato etiqueta="Nombre asegurador" valor={asegurador.nombre} ancho />
-              <Dato etiqueta="Persona de contacto" valor={asegurador.contacto} ancho />
-              <Dato etiqueta="Teléfono" valor={asegurador.telefono && <span className="flex items-center gap-1"><Phone size={12} />{asegurador.telefono}</span>} />
-              <Dato etiqueta="Correo de contacto" valor={asegurador.email && <span className="flex items-center gap-1 break-all"><Mail size={12} />{asegurador.email}</span>} />
-              {!correoValido && <p className="col-span-2 text-xs text-red-600">Este asegurador no tiene un correo válido. Actualícelo en Catálogos → Aseguradores.</p>}
-            </>)}
-          </Grupo>
+      <Grupo color="orden" icono={Stethoscope} titulo="Cirugía">
+        <Dato etiqueta="Paciente" valor={`${s.nombre_paciente ?? '—'} · ${s.documento_paciente}`} ancho />
+        <Dato etiqueta="Procedimiento" valor={s.procedimiento} ancho />
+        <Dato etiqueta="EPS / Contrato" valor={[s.eps_gomedisys || s.eps?.nombre, s.plan_gomedisys].filter(Boolean).join(' · ')} />
+        <Dato etiqueta="Programación" valor={s.fecha_programada ? `${s.fecha_programada} ${s.hora_programada?.slice(0, 5) ?? ''}` : null} />
+      </Grupo>
 
-          <Grupo color="boleta" icono={Paperclip} titulo="Documentos (obligatorios, PDF)">
-            {(['historia_clinica', 'boleta'] as TipoAdjunto[]).map((tipo) => {
-              const f = archivos[tipo]
-              return (
-                <div key={tipo} className="col-span-2">
-                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                    {tipo === 'historia_clinica' ? 'Historia clínica' : 'Boleta quirúrgica'} *
-                  </div>
-                  {f ? (
-                    <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-sm">
-                      <FileText size={16} className="shrink-0 text-red-500" />
-                      <span className="min-w-0 flex-1 truncate">{f.name}</span>
-                      <span className="text-xs text-slate-400">{tamano(f.size)}</span>
-                      <button title="Quitar" onClick={() => elegirArchivo(tipo, null)} className="text-slate-400 hover:text-red-600"><X size={14} /></button>
-                    </div>
-                  ) : (
-                    <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-amber-300 bg-white px-3 py-2.5 text-sm text-amber-800 hover:bg-amber-50">
-                      <Upload size={15} /> Cargar PDF
-                      <input type="file" accept="application/pdf,.pdf" className="hidden" onChange={(e) => { elegirArchivo(tipo, e.target.files?.[0] ?? null); e.target.value = '' }} />
-                    </label>
-                  )}
-                </div>
-              )
-            })}
-          </Grupo>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Observaciones (opcional, se incluyen en el correo)</label>
-            <textarea value={observaciones} onChange={(e) => setObservaciones(e.target.value)} rows={3} className={`${CLASE_CAMPO} w-full`} placeholder="Información adicional para el asegurador…" />
-          </div>
+      <Grupo color="paciente" icono={Building2} titulo="Asegurador *">
+        <div className="col-span-2">
+          <select value={aseguradorId} onChange={(e) => setAseguradorId(e.target.value)} className={campo}>
+            <option value="">Seleccione el asegurador…</option>
+            {aseguradores.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+          </select>
         </div>
+        {asegurador && (<>
+          <Dato etiqueta="Nombre asegurador" valor={asegurador.nombre} />
+          <Dato etiqueta="Persona de contacto" valor={asegurador.contacto} />
+          <Dato etiqueta="Teléfono" valor={asegurador.telefono && <span className="flex items-center gap-1"><Phone size={12} />{asegurador.telefono}</span>} />
+          <Dato etiqueta="Correo de contacto" valor={asegurador.email && <span className="flex items-center gap-1 break-all"><Mail size={12} />{asegurador.email}</span>} />
+          {!correoValido && <div className="col-span-2 text-xs text-red-600">Este asegurador no tiene un correo válido. Actualícelo en Catálogos → Aseguradores (MOS).</div>}
+        </>)}
+      </Grupo>
 
-        <div className="flex min-w-0 flex-col">
-          <div className="mb-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-            <div><span className="font-semibold">De:</span> {REMITENTE_MOS}</div>
-            <div><span className="font-semibold">Para:</span> {asegurador?.email ?? '—'}{perfil?.email && <> · <span className="font-semibold">Responder a:</span> {perfil.email}</>}</div>
-            <div className="truncate"><span className="font-semibold">Asunto:</span> {correo.asunto}</div>
-            <div className="flex flex-wrap items-center gap-1.5"><span className="font-semibold">Adjuntos:</span>
-              {(['historia_clinica', 'boleta'] as TipoAdjunto[]).map((t) => (
-                <span key={t} className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 ${archivos[t] ? 'border-slate-300 bg-white' : 'border-red-200 bg-red-50 text-red-600'}`}>
-                  <Paperclip size={11} />{archivos[t] ? nombreAdjunto(t, s.documento_paciente) : `Falta ${t === 'historia_clinica' ? 'historia clínica' : 'boleta'}`}
-                </span>
+      <Grupo
+        color="boleta"
+        icono={ClipboardList}
+        titulo="Material de osteosíntesis (boleta quirúrgica) *"
+        accion={
+          <button type="button" onClick={() => setFilasItems((fs) => [...fs, filaVacia()])} title="Agregar ítem"
+            className="flex items-center gap-1 rounded-md bg-amber-500 px-2 py-1 text-[11px] font-semibold normal-case tracking-normal text-white hover:bg-amber-600">
+            <Plus size={13} /> Agregar ítem
+          </button>
+        }
+      >
+        <div className="col-span-2 rounded-lg border border-amber-200 bg-white/70 px-3 py-2">
+          <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            Boleta (GoMedisys) · transcriba cada ítem como un registro
+          </div>
+          <p className="max-h-24 overflow-y-auto whitespace-pre-line text-xs text-slate-700">{s.boleta_quirurgica}</p>
+        </div>
+        <div className="col-span-2 overflow-hidden rounded-lg border border-amber-200 bg-white">
+          <table className="w-full text-sm">
+            <thead className="bg-amber-100 text-left text-[10px] font-semibold uppercase tracking-wide text-amber-900">
+              <tr>
+                <th className="w-8 px-2 py-1.5 text-center">#</th>
+                <th className="w-20 px-2 py-1.5">Cantidad</th>
+                <th className="px-2 py-1.5">Descripción</th>
+                <th className="w-48 px-2 py-1.5">Nombre proveedor</th>
+                <th className="w-8 px-1 py-1.5" />
+              </tr>
+            </thead>
+            <tbody>
+              {filasItems.map((f, i) => (
+                <tr key={i} className="border-t border-amber-100 align-top">
+                  <td className="px-2 py-1.5 text-center text-xs text-slate-400">{i + 1}</td>
+                  <td className="px-1 py-1">
+                    <input type="number" min={1} step={1} value={f.cantidad} onChange={(e) => cambiarFila(i, 'cantidad', e.target.value)} className={`${CLASE_CAMPO} w-full !px-2`} />
+                  </td>
+                  <td className="px-1 py-1">
+                    <input value={f.descripcion} onChange={(e) => cambiarFila(i, 'descripcion', e.target.value)} className={`${CLASE_CAMPO} w-full !px-2`} placeholder="Ej.: Placa bloqueada 3.5 mm de 8 orificios" />
+                  </td>
+                  <td className="px-1 py-1">
+                    <input value={f.proveedor} onChange={(e) => cambiarFila(i, 'proveedor', e.target.value)} className={`${CLASE_CAMPO} w-full !px-2`} placeholder="Casa médica / proveedor" />
+                  </td>
+                  <td className="px-1 py-1.5 text-center">
+                    <button type="button" title="Quitar ítem" disabled={filasItems.length === 1}
+                      onClick={() => setFilasItems((fs) => fs.filter((_, n) => n !== i))}
+                      className="text-slate-400 hover:text-red-600 disabled:opacity-30"><Trash2 size={14} /></button>
+                  </td>
+                </tr>
               ))}
-            </div>
-          </div>
-          <iframe title="Vista previa del correo" srcDoc={correo.html} className="h-[52vh] w-full rounded-lg border border-slate-200 bg-white" />
+            </tbody>
+          </table>
+          <button type="button" onClick={() => setFilasItems((fs) => [...fs, filaVacia()])}
+            className="flex w-full items-center justify-center gap-1.5 border-t border-dashed border-amber-200 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-50">
+            <Plus size={13} /> Agregar otro ítem
+          </button>
         </div>
-      </div>
+        <div className="col-span-2 text-[11px] text-slate-500">
+          {items.length} ítem(s) completo(s) · {items.reduce((t, i) => t + i.cantidad, 0)} unidades
+          {filasIncompletas > 0 && <span className="ml-2 text-red-600">Hay {filasIncompletas} fila(s) incompleta(s): cantidad, descripción y proveedor son obligatorios.</span>}
+        </div>
+      </Grupo>
+
+      <Grupo color="neutro" icono={Paperclip} titulo="Documentos adjuntos (PDF obligatorios)">
+        {(['historia_clinica', 'boleta'] as TipoAdjunto[]).map((tipo) => {
+          const f = archivos[tipo]
+          return (
+            <div key={tipo}>
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                {tipo === 'historia_clinica' ? 'Historia clínica' : 'Boleta quirúrgica'} *
+              </div>
+              {f ? (
+                <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm">
+                  <FileText size={16} className="shrink-0 text-red-500" />
+                  <span className="min-w-0 flex-1 truncate" title={f.name}>{f.name}</span>
+                  <span className="text-xs text-slate-400">{tamano(f.size)}</span>
+                  <button title="Quitar" onClick={() => elegirArchivo(tipo, null)} className="text-slate-400 hover:text-red-600"><X size={14} /></button>
+                </div>
+              ) : (
+                <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 bg-white px-3 py-2 text-sm text-slate-600 hover:border-[#0D2D6B] hover:text-[#0D2D6B]">
+                  <Upload size={15} /> Cargar PDF
+                  <input type="file" accept="application/pdf,.pdf" className="hidden" onChange={(e) => { elegirArchivo(tipo, e.target.files?.[0] ?? null); e.target.value = '' }} />
+                </label>
+              )}
+            </div>
+          )
+        })}
+      </Grupo>
+
+      <Grupo color="gestion" icono={MessageSquareText} titulo="Observaciones para el asegurador (opcional)">
+        <div className="col-span-2">
+          <RichTextEditor value={observaciones} onChange={setObservaciones} placeholder="Información adicional para el asegurador…" minHeight="70px" />
+        </div>
+      </Grupo>
+
+      {/* Vista previa de lo que recibirá el asegurador */}
+      <section className="rounded-xl border border-slate-200 bg-white p-3">
+        <h3 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-[#0D2D6B]">
+          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-[#0D2D6B] text-white"><Eye size={14} /></span>
+          Vista previa para el asegurador
+        </h3>
+        <div className="mb-2 space-y-0.5 rounded-lg bg-slate-50 px-3 py-1.5 text-xs text-slate-600">
+          <div><b>De:</b> {REMITENTE_MOS}</div>
+          <div><b>Para:</b> {asegurador?.email ?? '—'}{perfil?.email && <> · <b>Responder a:</b> {perfil.email}</>}</div>
+          <div><b>Asunto:</b> {correo.asunto}</div>
+          <div className="flex flex-wrap items-center gap-1.5"><b>Adjuntos:</b>
+            {(['historia_clinica', 'boleta'] as TipoAdjunto[]).map((t) => (
+              <span key={t} className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 ${archivos[t] ? 'border-slate-300 bg-white' : 'border-red-200 bg-red-50 text-red-600'}`}>
+                <Paperclip size={11} />{archivos[t] ? nombreAdjunto(t, s.documento_paciente) : `Falta ${t === 'historia_clinica' ? 'historia clínica' : 'boleta'}`}
+              </span>
+            ))}
+          </div>
+        </div>
+        <iframe title="Vista previa del correo" srcDoc={correo.html} className="h-[520px] w-full rounded-lg border border-slate-200" sandbox="" />
+      </section>
 
       {error && (
-        <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
           <AlertTriangle size={16} className="mt-0.5 shrink-0" /> {error}
-        </div>
+        </p>
       )}
+    </PanelLateral>
+  )
+}
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
-        <label className={`flex items-center gap-2 text-sm ${listo ? 'text-slate-700' : 'text-slate-400'}`}>
-          <input type="checkbox" disabled={!listo} checked={confirmado} onChange={(e) => setConfirmado(e.target.checked)} className="h-4 w-4 accent-[#0D2D6B]" />
-          Confirmo que la información y los documentos son correctos
-        </label>
-        <div className="flex gap-2">
-          <Boton variante="fantasma" onClick={onCerrar} disabled={enviando}>Cancelar</Boton>
-          <Boton onClick={enviar} disabled={!listo || !confirmado || enviando} className="flex items-center gap-1.5">
-            {enviando ? <Spinner className="h-4 w-4" /> : <Send size={15} />} Enviar correo al asegurador
-          </Boton>
-        </div>
-      </div>
-    </Modal>
+// --- Registros de material (uno por ítem) con su estado de entrega ---
+function TablaRegistros({ registros }: { registros: RegistroItem[] }) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-emerald-200 bg-white">
+      <table className="w-full text-xs">
+        <thead className="bg-emerald-100 text-left text-[10px] uppercase text-emerald-900">
+          <tr><th className="px-2 py-1">#</th><th className="px-2 py-1">Cant.</th><th className="px-2 py-1">Descripción</th><th className="px-2 py-1">Proveedor</th><th className="px-2 py-1">Entrega</th></tr>
+        </thead>
+        <tbody>
+          {registros.map((i) => (
+            <tr key={i.id} className="border-t border-emerald-100 align-top">
+              <td className="px-2 py-1 text-slate-400">{i.orden}</td>
+              <td className="px-2 py-1 font-semibold">{i.cantidad}</td>
+              <td className="px-2 py-1">{i.descripcion}</td>
+              <td className="px-2 py-1 text-slate-500">{i.proveedor}</td>
+              <td className="px-2 py-1"><Badge className={ESTADO_ITEM_COLOR[i.estado]}>{ESTADO_ITEM_LABEL[i.estado]}</Badge></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// --- Detalle de la gestión MOS (se abre desde Gestión de solicitudes) ---
+export function ModalDetalleMos({ solicitudId, onCerrar }: { solicitudId: number; onCerrar: () => void }) {
+  const [s, setS] = useState<Solicitud | null>(null)
+  const [correos, setCorreos] = useState<Correo[]>([])
+  const [registros, setRegistros] = useState<RegistroItem[]>([])
+  const [cargando, setCargando] = useState(true)
+  const [evidencia, setEvidencia] = useState<Correo | null>(null)
+
+  useEffect(() => {
+    setCargando(true)
+    Promise.all([
+      sb.from('solicitudes_cirugia').select('*, especialidades(nombre), eps(nombre), aseguradores(nombre)').eq('id', solicitudId).single(),
+      sb.from('mos_correos').select('*').eq('solicitud_id', solicitudId).order('enviado_en', { ascending: false }),
+      sb.from('mos_items').select('*').eq('solicitud_id', solicitudId).neq('estado', 'reemplazado').order('orden'),
+    ]).then(([rs, rc, ri]: { data: unknown }[]) => {
+      setS(rs.data as Solicitud | null)
+      setCorreos((rc.data ?? []) as Correo[])
+      setRegistros((ri.data ?? []) as RegistroItem[])
+      setCargando(false)
+    })
+  }, [solicitudId])
+
+  const ultimo = correos[0] ?? null
+  const unidades = registros.reduce((t, i) => t + i.cantidad, 0)
+
+  return (
+    <>
+      <Modal open onClose={onCerrar} titulo={`Gestión MOS · ${codigo(solicitudId)}${s ? ` · ${s.nombre_paciente ?? s.documento_paciente}` : ''}`} ancho="max-w-4xl">
+        {cargando || !s ? (
+          <div className="flex justify-center py-12"><Spinner className="h-7 w-7" /></div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <BadgeMos s={s} />
+              <Badge className={ESTADOS_COLOR[s.estado]}>{ESTADOS_LABEL[s.estado]}</Badge>
+              {s.mos_notificado_en && <span className="text-xs text-slate-500">Notificado el {fechaHora(s.mos_notificado_en)}{ultimo?.enviado_por_nombre && ` por ${ultimo.enviado_por_nombre}`}</span>}
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <Grupo color="orden" icono={Stethoscope} titulo="Paciente y cirugía">
+                <Dato etiqueta="Paciente" valor={`${s.nombre_paciente ?? '—'} · ${s.documento_paciente}`} ancho />
+                <Dato etiqueta="Procedimiento" valor={s.procedimiento} ancho />
+                <Dato etiqueta="EPS / Contrato" valor={[s.eps_gomedisys || s.eps?.nombre, s.plan_gomedisys].filter(Boolean).join(' · ')} />
+                <Dato etiqueta="Programación" valor={s.fecha_programada ? `${s.fecha_programada} ${s.hora_programada?.slice(0, 5) ?? ''}` : null} />
+              </Grupo>
+              <Grupo color="paciente" icono={Building2} titulo="Asegurador notificado">
+                <Dato etiqueta="Asegurador" valor={ultimo?.asegurador_nombre ?? s.aseguradores?.nombre} />
+                <Dato etiqueta="Persona de contacto" valor={ultimo?.asegurador_contacto} />
+                <Dato etiqueta="Teléfono" valor={ultimo?.asegurador_telefono} />
+                <Dato etiqueta="Correo" valor={ultimo?.destinatario && <span className="break-all">{ultimo.destinatario}</span>} />
+              </Grupo>
+            </div>
+
+            <Grupo color="boleta" icono={ClipboardList} titulo={`Material de osteosíntesis · ${registros.length} registros · ${unidades} unidades`}>
+              <div className="col-span-2">
+                {registros.length ? <TablaRegistros registros={registros} /> : <p className="text-sm text-slate-400">Sin ítems registrados.</p>}
+              </div>
+              <Dato etiqueta="Boleta (GoMedisys)" valor={s.boleta_quirurgica} ancho />
+            </Grupo>
+
+            <Grupo color="gestion" icono={History} titulo="Correos enviados (evidencia)">
+              <div className="col-span-2">
+                {correos.length === 0 ? <p className="text-sm text-slate-400">Sin correos registrados.</p> : (
+                  <ul className="space-y-1.5">
+                    {correos.map((c) => (
+                      <li key={c.id}>
+                        <button onClick={() => setEvidencia(c)} className="flex w-full items-center gap-2 rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-left text-xs hover:bg-emerald-50">
+                          <MailCheck size={14} className="shrink-0 text-emerald-600" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-medium text-slate-700">Notificación a {c.asegurador_nombre} · {c.adjuntos.length} adjuntos</span>
+                            <span className="block truncate text-slate-400">{fechaHora(c.enviado_en)} · {c.destinatario} · {c.enviado_por_nombre ?? '—'}</span>
+                          </span>
+                          <Eye size={14} className="text-slate-400" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </Grupo>
+          </div>
+        )}
+      </Modal>
+      {evidencia && <ModalEvidencia correo={evidencia} onCerrar={() => setEvidencia(null)} />}
+    </>
   )
 }
 
