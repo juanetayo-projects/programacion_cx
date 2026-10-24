@@ -1356,3 +1356,10 @@ Se requiere construir una app que permita
 			Versión previa guardada en la etiqueta git "dashboard-sin-hero" (commit
 			de01b94). Para revertir solo la card: git revert 4e6bc8c (quita el
 			componente, la imagen y la línea del Dashboard sin tocar lo posterior).
+
+		27.- Dashboard · card "Tiempos del proceso" (2026-10-24)
+			Completa la fila de las fases 6 y 7. Promedio por tramo (orden → reporte,
+			solicitud → autorización, reporte → programación, MOS asegurador →
+			material, programación → cirugía, cirugía → 1.er control) con barra
+			proporcional, anillo del ciclo orden → cirugía (se llena a 30 días),
+			tramo más lento y clic a los pacientes medidos en cada tramo.

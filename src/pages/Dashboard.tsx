@@ -45,6 +45,7 @@ type S = CamposAutorizacion & CamposCierre & {
   realizado_en: string | null
   estado_mos: EstadoMos | null
   estado_gc_id: number | null
+  fecha_ordenamiento: string | null
   mos_notificado_en: string | null
   mos_respuesta_asegurador: string | null
   mos_proveedor_notificado_en: string | null
@@ -245,6 +246,28 @@ export default function Dashboard() {
     for (const i of itemsSolicitados) { const k = i.proveedor ?? 'Sin proveedor'; m[k] ??= { sol: 0, rec: 0 }; m[k].sol += i.cantidad; m[k].rec += i.cantidad_entregada ?? 0 }
     return Object.entries(m).map(([nombre, v]) => ({ nombre, solicitadas: v.sol, recibidas: v.rec })).sort((a, b) => b.solicitadas - a.solicitadas)
   }, [itemsSolicitados])
+
+  // Tiempos del proceso: promedio por tramo con los pacientes que tienen ambas fechas
+  const primerPostqx = useMemo(() => {
+    const m = new Map<number, string>()
+    for (const n of notasPost) { const a = m.get(n.solicitud_id); if (!a || n.created_at < a) m.set(n.solicitud_id, n.created_at) }
+    return m
+  }, [notasPost])
+  const tramo = (titulo: string, color: string, desde: (s: S) => string | null, hasta: (s: S) => string | null) => {
+    const lista = F.filter((s) => { const d = dias(desde(s), hasta(s)); return d !== null && d >= 0 })
+    return { titulo, color, lista, prom: promedio(lista.map((s) => dias(desde(s), hasta(s)))) }
+  }
+  const tramos = [
+    tramo('Orden → reporte', FASE.gomedisys, (s) => s.fecha_ordenamiento, (s) => s.fecha_reporte),
+    tramo('Solicitud → autorización', FASE.autorizacion, (s) => s.autorizacion_fecha_solicitud, (s) => s.autorizacion_fecha),
+    tramo('Reporte → programación', FASE.programacion, (s) => s.fecha_reporte, (s) => s.programado_en),
+    tramo('MOS: asegurador → material', FASE.mos, (s) => s.mos_notificado_en, (s) => s.mos_material_recibido_en),
+    tramo('Programación → cirugía', FASE.cirugia, (s) => s.programado_en, (s) => s.cirugia_inicio ?? s.realizado_en),
+    tramo('Cirugía → 1.er control', FASE.postqx, (s) => s.cirugia_fin ?? s.realizado_en, (s) => primerPostqx.get(s.id) ?? null),
+  ]
+  const maxTramo = Math.max(1, ...tramos.map((t) => t.prom ?? 0))
+  const cicloTotal = tramo('Orden → cirugía', FASE.cirugia, (s) => s.fecha_ordenamiento ?? s.fecha_reporte, (s) => s.cirugia_inicio ?? s.realizado_en)
+  const tramoMasLento = [...tramos].filter((t) => t.prom !== null).sort((a, b) => b.prom! - a.prom!)[0]
 
   // Fase 7: PostQx
   const citas = notasPost.filter((n) => n.fecha_cita)
@@ -615,6 +638,37 @@ export default function Dashboard() {
               </BarChart></ResponsiveContainer>
             </div>
           )}
+        </TarjetaFase>
+
+        {/* Tiempos del proceso (completa la fila de las fases 6 y 7) */}
+        <TarjetaFase titulo="Tiempos del proceso" subtitulo="Promedio por tramo · clic para ver los pacientes medidos" icono={Timer} color="#E8590C">
+          <div className="mb-3 flex items-center gap-4">
+            <AnilloSimple pct={cicloTotal.prom === null ? 0 : Math.min(100, (cicloTotal.prom / 30) * 100)} color={cicloTotal.prom !== null && cicloTotal.prom > 30 ? '#DC2626' : '#E8590C'} tamano={104} grosor={11}>
+              <span className="text-xl font-bold text-slate-800">{fmtDias(cicloTotal.prom)}</span>
+              <span className="text-[10px] leading-tight text-slate-500">orden →<br />cirugía</span>
+            </AnilloSimple>
+            <div className="min-w-0 flex-1 text-xs text-slate-600">
+              <p><span className="font-semibold text-slate-800">{cicloTotal.lista.length}</span> cirugías con el ciclo completo medido.</p>
+              {tramoMasLento && <p className="mt-1">Tramo más lento: <span className="font-semibold" style={{ color: tramoMasLento.color }}>{tramoMasLento.titulo}</span> ({fmtDias(tramoMasLento.prom)}).</p>}
+              <p className="mt-1 text-[10px] text-slate-400">El anillo se llena a 30 días.</p>
+            </div>
+          </div>
+          <ul className="space-y-1.5">
+            {tramos.map((t) => (
+              <li key={t.titulo}>
+                <button type="button" disabled={!t.lista.length} onClick={(e) => abrir(t.titulo, t.lista)(e)}
+                  className={`w-full rounded-lg px-1.5 py-1 text-left ${t.lista.length ? 'hover:bg-slate-50' : 'cursor-default opacity-60'}`}>
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-medium text-slate-700">{t.titulo}</span>
+                    <span className="font-bold tabular-nums" style={{ color: t.color }}>{fmtDias(t.prom)} <span className="font-normal text-slate-400">· {t.lista.length}</span></span>
+                  </div>
+                  <div className="mt-0.5 h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-full rounded-full transition-[width] duration-700" style={{ width: `${t.prom === null ? 0 : Math.max(3, (t.prom / maxTramo) * 100)}%`, background: t.color }} />
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
         </TarjetaFase>
 
         {/* Tendencia */}
