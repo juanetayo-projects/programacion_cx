@@ -5,6 +5,7 @@ import { CrudTable } from '../../components/CrudTable'
 const TABS = [
   { key: 'especialidades', label: 'Especialidades' },
   { key: 'eps', label: 'EPS' },
+  { key: 'aseguradores', label: 'Aseguradores (MOS)' },
   { key: 'unidades', label: 'Unidades' },
   { key: 'quirofanos', label: 'Quirófanos' },
   { key: 'recomendaciones_cirugia', label: 'Recomendaciones' },
@@ -47,6 +48,19 @@ export default function Catalogos() {
           titulo="EPS / Aseguradoras"
           columnas={[
             { key: 'nombre', label: 'Nombre', tipo: 'text', requerido: true },
+            { key: 'activo', label: 'Activo', tipo: 'boolean' },
+          ]}
+        />
+      )}
+      {tab === 'aseguradores' && (
+        <CrudTable
+          tabla="aseguradores"
+          titulo="Aseguradores — contacto para notificaciones MOS"
+          columnas={[
+            { key: 'nombre', label: 'Nombre asegurador', tipo: 'text', requerido: true },
+            { key: 'contacto', label: 'Persona de contacto', tipo: 'text' },
+            { key: 'telefono', label: 'Teléfono', tipo: 'text' },
+            { key: 'email', label: 'Correo de contacto', tipo: 'text', requerido: true },
             { key: 'activo', label: 'Activo', tipo: 'boolean' },
           ]}
         />

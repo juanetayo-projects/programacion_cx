@@ -1047,3 +1047,39 @@ Se requiere construir una app que permita
 			e) Pendiente para habilitar el correo: secret RESEND_API_KEY en
 			   Supabase (Edge Functions → Secrets). Sin él, la notificación
 			   por correo muestra "Falta configurar RESEND_API_KEY".
+
+
+		16.- Módulo MOS — Materiales de Osteosíntesis (2026-10-23)
+			16.1.- Acceso
+				- Nuevo rol 'mos' (Gestor MOS) y módulo 'mos' (menú "Gestión MOS",
+				  ruta #/mos). Por defecto solo Administrador y Gestor MOS lo ven;
+				  se ajusta en Roles y permisos.
+				- La lista muestra por defecto solo los pacientes CON boleta
+				  quirúrgica (boleta_quirurgica no vacía); el filtro permite ver
+				  todas. El icono de gestión (hueso) aparece solo al rol mos o al
+				  administrador, y solo en pacientes con boleta.
+			16.2.- Paso 1: Notificación al asegurador (modal)
+				- Asegurador desde el catálogo 'aseguradores' (Catálogos →
+				  Aseguradores (MOS)); al elegirlo se cargan nombre, persona de
+				  contacto, teléfono y correo.
+				- Historia clínica y boleta quirúrgica en PDF, obligatorias
+				  (máx. 10 MB c/u), al bucket privado 'mos' (<solicitud>/<marca>_<tipo>.pdf).
+				- Vista previa del correo exacto (plantilla compartida
+				  supabase/functions/notificar-asegurador/plantilla.ts), casilla de
+				  confirmación y botón "Enviar correo al asegurador".
+			16.3.- Envío y evidencia
+				- Edge Function notificar-asegurador (Resend). Remitente
+				  "Clínica Santa Bárbara - MOS <notificaciones@cacsantabarbara.co>",
+				  responder-a: el correo del gestor; adjuntos Historia_Clinica_<doc>.pdf
+				  y Boleta_Quirurgica_<doc>.pdf.
+				- solicitudes_cirugia.estado_mos = 'asegurador_notificado' ("Asegurador
+				  notificado · en espera de respuesta"), independiente del estado de
+				  programación; + mos_asegurador_id, mos_notificado_en, mos_notificado_por.
+				- mos_correos guarda la copia: HTML enviado, asunto, remitente,
+				  destinatario, datos del asegurador, adjuntos (rutas en el bucket),
+				  id de Resend, quién y fecha/hora. Solo lectura (la inserta la
+				  función con service role). También queda en solicitudes_historial.
+			16.4.- Datos de ejemplo
+				Aseguradores EMSSANAR, ASMET SALUD, S.O.S, SURA y SURA ARL con
+				contactos y correos ficticios (@ejemplo.co) hasta cargar los reales.
+			16.5.- Migración: 0020_modulo_mos.sql

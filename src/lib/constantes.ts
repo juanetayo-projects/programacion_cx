@@ -1,4 +1,4 @@
-export const ROLES = ['administrador', 'programador', 'medico', 'visualizador'] as const
+export const ROLES = ['administrador', 'programador', 'medico', 'visualizador', 'mos'] as const
 export type Rol = (typeof ROLES)[number]
 
 export const ROLES_LABEL: Record<Rol, string> = {
@@ -6,6 +6,7 @@ export const ROLES_LABEL: Record<Rol, string> = {
   programador: 'Programador de cirugía',
   medico: 'Médico cirujano',
   visualizador: 'Visualizador',
+  mos: 'Gestor MOS',
 }
 
 export const ESTADOS = [
@@ -109,7 +110,7 @@ export type CanalNotificacion = (typeof CANALES_NOTIFICACION)[number]
 // Módulos de la app — usados por Roles y Permisos para controlar el acceso por rol
 export const MODULOS = [
   'dashboard', 'reportar', 'reportar_masivo', 'solicitudes_reportadas', 'solicitudes', 'cirugias_realizadas', 'quirofanos', 'calor', 'reportes',
-  'logs', 'admin_usuarios', 'admin_catalogos', 'admin_roles',
+  'logs', 'admin_usuarios', 'admin_catalogos', 'admin_roles', 'mos',
 ] as const
 export type Modulo = (typeof MODULOS)[number]
 
@@ -133,4 +134,20 @@ export const MODULOS_LABEL: Record<Modulo, string> = {
   admin_usuarios: 'Administración · Usuarios',
   admin_catalogos: 'Administración · Catálogos',
   admin_roles: 'Administración · Roles y permisos',
+  mos: 'Gestión MOS (materiales de osteosíntesis)',
+}
+
+// Módulo MOS (Materiales de Osteosíntesis): estado propio de la solicitud,
+// independiente del estado de programación. NULL en la base = pendiente.
+export const ESTADOS_MOS = ['pendiente', 'asegurador_notificado'] as const
+export type EstadoMos = (typeof ESTADOS_MOS)[number]
+
+export const ESTADOS_MOS_LABEL: Record<EstadoMos, string> = {
+  pendiente: 'Pendiente de gestión',
+  asegurador_notificado: 'Asegurador notificado · en espera de respuesta',
+}
+
+export const ESTADOS_MOS_COLOR: Record<EstadoMos, string> = {
+  pendiente: 'bg-slate-100 text-slate-700 border-slate-300',
+  asegurador_notificado: 'bg-indigo-100 text-indigo-700 border-indigo-300',
 }
