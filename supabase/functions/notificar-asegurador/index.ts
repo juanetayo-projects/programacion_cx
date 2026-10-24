@@ -64,6 +64,13 @@ Deno.serve(async (req) => {
   if (!String(solicitud.boleta_quirurgica ?? '').trim()) return json(400, { error: 'La solicitud no tiene boleta quirúrgica' })
   // Una vez enviada, la notificación al asegurador no se modifica ni se reenvía
   if (solicitud.estado_mos) return json(409, { error: 'El asegurador ya fue notificado; la notificación no se puede modificar ni reenviar' })
+  // Sin autorización vigente del asegurador no se inicia ningún proceso de la cirugía (incluido MOS)
+  const { data: vigente } = await admin.rpc('autorizacion_vigente_de', {
+    p_estado: solicitud.autorizacion_estado, p_vigencia: solicitud.autorizacion_vigencia_hasta,
+  })
+  if (!vigente) {
+    return json(409, { error: 'La cirugía no tiene autorización vigente del asegurador. El Gestor clínico debe registrarla en Gestión clínica → Autorización del asegurador antes de iniciar la gestión MOS.' })
+  }
 
   const { data: asegurador } = await admin.from('aseguradores').select('*').eq('id', aseguradorId).single()
   if (!asegurador || !asegurador.activo) return json(404, { error: 'Asegurador no encontrado o inactivo' })

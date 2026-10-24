@@ -17,7 +17,7 @@ const sb = supabase as any
 export type Ambito = 'gestion_clinica' | 'prequirurgico'
 type Fase = 'prequirurgico' | 'posquirurgico' | 'general'
 type EstadoCita = 'programada' | 'confirmada' | 'cumplida' | 'no_asistio' | 'reprogramada' | 'cancelada'
-type Adjunto = { nombre: string; path: string; bytes: number; tipo: string }
+export type Adjunto = { nombre: string; path: string; bytes: number; tipo: string }
 
 export type Nota = {
   id: number
@@ -441,7 +441,7 @@ function LineaTiempo({ notas, etiquetasItems, puedeEscribir, paciente, onCambio 
 }
 
 // --- Vista previa de un adjunto ---
-function ModalAdjunto({ adjunto, onCerrar }: { adjunto: Adjunto; onCerrar: () => void }) {
+export function ModalAdjunto({ adjunto, onCerrar }: { adjunto: Adjunto; onCerrar: () => void }) {
   const [url, setUrl] = useState<string | null>(null)
   const [error, setError] = useState('')
   useEffect(() => {

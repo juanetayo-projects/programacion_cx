@@ -7,6 +7,8 @@ import RichTextEditor from '../components/RichTextEditor'
 import { AvanceMos, AvanceMosCompacto, type CamposAvanceMos } from '../components/AvanceMos'
 import { ListaEvidencias, ModalEvidencia, fechaHora, type Correo } from '../components/EvidenciasMos'
 import FiltroEtapaMos from '../components/FiltroEtapaMos'
+import { AlertaAutorizacion, IndicadorAutorizacion } from '../components/Autorizacion'
+import { autorizacionVigente, type CamposAutorizacion } from '../lib/autorizacion'
 import { filtrarPorEtapaMos } from '../lib/filtrosMos'
 import { LOGO_CORREO } from '../lib/mensajesNotificacion'
 import {
@@ -30,7 +32,7 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const sb = supabase as any
 
-type Solicitud = SolicitudMos & CamposAvanceMos & {
+type Solicitud = SolicitudMos & CamposAvanceMos & CamposAutorizacion & {
   id: number
   estado: Estado
   fecha_reporte: string
@@ -243,6 +245,7 @@ export default function Mos() {
                     </td>
                     <td className="px-4 py-2.5">
                       <BadgeMos s={s} />
+                      <div onClick={(ev) => ev.stopPropagation()}><IndicadorAutorizacion s={s} /></div>
                       {s.estado_mos && (<>
                         <div onClick={(e) => e.stopPropagation()}><AvanceMosCompacto s={s} onClick={() => abrir(s, 'ver')} /></div>
                         <div className="mt-0.5 text-[11px] text-slate-400">{s.aseguradores?.nombre}</div>
@@ -253,7 +256,11 @@ export default function Mos() {
                         <button title="Ver detalle y evidencias" onClick={() => abrir(s, 'ver')} className="text-slate-500 hover:text-[#0D2D6B]"><Eye size={15} /></button>
                         {/* Cada paso se puede ejecutar una sola vez; luego solo queda su evidencia */}
                         {puedeGestionar && tieneBoleta(s) && !s.estado_mos && (
-                          <button title="Paso 1 · Notificar al asegurador" onClick={() => abrir(s, 'gestion')} className="text-slate-500 hover:text-[#0D2D6B]"><Bone size={15} /></button>
+                          <button
+                            title={autorizacionVigente(s) ? 'Paso 1 · Notificar al asegurador' : 'Paso 1 bloqueado: la cirugía no tiene autorización vigente del asegurador'}
+                            onClick={() => abrir(s, 'gestion')}
+                            className={autorizacionVigente(s) ? 'text-slate-500 hover:text-[#0D2D6B]' : 'text-slate-300 hover:text-red-500'}
+                          ><Bone size={15} /></button>
                         )}
                         {puedeGestionar && s.estado_mos && !s.mos_proveedor_notificado_en && (
                           <button title="Registrar respuesta del asegurador (aprobado / rechazado)" onClick={() => abrir(s, 'respuesta')} className="text-emerald-600 hover:text-emerald-800"><ShieldCheck size={15} /></button>
@@ -542,7 +549,7 @@ function PanelGestion({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () =
   const correoValido = !!asegurador?.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(asegurador.email)
   const items = useMemo(() => itemsValidos(filasItems.map((f) => ({ ...f, cantidad: Number(f.cantidad) }))), [filasItems])
   const filasIncompletas = filasItems.filter((f) => f.descripcion.trim() && !itemsValidos([{ ...f, cantidad: Number(f.cantidad) }]).length).length
-  const listo = !!asegurador && correoValido && !!archivos.historia_clinica && !!archivos.boleta && items.length > 0 && filasIncompletas === 0
+  const listo = autorizacionVigente(s) && !!asegurador && correoValido && !!archivos.historia_clinica && !!archivos.boleta && items.length > 0 && filasIncompletas === 0
 
   // Cualquier cambio obliga a volver a confirmar la vista previa
   useEffect(() => { setConfirmado(false) }, [aseguradorId, archivos, observaciones, filasItems])
@@ -640,6 +647,8 @@ function PanelGestion({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () =
         </Boton>
       </>}
     >
+      <AlertaAutorizacion s={s} contexto="Notificación al asegurador (MOS)" />
+
       {s.estado_mos === 'asegurador_notificado' && (
         <div className="flex items-start gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
           <MailCheck size={16} className="mt-0.5 shrink-0" />

@@ -10,18 +10,21 @@ import FiltroEtapaMos from '../components/FiltroEtapaMos'
 import { filtrarPorEtapaMos, type CamposFiltroMos } from '../lib/filtrosMos'
 import type { RegistroItem } from './Mos'
 import { ESTADOS_LABEL, ESTADOS_COLOR, ESTADOS_MOS_LABEL, ESTADOS_MOS_COLOR, type Estado, type EstadoMos } from '../lib/constantes'
+import { IndicadorAutorizacion, PanelAutorizacion } from '../components/Autorizacion'
+import { ESTADOS_AUT, estadoAutorizacion, diasVigencia, type CamposAutorizacion, type EstadoAutEfectivo } from '../lib/autorizacion'
 import {
-  Stethoscope, Search, Eraser, Eye, UserRound, ClipboardList, Receipt, History, StickyNote, Save, Bone, CalendarClock,
+  Stethoscope, Search, Eraser, Eye, UserRound, ClipboardList, Receipt, History, StickyNote, Save, Bone, CalendarClock, ShieldCheck,
 } from 'lucide-react'
 
-// Gestión clínica: el gestor clínico consulta toda la información del paciente
-// y de la gestión MOS, registra a quién se carga el cobro de cada ítem de
+// Gestión clínica: el gestor clínico gestiona la AUTORIZACIÓN del asegurador
+// (sin ella no se programa ni se inicia ningún proceso de la cirugía),
+// consulta toda la información del paciente y de la gestión MOS, registra a quién se carga el cobro de cada ítem de
 // material (facturación) y lleva notas de seguimiento con adjuntos.
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const sb = supabase as any
 
-type Solicitud = CamposAvanceMos & CamposFiltroMos & {
+type Solicitud = CamposAvanceMos & CamposFiltroMos & CamposAutorizacion & {
   id: number
   numero_ingreso: string
   documento_paciente: string
@@ -61,6 +64,13 @@ type ItemClinico = RegistroItem & {
 
 const codigo = (id: number) => `SC-${String(id).padStart(6, '0')}`
 
+function cumpleFiltroAut(s: CamposAutorizacion & { estado: Estado }, f: string) {
+  const e = estadoAutorizacion(s)
+  if (f === 'pendientes') return !['autorizada', 'no_requiere'].includes(e) && s.estado !== 'realizado'
+  if (f === 'por_vencer') { const d = diasVigencia(s); return d !== null && d <= 7 && s.estado !== 'realizado' }
+  return e === f
+}
+
 export default function GestionClinica() {
   const { perfil } = useAuth()
   const puedeEscribir = perfil?.rol === 'administrador' || perfil?.rol === 'gestor_clinico'
@@ -71,6 +81,7 @@ export default function GestionClinica() {
   const [cargando, setCargando] = useState(true)
   const [filtroEtapa, setFiltroEtapa] = useState('')
   const [filtroCobro, setFiltroCobro] = useState<'' | 'pendiente' | 'completo'>('')
+  const [filtroAut, setFiltroAut] = useState<string>('')
   const [busqueda, setBusqueda] = useState('')
   const [seleccion, setSeleccion] = useState<Solicitud | null>(null)
 
@@ -78,10 +89,11 @@ export default function GestionClinica() {
     setCargando(true)
     const { data } = await sb.from('solicitudes_cirugia')
       .select('*, especialidades(nombre), eps(nombre), quirofanos(nombre), aseguradores(nombre)')
-      .not('estado_mos', 'is', null)
-      .order('mos_notificado_en', { ascending: false })
+      .neq('estado', 'cancelado')
+      .order('fecha_reporte', { ascending: false })
     const lista = (data ?? []) as Solicitud[]
     setFilas(lista)
+    setSeleccion((sel) => (sel ? lista.find((x) => x.id === sel.id) ?? null : null))
     if (lista.length) {
       const ids = lista.map((s) => s.id)
       const [ri, rn] = await Promise.all([
@@ -104,21 +116,32 @@ export default function GestionClinica() {
   const filtradas = useMemo(() => {
     let r = filtroEtapa ? filtrarPorEtapaMos(filas, filtroEtapa) : filas
     if (filtroCobro) r = r.filter((s) => (filtroCobro === 'completo') === cobroCompleto(s.id))
+    if (filtroAut) r = r.filter((s) => cumpleFiltroAut(s, filtroAut))
     if (busqueda) {
       const b = busqueda.toLowerCase()
       r = r.filter((s) => [s.documento_paciente, s.numero_ingreso, s.nombre_paciente, s.procedimiento, codigo(s.id)]
         .some((v) => (v ?? '').toLowerCase().includes(b)))
     }
     return r
-  }, [filas, filtroEtapa, filtroCobro, busqueda, items]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [filas, filtroEtapa, filtroCobro, filtroAut, busqueda, items]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const pendientesCobro = filas.filter((s) => !cobroCompleto(s.id)).length
+  const pendientesCobro = filas.filter((s) => itemsDe(s.id).length > 0 && !cobroCompleto(s.id)).length
+  const pendientesAut = filas.filter((s) => cumpleFiltroAut(s, 'pendientes')).length
+  const porVencerAut = filas.filter((s) => cumpleFiltroAut(s, 'por_vencer')).length
 
   return (
     <div className="flex h-full flex-col">
-      <TituloEnHeader titulo="Gestión clínica" subtitulo="Consulta del paciente y del proceso MOS · cobro por ítem y notas de seguimiento" />
+      <TituloEnHeader titulo="Gestión clínica" subtitulo="Autorización del asegurador · consulta del paciente y del proceso MOS · cobro por ítem y notas" />
 
       <div className="neu-card mb-2 flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2">
+        <CampoLinea etiqueta="Autorización">
+          <select value={filtroAut} onChange={(e) => setFiltroAut(e.target.value)} className={CLASE_CAMPO}>
+            <option value="">Todas</option>
+            <option value="pendientes">Pendientes (sin autorización vigente)</option>
+            <option value="por_vencer">Por vencer (7 días)</option>
+            {(Object.keys(ESTADOS_AUT) as EstadoAutEfectivo[]).map((k) => <option key={k} value={k}>{ESTADOS_AUT[k].label}</option>)}
+          </select>
+        </CampoLinea>
         <CampoLinea etiqueta="Etapa MOS">
           <FiltroEtapaMos valor={filtroEtapa} onChange={setFiltroEtapa} conteo={(c) => filtrarPorEtapaMos(filas, c).length} />
         </CampoLinea>
@@ -133,11 +156,19 @@ export default function GestionClinica() {
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Paciente, documento, ingreso, procedimiento…" className={`${CLASE_CAMPO} w-72 pl-8`} />
         </div>
-        {(filtroEtapa || filtroCobro || busqueda) && (
-          <button title="Limpiar filtros" onClick={() => { setFiltroEtapa(''); setFiltroCobro(''); setBusqueda('') }} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"><Eraser size={16} /></button>
+        {(filtroEtapa || filtroCobro || filtroAut || busqueda) && (
+          <button title="Limpiar filtros" onClick={() => { setFiltroEtapa(''); setFiltroCobro(''); setFiltroAut(''); setBusqueda('') }} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"><Eraser size={16} /></button>
         )}
         <div className="ml-auto flex items-center gap-2 text-xs">
-          <span className="rounded-full border border-sky-300 bg-sky-50 px-3 py-1 font-medium text-sky-700">Pacientes con MOS: {filas.length}</span>
+          <span className="rounded-full border border-sky-300 bg-sky-50 px-3 py-1 font-medium text-sky-700">Cirugías: {filas.length}</span>
+          <button onClick={() => setFiltroAut(filtroAut === 'pendientes' ? '' : 'pendientes')}
+            className={`rounded-full border border-red-300 bg-red-50 px-3 py-1 font-medium text-red-700 ${filtroAut === 'pendientes' ? 'ring-2 ring-offset-1 ring-[#0D2D6B]/40' : ''}`}>
+            Sin autorización vigente: {pendientesAut}
+          </button>
+          <button onClick={() => setFiltroAut(filtroAut === 'por_vencer' ? '' : 'por_vencer')}
+            className={`rounded-full border border-amber-300 bg-amber-50 px-3 py-1 font-medium text-amber-800 ${filtroAut === 'por_vencer' ? 'ring-2 ring-offset-1 ring-[#0D2D6B]/40' : ''}`}>
+            Por vencer: {porVencerAut}
+          </button>
           <button onClick={() => setFiltroCobro(filtroCobro === 'pendiente' ? '' : 'pendiente')}
             className={`rounded-full border border-amber-300 bg-amber-50 px-3 py-1 font-medium text-amber-800 ${filtroCobro === 'pendiente' ? 'ring-2 ring-offset-1 ring-[#0D2D6B]/40' : ''}`}>
             Cobro pendiente: {pendientesCobro}
@@ -153,6 +184,7 @@ export default function GestionClinica() {
                 <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">ID</th>
                 <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Paciente</th>
                 <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Cirugía</th>
+                <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Autorización</th>
                 <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Estado MOS</th>
                 <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Cobro de ítems</th>
                 <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5 text-center">Notas</th>
@@ -161,9 +193,9 @@ export default function GestionClinica() {
             </thead>
             <tbody>
               {cargando ? (
-                <tr><td colSpan={7} className="p-10 text-center"><Spinner className="mx-auto" /></td></tr>
+                <tr><td colSpan={8} className="p-10 text-center"><Spinner className="mx-auto" /></td></tr>
               ) : filtradas.length === 0 ? (
-                <tr><td colSpan={7}><EstadoVacio icono={<Stethoscope size={28} />} titulo="Sin pacientes" descripcion="Aquí aparecen los pacientes con gestión MOS iniciada" /></td></tr>
+                <tr><td colSpan={8}><EstadoVacio icono={<Stethoscope size={28} />} titulo="Sin pacientes" descripcion="Ajuste los filtros" /></td></tr>
               ) : filtradas.map((s) => {
                 const its = itemsDe(s.id)
                 const conCobro = its.filter((i) => i.cobro_responsable).length
@@ -180,12 +212,18 @@ export default function GestionClinica() {
                       <div className="text-xs text-slate-400">{s.fecha_programada ? `${s.fecha_programada} ${s.hora_programada?.slice(0, 5) ?? ''}` : 'Sin programar'}</div>
                     </td>
                     <td className="px-4 py-2.5">
-                      <Badge className={ESTADOS_MOS_COLOR[e]}>{ESTADOS_MOS_LABEL[e]}</Badge>
-                      <div onClick={(ev) => ev.stopPropagation()}><AvanceMosCompacto s={s} onClick={() => setSeleccion(s)} /></div>
+                      <Badge className={ESTADOS_COLOR[s.estado]}>{ESTADOS_LABEL[s.estado]}</Badge>
+                      <div onClick={(ev) => ev.stopPropagation()}><IndicadorAutorizacion s={s} onClick={() => setSeleccion(s)} /></div>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {s.estado_mos ? (<>
+                        <Badge className={ESTADOS_MOS_COLOR[e]}>{ESTADOS_MOS_LABEL[e]}</Badge>
+                        <div onClick={(ev) => ev.stopPropagation()}><AvanceMosCompacto s={s} onClick={() => setSeleccion(s)} /></div>
+                      </>) : <span className="text-xs text-slate-400">{s.boleta_quirurgica?.trim() ? 'Con boleta · sin gestión MOS' : 'Sin MOS'}</span>}
                     </td>
                     <td className="px-4 py-2.5">
                       <span className={`text-xs font-semibold ${its.length && conCobro === its.length ? 'text-emerald-700' : 'text-amber-700'}`}>
-                        {conCobro} de {its.length} ítems con cobro
+                        {its.length ? `${conCobro} de ${its.length} ítems con cobro` : '—'}
                       </span>
                     </td>
                     <td className="px-4 py-2.5 text-center">
@@ -237,6 +275,12 @@ function PanelClinico({ s, items, puedeEscribir, onCerrar, onCambio }: {
       </>}
       onCerrar={onCerrar}
     >
+      <Grupo color="gestion" icono={ShieldCheck} titulo="Autorización del asegurador (requisito para toda la gestión de la cirugía)">
+        <div className="col-span-2">
+          <PanelAutorizacion solicitudId={s.id} s={s} puedeEscribir={puedeEscribir} onCambio={onCambio} />
+        </div>
+      </Grupo>
+
       <div className="grid gap-3 lg:grid-cols-2">
         <Grupo color="paciente" icono={UserRound} titulo="Paciente">
           <Dato etiqueta="Paciente" valor={s.nombre_paciente} ancho />

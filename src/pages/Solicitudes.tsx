@@ -7,6 +7,8 @@ import { PanelLateral, Grupo, Dato } from '../components/PanelLateral'
 import RichTextEditor from '../components/RichTextEditor'
 import { ModalDetalleMos } from './Mos'
 import { ModalCierreCirugia, type CamposCierre } from '../components/CierreCirugia'
+import { IndicadorAutorizacion, AlertaAutorizacion, PanelAutorizacion } from '../components/Autorizacion'
+import { autorizacionVigente, type CamposAutorizacion } from '../lib/autorizacion'
 import {
   IndicadorClinico, IndicadorPostquirurgico, IndicadorEsterilizacion, ModalGestionClinica, ModalPostquirurgico, ModalEsterilizacion,
   cargarResumenSeguimiento, type ResumenNota, type ResumenItem,
@@ -29,7 +31,7 @@ import {
   Bone, FileWarning, XCircle, Mail, MessageCircle, Smartphone, Copy, ExternalLink, Eye as EyeIcon,
 } from 'lucide-react'
 
-type Solicitud = {
+type Solicitud = CamposAutorizacion & {
   id: number
   numero_ingreso: string
   documento_paciente: string
@@ -127,7 +129,7 @@ const ESTADOS_PROGRAMADOS: Estado[] = ['programado', 'notificado', 'aplazado', '
 const hoyISO = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
 
 export default function Solicitudes() {
-  const { session } = useAuth()
+  const { session, perfil } = useAuth()
   const [filas, setFilas] = useState<Solicitud[]>([])
   const [cargando, setCargando] = useState(true)
   const [exportando, setExportando] = useState(false)
@@ -142,6 +144,7 @@ export default function Solicitudes() {
   const [busqueda, setBusqueda] = useState('')
   const [masFiltros, setMasFiltros] = useState(false)
   const [detalleMos, setDetalleMos] = useState<number | null>(null)
+  const [sinAutorizacion, setSinAutorizacion] = useState<Solicitud | null>(null)
   const [seguimiento, setSeguimiento] = useState<{ id: number; tipo: 'clinica' | 'postquirurgico' | 'esterilizacion'; titulo: string } | null>(null)
   const [resumen, setResumen] = useState<{ notas: ResumenNota[]; items: ResumenItem[]; actas: Record<number, number> }>({ notas: [], items: [], actas: {} })
   const notasDe = (id: number) => resumen.notas.filter((n) => n.solicitud_id === id)
@@ -309,6 +312,12 @@ export default function Solicitudes() {
   const filtrosAvanzados = [filtroMedico, filtroQuirofano, filtroHora].filter(Boolean).length
 
   function abrir(fila: Solicitud, m: typeof modal) {
+    // Programar, reprogramar o registrar realizada exige autorización vigente del asegurador
+    // (también lo valida la base de datos); se explica el motivo y la acción.
+    if (['programar', 'reprogramar', 'realizada'].includes(m) && !autorizacionVigente(fila)) {
+      setSinAutorizacion(fila)
+      return
+    }
     setSeleccion(fila)
     setModal(m)
     setError('')
@@ -599,6 +608,7 @@ export default function Solicitudes() {
                       )}
                       {/* Seguimientos: MOS, Esterilización, Gestión clínica y Postquirúrgico (clic → modal de cada uno) */}
                       <div className="flex flex-wrap items-center gap-x-1" onClick={(e) => e.stopPropagation()}>
+                        <IndicadorAutorizacion s={f} onClick={() => setSinAutorizacion(f)} />
                         {f.estado_mos && <AvanceMosCompacto s={f} onClick={() => setDetalleMos(f.id)} />}
                         <IndicadorEsterilizacion items={itemsDe(f.id)} actas={resumen.actas[f.id] ?? 0}
                           onClick={() => setSeguimiento({ id: f.id, tipo: 'esterilizacion', titulo: f.nombre_paciente ?? f.documento_paciente })} />
@@ -670,12 +680,12 @@ export default function Solicitudes() {
           pie={<>
             <Boton variante="secundario" onClick={() => setModal('editar')} className="flex items-center gap-1.5"><Pencil size={14} /> Editar</Boton>
             {!ESTADOS_PROGRAMADOS.includes(seleccion.estado) && seleccion.estado !== 'cancelado' && (
-              <Boton onClick={() => setModal('programar')} className="flex flex-1 items-center justify-center gap-1.5"><CalendarClock size={14} /> Programar</Boton>
+              <Boton onClick={() => abrir(seleccion, 'programar')} className="flex flex-1 items-center justify-center gap-1.5"><CalendarClock size={14} /> Programar</Boton>
             )}
             {ESTADOS_PROGRAMADOS.includes(seleccion.estado) && (
               <>
                 <Boton variante="secundario" onClick={() => setModal('notificar')} className="flex items-center gap-1.5"><BellRing size={14} /> Notificar</Boton>
-                <Boton onClick={() => setModal('reprogramar')} className="flex flex-1 items-center justify-center gap-1.5"><RefreshCw size={14} /> Reprogramar</Boton>
+                <Boton onClick={() => abrir(seleccion, 'reprogramar')} className="flex flex-1 items-center justify-center gap-1.5"><RefreshCw size={14} /> Reprogramar</Boton>
               </>
             )}
             <Boton variante="fantasma" onClick={cerrarPanel}>Cerrar</Boton>
@@ -784,6 +794,19 @@ export default function Solicitudes() {
       {envioManual && <ModalEnvioManual {...envioManual} onClose={() => setEnvioManual(null)} />}
 
       {detalleMos !== null && <ModalDetalleMos solicitudId={detalleMos} onCerrar={() => setDetalleMos(null)} />}
+      {sinAutorizacion && (
+        <Modal open onClose={() => setSinAutorizacion(null)} titulo={`Autorización del asegurador · ${sinAutorizacion.nombre_paciente ?? sinAutorizacion.documento_paciente}`} ancho="max-w-2xl">
+          <div className="space-y-3">
+            <AlertaAutorizacion s={sinAutorizacion} contexto="Programar / reprogramar / registrar la cirugía" />
+            <PanelAutorizacion solicitudId={sinAutorizacion.id} s={sinAutorizacion}
+              puedeEscribir={perfil?.rol === 'administrador' || perfil?.rol === 'gestor_clinico'}
+              onCambio={() => { setSinAutorizacion(null); cargar() }} />
+            <div className="flex justify-end border-t border-slate-100 pt-3">
+              <Boton variante="secundario" onClick={() => setSinAutorizacion(null)}>Cerrar</Boton>
+            </div>
+          </div>
+        </Modal>
+      )}
       {seguimiento?.tipo === 'clinica' && (
         <ModalGestionClinica solicitudId={seguimiento.id} titulo={seguimiento.titulo} onCerrar={() => { setSeguimiento(null); cargar() }} />
       )}
