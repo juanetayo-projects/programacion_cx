@@ -1347,3 +1347,9 @@ Se requiere construir una app que permita
 				muestra la distribución por estado con clic al detalle.
 			25.6.- Migraciones 0034-0036. Nota: con dos FK a aseguradores, los embeds
 				usan aseguradores!mos_asegurador_id(nombre).
+
+		26.- Dashboard · card principal (2026-10-24, aprobada)
+			Imagen del quirófano (public/images/quirofano.webp) con la agenda del día:
+			cirugías hoy, por iniciar, en curso y realizadas hoy (clic al detalle), y
+			la lista de próximas cirugías. Usa todas las solicitudes, no los filtros.
+			Componente: src/components/dashboard/HeroQuirofano.tsx.
