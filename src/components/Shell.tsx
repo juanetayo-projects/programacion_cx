@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
+import { useTablasAlAlto } from '../lib/tablasAlAlto'
 import {
   LayoutDashboard, ListChecks, Stethoscope, CalendarRange, Flame,
   BarChart3, ScrollText, Settings, ShieldCheck, ChevronDown, LogOut, User, DatabaseZap, Bone, PackageCheck, HeartPulse, CalendarCheck,
@@ -37,6 +38,9 @@ const ADMIN_NAV = [
 export default function Shell({ children }: { children: ReactNode }) {
   const { perfil, permisos } = useAuth()
   const [menuAbierto, setMenuAbierto] = useState(false)
+  const location = useLocation()
+  // Las tablas .tabla-scroll terminan en el borde inferior de la ventana (títulos siempre visibles)
+  useTablasAlAlto(location.pathname)
   const rol = perfil?.rol ?? 'visualizador'
   const puede = (m: Modulo) => rol === 'administrador' || permisos.has(m)
 

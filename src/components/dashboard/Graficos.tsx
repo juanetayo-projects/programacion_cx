@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { X } from 'lucide-react'
+import { GripHorizontal, X } from 'lucide-react'
+import { useArrastre } from '../ui'
 
 // Piezas del Panel Ejecutivo (patrón validado en SIAU, skill cac-fullstack-app):
 // anillo de progreso, anillos concéntricos, popover de detalle al clic,
@@ -70,14 +71,17 @@ export function abrirPopover<T>(
 export function PopoverDetalle<T>({ popover, onClose, getKey }: {
   popover: PopoverState<T>; onClose: () => void; getKey: (r: T) => string | number
 }) {
+  const { pos, ref, iniciarArrastre, reiniciar, arrastrando } = useArrastre()
+  useEffect(() => { reiniciar() }, [popover, reiniciar])
   if (!popover) return null
   return (
-    <div className="fixed inset-0 z-40" onClick={onClose}>
-      <div className="fixed z-50 w-[340px] rounded-xl border border-slate-300 bg-white p-3 shadow-2xl"
-        style={{ left: popover.x, top: popover.y }} onClick={(e) => e.stopPropagation()}>
-        <div className="mb-2 flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
-          <span className="text-xs font-bold text-[#0D2D6B]">{popover.titulo} · {popover.filas.length}</span>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
+    <div className="fixed inset-0 z-40" onClick={arrastrando ? undefined : onClose}>
+      <div ref={ref} className="fixed z-50 w-[340px] rounded-xl border border-slate-300 bg-white p-3 shadow-2xl"
+        style={{ left: popover.x, top: popover.y, transform: `translate(${pos.x}px, ${pos.y}px)` }} onClick={(e) => e.stopPropagation()}>
+        <div onPointerDown={iniciarArrastre} title="Arrastre para mover"
+          className={`mb-2 flex touch-none select-none items-center justify-between gap-2 border-b border-slate-100 pb-2 ${arrastrando ? 'cursor-grabbing' : 'cursor-grab'}`}>
+          <span className="flex items-center gap-1.5 text-xs font-bold text-[#0D2D6B]"><GripHorizontal size={13} className="text-slate-300" />{popover.titulo} · {popover.filas.length}</span>
+          <button onPointerDown={(e) => e.stopPropagation()} onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
         </div>
         <div className="max-h-64 overflow-y-auto">
           <table className="w-full text-[11px]">

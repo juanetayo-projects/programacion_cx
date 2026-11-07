@@ -1510,6 +1510,9 @@ export type Database = {
           r_tomada_por_mi: boolean
         }[]
       }
+      masiva_estado: { Args: never; Returns: Json }
+      masiva_resultado: { Args: { p_id?: number }; Returns: Json }
+      puede_consulta_masiva: { Args: never; Returns: boolean }
       mos_item_registrar_cobro: {
         Args: { p_item: number; p_responsable: string }
         Returns: undefined

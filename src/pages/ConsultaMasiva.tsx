@@ -2,14 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
-import { TituloEnHeader, CampoLinea, CLASE_CAMPO, Boton, Modal, Badge, EstadoVacio } from '../components/ui'
+import { TituloEnHeader, CLASE_CAMPO, Boton, Modal, Badge, EstadoVacio } from '../components/ui'
 import { PanelLateral, Grupo, Dato } from '../components/PanelLateral'
 import ProgresoConsulta, { type Tramo } from '../components/ProgresoConsulta'
-import { consultarGoMedisys, emparejarCatalogo as emparejar, normalizar, camposDeProgramacion, type ProgramacionGM, type EstadoTrabajo } from '../lib/gomedisys'
+import { consultarGoMedisys, emparejarCatalogo as emparejar, normalizar, camposDeProgramacion, ErrorConsultaGM, type ProgramacionGM, type EstadoTrabajo } from '../lib/gomedisys'
 import { ESTADOS_LABEL, type Estado } from '../lib/constantes'
 import {
   DatabaseZap, Search, CheckCircle2, Lock, Users, AlertTriangle, ListChecks, ArrowRight, X, Ban, RotateCw,
-  CalendarDays, Eraser, SlidersHorizontal, FileSpreadsheet, UserRound, Stethoscope, ClipboardList, ShieldCheck,
+  CalendarDays, Eraser, FileSpreadsheet, UserRound, Stethoscope, ClipboardList, ShieldCheck, Hourglass,
+  Clock, History, ClipboardX, ClipboardCheck, Layers, RefreshCw, Info, ShieldAlert,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -27,6 +28,19 @@ type EnGestion = {
 type Catalogo = { id: number; nombre: string }
 type Presencia = { uid: string; nombre: string; seleccion: number[] }
 type ResultadoMarcacion = { r_programacion: number; r_solicitud_id: number; r_tomada_por_mi: boolean; r_responsable: string | null; r_estado: string }
+type Rango = { desde: string; hasta: string }
+type ResultadoMasiva = { filas: FilaGM[]; fallas: string[]; ms: number }
+
+/** Respuesta de masiva_estado() (migración 0037) */
+type EstadoMasiva = {
+  ahora: string
+  intervalo_minutos: number
+  en_curso: { id: number; parametros: Rango; creado_en: string; solicitado_por: string; nombre: string | null } | null
+  ultima: { id: number; parametros: Rango; creado_en: string; terminado_en: string | null; solicitado_por: string; nombre: string | null } | null
+  proxima_permitida: string | null
+}
+/** Consulta cuyos resultados se están mostrando */
+type Origen = { id: number; nombre: string | null; terminado: string; propia: boolean }
 
 const ESTADOS_CERRADOS = ['cancelado', 'realizado']
 
@@ -42,10 +56,27 @@ const diasEntre = (desde: string, hasta: string) => {
   return r
 }
 const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
+const ddmmaaaa = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
+const horaCO = (iso: string) => new Date(iso).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' })
+const fechaHoraCO = (iso: string) => new Date(iso).toLocaleString('es-CO', { timeZone: 'America/Bogota', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+const mmss = (ms: number) => {
+  const s = Math.max(0, Math.ceil(ms / 1000))
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
+}
+const haceTexto = (ms: number) => {
+  const m = Math.floor(ms / 60000)
+  if (m < 1) return 'hace un momento'
+  if (m < 60) return `hace ${m} min`
+  const h = Math.floor(m / 60)
+  return `hace ${h} h ${m % 60} min`
+}
 const sc = (id: number) => `SC-${String(id).padStart(6, '0')}`
 const SIN_DATO = 'Sin dato'
 const tieneBoleta = (f: FilaGM) =>
   !!(f['Descripción Boleta'] || f['Anotaciones Boleta'] || f.FechaSolicitudBoleta || (f.DuracionBoleta != null && f.DuracionBoleta !== ''))
+const ordenarFilas = (filas: FilaGM[]) => [...filas].sort((a, b) =>
+  `${a.FechaProgramadaISO} ${a.HoraProgramada}`.localeCompare(`${b.FechaProgramadaISO} ${b.HoraProgramada}`)
+  || String(a.NombrePaciente).localeCompare(String(b.NombrePaciente)))
 
 type Situacion =
   | { tipo: 'tomada'; g: EnGestion }
@@ -53,9 +84,12 @@ type Situacion =
   | { tipo: 'ingreso'; gs: EnGestion[] }
   | { tipo: 'disponible' }
 
+type ModalEspera = { motivo: 'espera' | 'en_curso' }
+
 export default function ConsultaMasiva() {
   const { perfil, session } = useAuth()
   const navigate = useNavigate()
+  const esAdmin = perfil?.rol === 'administrador'
   const [desde, setDesde] = useState(hoyISO())
   const [hasta, setHasta] = useState(sumarDias(hoyISO(), 7))
 
@@ -67,6 +101,16 @@ export default function ConsultaMasiva() {
   const [duracion, setDuracion] = useState<number | null>(null)
   const [errores, setErrores] = useState<string[]>([])
 
+  // Control del intervalo entre consultas (masiva_estado / masiva_resultado)
+  const [estadoMasiva, setEstadoMasiva] = useState<EstadoMasiva | null>(null)
+  const [desfase, setDesfase] = useState(0) // reloj del servidor − reloj local
+  const [ahora, setAhora] = useState(Date.now())
+  const [rango, setRango] = useState<Rango | null>(null) // rango que trae la consulta mostrada
+  const [origen, setOrigen] = useState<Origen | null>(null)
+  const [cargandoInicial, setCargandoInicial] = useState(true)
+  const [modalEspera, setModalEspera] = useState<ModalEspera | null>(null)
+  const [modalConfirmar, setModalConfirmar] = useState(false)
+
   const [porProgramacion, setPorProgramacion] = useState<Map<number, EnGestion>>(new Map())
   const [porIngreso, setPorIngreso] = useState<Map<string, EnGestion[]>>(new Map())
   const [otros, setOtros] = useState<Presencia[]>([])
@@ -75,12 +119,10 @@ export default function ConsultaMasiva() {
   const [vista, setVista] = useState<'todos' | 'disponibles' | 'gestion'>('disponibles')
   const [filtroEstadoGM, setFiltroEstadoGM] = useState('')
   const [busqueda, setBusqueda] = useState('')
-  const [filtroFecha, setFiltroFecha] = useState('')
   const [filtroContrato, setFiltroContrato] = useState('')
   const [filtroTipoOrden, setFiltroTipoOrden] = useState('')
   const [filtroBoleta, setFiltroBoleta] = useState<'' | 'con' | 'sin'>('')
   const [filtroProcedimiento, setFiltroProcedimiento] = useState('')
-  const [masFiltros, setMasFiltros] = useState(false)
   const [exportando, setExportando] = useState(false)
   // Registro abierto en el panel lateral de detalle
   const [detalleId, setDetalleId] = useState<number | null>(null)
@@ -97,10 +139,20 @@ export default function ConsultaMasiva() {
   const canalRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const filasRef = useRef<FilaGM[] | null>(null)
   filasRef.current = filas
+  const origenRef = useRef<Origen | null>(null)
+  origenRef.current = origen
+  const consultandoRef = useRef(false)
+  consultandoRef.current = consultando
 
   useEffect(() => {
     supabase.from('especialidades').select('id, nombre').eq('activo', true).order('nombre').then(({ data }) => setEspecialidades((data ?? []) as Catalogo[]))
     supabase.from('eps').select('id, nombre').order('nombre').then(({ data }) => setEps((data ?? []) as Catalogo[]))
+  }, [])
+
+  // Reloj de la cuenta regresiva
+  useEffect(() => {
+    const t = setInterval(() => setAhora(Date.now()), 1000)
+    return () => clearInterval(t)
   }, [])
 
   // --- Qué pacientes ya están en gestión en la app -----------------------
@@ -142,6 +194,68 @@ export default function ConsultaMasiva() {
     // Lo que otro usuario ya tomó deja de estar seleccionable aquí
     setSeleccion((prev) => new Set([...prev].filter((id) => !pp.has(id))))
   }, [])
+
+  // --- Intervalo entre consultas: estado y reuso de la última consulta -----
+  const leerEstado = useCallback(async () => {
+    const { data, error } = await supabase.rpc('masiva_estado')
+    if (error || !data) return null
+    const e = data as unknown as EstadoMasiva
+    setDesfase(Date.parse(e.ahora) - Date.now())
+    setEstadoMasiva(e)
+    return e
+  }, [])
+
+  /** Muestra el resultado de una consulta ya hecha (propia o de otro usuario), sin volver a GoMedisys */
+  const cargarResultado = useCallback(async (id?: number) => {
+    const { data, error } = await supabase.rpc('masiva_resultado', id ? { p_id: id } : {})
+    if (error || !data) return false
+    const r = data as unknown as { id: number; parametros: Rango; resultado: ResultadoMasiva | null; creado_en: string; terminado_en: string | null; solicitado_por: string; nombre: string | null }
+    const lista = ordenarFilas(r.resultado?.filas ?? [])
+    await cargarGestion(lista)
+    setFilas(lista)
+    setErrores(r.resultado?.fallas ?? [])
+    setDuracion(r.resultado?.ms ?? null)
+    setRango(r.parametros)
+    setDesde(r.parametros.desde)
+    setHasta(r.parametros.hasta)
+    setOrigen({ id: r.id, nombre: r.nombre, terminado: r.terminado_en ?? r.creado_en, propia: r.solicitado_por === session?.user.id })
+    return true
+  }, [cargarGestion, session?.user.id])
+
+  // Al entrar: si la última consulta sigue vigente (antes de la próxima hora
+  // permitida), se muestran sus resultados sin consultar GoMedisys otra vez.
+  useEffect(() => {
+    let vivo = true
+    ;(async () => {
+      const e = await leerEstado()
+      if (vivo && e?.ultima && e.proxima_permitida && Date.parse(e.proxima_permitida) > Date.parse(e.ahora)) {
+        await cargarResultado(e.ultima.id)
+      }
+      if (vivo) setCargandoInicial(false)
+    })()
+    return () => { vivo = false }
+  }, [leerEstado, cargarResultado])
+
+  // Mientras otro usuario consulta, se sigue el estado; al terminar se cargan sus resultados
+  const enCursoOtro = estadoMasiva?.en_curso && !consultando ? estadoMasiva.en_curso : null
+  useEffect(() => {
+    const cada = enCursoOtro ? 8000 : 60000
+    const t = setInterval(async () => {
+      if (consultandoRef.current) return
+      const previo = enCursoOtro?.id
+      const e = await leerEstado()
+      // La consulta que se esperaba terminó: se muestran sus resultados
+      if (previo && e && !e.en_curso && e.ultima?.id === previo && origenRef.current?.id !== previo) await cargarResultado(previo)
+    }, cada)
+    return () => clearInterval(t)
+  }, [enCursoOtro, leerEstado, cargarResultado])
+
+  const ahoraServidor = ahora + desfase
+  const proxima = estadoMasiva?.proxima_permitida ? Date.parse(estadoMasiva.proxima_permitida) : 0
+  const restante = Math.max(0, proxima - ahoraServidor)
+  const intervaloMs = (estadoMasiva?.intervalo_minutos ?? 15) * 60000
+  const bloqueado = restante > 0 || !!enCursoOtro
+  const hayNueva = !!(estadoMasiva?.ultima && origen && estadoMasiva.ultima.id > origen.id && !consultando)
 
   // --- Tiempo real: marcaciones de otros usuarios + quién está seleccionando
   useEffect(() => {
@@ -185,12 +299,27 @@ export default function ConsultaMasiva() {
     return m
   }, [otros])
 
+  // --- Rango: dentro de lo consultado filtra al instante; fuera pide consulta
+  const rangoValido = hasta >= desde
+  const dentroDeRango = !!(rango && desde >= rango.desde && hasta <= rango.hasta)
+  const diasRango = rangoValido ? diasEntre(desde, hasta).length : 0
+
+  /** Clic en Consultar: valida el intervalo antes de lanzar nada */
+  async function intentarConsultar() {
+    if (!rangoValido) { setErrores(['La fecha final no puede ser anterior a la inicial.']); return }
+    const e = await leerEstado()
+    if (e?.en_curso) { setModalEspera({ motivo: 'en_curso' }); return }
+    if (e?.proxima_permitida && Date.parse(e.proxima_permitida) > Date.parse(e.ahora)) { setModalEspera({ motivo: 'espera' }); return }
+    setModalConfirmar(true)
+  }
+
   // --- Consulta a GoMedisys (trabajo en GitHub Actions, un tramo por día) --
-  async function consultar() {
-    if (hasta < desde) { setErrores(['La fecha final no puede ser anterior a la inicial.']); return }
+  async function consultar(forzar = false) {
+    setModalConfirmar(false)
+    setModalEspera(null)
     const dias = diasEntre(desde, hasta)
+    const anteriores = { filas, rango, origen }
     setErrores([])
-    setFilas(null)
     setSeleccion(new Set())
     setVista('disponibles')
     setTramos(dias.map((d) => ({ etiqueta: ddmm(d), estado: 'pendiente' })))
@@ -198,23 +327,31 @@ export default function ConsultaMasiva() {
     setInicio(Date.now())
     setConsultando(true)
     try {
-      const res = await consultarGoMedisys<{ filas: FilaGM[]; fallas: string[]; ms: number }>(
-        'masiva', { desde, hasta },
+      const res = await consultarGoMedisys<ResultadoMasiva>(
+        'masiva', { desde, hasta, ...(forzar ? { forzar: true } : {}) },
         (t) => {
           setEstadoTrabajo(t.estado)
           // El runner reporta un tramo por día; antes de empezar solo reporta la conexión
           if (Array.isArray(t.progreso) && t.progreso.length === dias.length) setTramos(t.progreso)
         },
       )
-      const lista = [...(res?.filas ?? [])].sort((a, b) =>
-        `${a.FechaProgramadaISO} ${a.HoraProgramada}`.localeCompare(`${b.FechaProgramadaISO} ${b.HoraProgramada}`)
-        || String(a.NombrePaciente).localeCompare(String(b.NombrePaciente)))
+      const lista = ordenarFilas(res?.filas ?? [])
       await cargarGestion(lista)
       setFilas(lista)
       setErrores(res?.fallas ?? [])
       setDuracion(res?.ms ?? null)
+      setRango({ desde, hasta })
+      const e = await leerEstado()
+      setOrigen({ id: e?.ultima?.id ?? 0, nombre: perfil?.nombre ?? null, terminado: e?.ultima?.terminado_en ?? new Date().toISOString(), propia: true })
     } catch (e) {
-      setErrores([(e as Error).message])
+      // Se conservan los resultados que había en pantalla
+      setFilas(anteriores.filas); setRango(anteriores.rango); setOrigen(anteriores.origen)
+      if (e instanceof ErrorConsultaGM && (e.codigo === 'espera' || e.codigo === 'en_curso')) {
+        await leerEstado()
+        setModalEspera({ motivo: e.codigo })
+      } else {
+        setErrores([(e as Error).message])
+      }
     } finally {
       setConsultando(false)
     }
@@ -237,21 +374,20 @@ export default function ConsultaMasiva() {
     const unicos = (fn: (f: FilaGM) => string | null | undefined) =>
       [...new Set((filas ?? []).map((f) => fn(f) || SIN_DATO))].sort((x, y) => x.localeCompare(y))
     return {
-      fechas: [...new Set((filas ?? []).map((f) => f.FechaProgramadaISO).filter(Boolean) as string[])].sort(),
       estados: unicos((f) => f.Estado),
       contratos: unicos((f) => f.ContratoIngresoCirugia),
       tiposOrden: unicos((f) => f.TipoOrden),
     }
   }, [filas])
 
-  // Todos los filtros menos la pestaña (Disponibles / En gestión / Todos)
-  const filtradas = useMemo(() => {
+  // Filtros sin boleta ni pestaña: base de los conteos de los indicadores
+  const filtradasBase = useMemo(() => {
     let r = filas ?? []
-    if (filtroFecha) r = r.filter((f) => f.FechaProgramadaISO === filtroFecha)
+    // Desde / Hasta también filtran lo ya consultado (sin volver a GoMedisys)
+    if (rangoValido) r = r.filter((f) => !f.FechaProgramadaISO || (f.FechaProgramadaISO >= desde && f.FechaProgramadaISO <= hasta))
     if (filtroEstadoGM) r = r.filter((f) => (f.Estado || SIN_DATO) === filtroEstadoGM)
     if (filtroContrato) r = r.filter((f) => (f.ContratoIngresoCirugia || SIN_DATO) === filtroContrato)
     if (filtroTipoOrden) r = r.filter((f) => (f.TipoOrden || SIN_DATO) === filtroTipoOrden)
-    if (filtroBoleta) r = r.filter((f) => tieneBoleta(f) === (filtroBoleta === 'con'))
     if (filtroProcedimiento) {
       const p = normalizar(filtroProcedimiento)
       r = r.filter((f) => normalizar(f.ProcedimientosProgramados ?? '').includes(p))
@@ -261,7 +397,17 @@ export default function ConsultaMasiva() {
       r = r.filter((f) => normalizar(`${f.NombrePaciente} ${f.DocumentoIdentificacion} ${f.NumeroIngreso} ${f.Quirofano} ${f.EspecialistaOrdena} ${f.EspecialistaOpera}`).includes(b))
     }
     return r
-  }, [filas, filtroFecha, filtroEstadoGM, filtroContrato, filtroTipoOrden, filtroBoleta, filtroProcedimiento, busqueda])
+  }, [filas, rangoValido, desde, hasta, filtroEstadoGM, filtroContrato, filtroTipoOrden, filtroProcedimiento, busqueda])
+
+  const filtradas = useMemo(
+    () => (filtroBoleta ? filtradasBase.filter((f) => tieneBoleta(f) === (filtroBoleta === 'con')) : filtradasBase),
+    [filtradasBase, filtroBoleta],
+  )
+
+  const enVista = useCallback((f: FilaGM) => {
+    const s = situacion(f)
+    return vista === 'disponibles' ? seleccionable(s) : vista === 'gestion' ? s.tipo === 'tomada' : true
+  }, [situacion, vista])
 
   const conteoVista = useMemo(() => ({
     disponibles: filtradas.filter((f) => seleccionable(situacion(f))).length,
@@ -269,31 +415,25 @@ export default function ConsultaMasiva() {
     todos: filtradas.length,
   }), [filtradas, situacion])
 
-  const visibles = useMemo(() => {
-    if (vista === 'disponibles') return filtradas.filter((f) => seleccionable(situacion(f)))
-    if (vista === 'gestion') return filtradas.filter((f) => situacion(f).tipo === 'tomada')
-    return filtradas
-  }, [filtradas, vista, situacion])
+  const conteoBoleta = useMemo(() => {
+    const base = filtradasBase.filter(enVista)
+    const con = base.filter(tieneBoleta).length
+    return { con, sin: base.length - con }
+  }, [filtradasBase, enVista])
 
-  const hayFiltros = !!(filtroFecha || filtroEstadoGM || filtroContrato || filtroTipoOrden || filtroBoleta || filtroProcedimiento || busqueda)
+  const visibles = useMemo(() => filtradas.filter(enVista), [filtradas, enVista])
+
+  const hayFiltros = !!(filtroEstadoGM || filtroContrato || filtroTipoOrden || filtroBoleta || filtroProcedimiento || busqueda
+    || (rango && (desde !== rango.desde || hasta !== rango.hasta)))
   function limpiarFiltros() {
-    setFiltroFecha(''); setFiltroEstadoGM(''); setFiltroContrato(''); setFiltroTipoOrden('')
+    setFiltroEstadoGM(''); setFiltroContrato(''); setFiltroTipoOrden('')
     setFiltroBoleta(''); setFiltroProcedimiento(''); setBusqueda('')
+    if (rango) { setDesde(rango.desde); setHasta(rango.hasta) }
   }
 
   // Panel lateral: las flechas recorren los registros visibles
   const detalle = detalleId != null ? (filas ?? []).find((f) => f.idProgramming === detalleId) ?? null : null
   const posDetalle = detalle ? visibles.findIndex((f) => f.idProgramming === detalle.idProgramming) : -1
-
-  const totales = useMemo(() => {
-    const t = { total: filas?.length ?? 0, disponibles: 0, gestion: 0 }
-    for (const f of filas ?? []) {
-      const s = situacion(f)
-      if (s.tipo === 'tomada') t.gestion++
-      else if (seleccionable(s)) t.disponibles++
-    }
-    return t
-  }, [filas, situacion])
 
   const visiblesSeleccionables = visibles.filter((f) => seleccionable(situacion(f)))
   const todosMarcados = visiblesSeleccionables.length > 0 && visiblesSeleccionables.every((f) => seleccion.has(f.idProgramming))
@@ -358,15 +498,15 @@ export default function ConsultaMasiva() {
     if (filas) cargarGestion(filas)
   }
 
-  // Exporta lo que se ve en la tabla (filtros + pestaña) con los colores de pantalla
+  // Exporta lo que se ve en la tabla (filtros + vista) con los colores de pantalla
   async function exportar() {
     setExportando(true)
     try {
       const { exportarConsultaMasiva } = await import('../lib/exportarConsultaMasiva')
       const filtrosTexto = [
-        `Rango consultado: ${desde} a ${hasta}`,
+        rango && `Rango consultado: ${rango.desde} a ${rango.hasta}`,
+        `Fechas mostradas: ${desde} a ${hasta}`,
         `Vista: ${vista === 'disponibles' ? 'Disponibles' : vista === 'gestion' ? 'Ya en gestión' : 'Todos'}`,
-        filtroFecha && `Fecha: ${filtroFecha}`,
         filtroTipoOrden && `Tipo de orden: ${filtroTipoOrden}`,
         filtroContrato && `Contrato: ${filtroContrato}`,
         filtroBoleta && `Boleta: ${filtroBoleta === 'con' ? 'con boleta' : 'sin boleta'}`,
@@ -389,16 +529,18 @@ export default function ConsultaMasiva() {
         filtrosTexto,
       )
     } catch (e) {
-      alert(`No fue posible exportar: ${(e as Error).message}`)
+      setErrores([`No fue posible exportar: ${(e as Error).message}`])
     } finally {
       setExportando(false)
     }
   }
 
-  const filtrosAvanzadosActivos = [filtroFecha, filtroContrato, filtroBoleta, filtroEstadoGM, filtroProcedimiento].filter(Boolean).length
-
   const tomadasPorMi = resultado?.filter((r) => r.r_tomada_por_mi) ?? []
   const tomadasPorOtro = resultado?.filter((r) => !r.r_tomada_por_mi) ?? []
+  const ultima = estadoMasiva?.ultima ?? null
+
+  // Texto e intención del botón principal
+  const accionConsulta = !filas ? 'Consultar GoMedisys' : dentroDeRango ? 'Actualizar consulta' : 'Consultar nuevo rango'
 
   return (
     <div>
@@ -410,230 +552,277 @@ export default function ConsultaMasiva() {
         )}
       </TituloEnHeader>
 
-      <div className="neu-card relative mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2">
-        <CampoLinea etiqueta="Desde">
-          <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className={CLASE_CAMPO} />
-        </CampoLinea>
-        <CampoLinea etiqueta="Hasta">
-          <input type="date" value={hasta} min={desde} max={sumarDias(desde, 61)} onChange={(e) => setHasta(e.target.value)} className={CLASE_CAMPO} />
-        </CampoLinea>
-        <Boton onClick={consultar} disabled={consultando} className="flex items-center gap-2 !py-1.5">
-          <DatabaseZap size={16} /> {filas ? 'Volver a consultar' : 'Consultar GoMedisys'}
-        </Boton>
+      {/* Franja con la foto de la clínica: rango, consulta y estado del intervalo */}
+      <section className={`relative mb-4 overflow-hidden rounded-2xl text-white shadow-lg ${filas ? '' : 'min-h-[320px]'}`}>
+        <img src={`${import.meta.env.BASE_URL}images/fachada.jpg`} alt="" aria-hidden
+          className="mc-zoom absolute inset-y-0 right-0 h-full w-full object-cover object-[50%_40%] lg:w-[55%]" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#0D2D6B] from-30% via-[#0D2D6B]/75 via-50% to-[#0D2D6B]/5" />
+        <div className="relative p-4 lg:p-5">
+          {!filas && (
+            <div className="mb-5 max-w-2xl">
+              <p className="text-xs font-medium uppercase tracking-widest text-sky-200">Paso 1 · Ingreso de pacientes</p>
+              <h2 className="mt-1 text-2xl font-bold leading-tight">Traiga las cirugías programadas en GoMedisys</h2>
+              <p className="mt-1 text-sm text-white/75">
+                Seleccione el rango de fechas y consulte. Los pacientes que ya están en gestión no se muestran, para evitar registros duplicados.
+              </p>
+            </div>
+          )}
 
-        {filas && (
-          <>
-            <div className="hidden h-7 w-px bg-slate-200 lg:block" />
-            <CampoLinea etiqueta="Tipo orden">
-              <select value={filtroTipoOrden} onChange={(e) => setFiltroTipoOrden(e.target.value)} className={`${CLASE_CAMPO} max-w-[150px]`}>
-                <option value="">Todas</option>
-                {opciones.tiposOrden.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </CampoLinea>
-            <div className="relative min-w-[180px] flex-1">
-              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar paciente, documento, ingreso, médico…" className={`${CLASE_CAMPO} w-full pl-8`} />
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+            <div>
+              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-sky-100">Fechas programadas</span>
+              <div className="flex items-center gap-2">
+                <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} aria-label="Desde"
+                  className={`${CLASE_CAMPO} w-[9.5rem] border-white/30`} />
+                <span className="text-xs text-white/70">a</span>
+                <input type="date" value={hasta} min={desde} max={sumarDias(desde, 61)} onChange={(e) => setHasta(e.target.value)} aria-label="Hasta"
+                  className={`${CLASE_CAMPO} w-[9.5rem] border-white/30 ${rangoValido ? '' : '!border-red-400 !bg-red-50'}`} />
+              </div>
+              {filas && rango && rangoValido && (
+                <span className={`mt-1.5 flex items-center gap-1.5 text-[11px] font-medium ${dentroDeRango ? 'text-emerald-200' : 'text-amber-200'}`}>
+                  {dentroDeRango
+                    ? <><CheckCircle2 size={12} /> Filtra lo consultado ({ddmm(rango.desde)} – {ddmm(rango.hasta)}) al instante</>
+                    : <><AlertTriangle size={12} /> Fuera de lo consultado ({ddmm(rango.desde)} – {ddmm(rango.hasta)}): solo se ven esos días</>}
+                </span>
+              )}
             </div>
             <button
-              onClick={() => setMasFiltros((v) => !v)}
-              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
-                masFiltros || filtrosAvanzadosActivos ? 'border-[#0D2D6B] bg-[#0D2D6B]/5 text-[#0D2D6B]' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+              onClick={intentarConsultar}
+              disabled={consultando || cargandoInicial || !rangoValido}
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold shadow transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                bloqueado ? 'bg-white/15 text-white ring-1 ring-white/30 hover:bg-white/25' : 'bg-white text-[#0D2D6B] hover:bg-sky-50'
               }`}
             >
-              <SlidersHorizontal size={15} /> Más filtros
-              {filtrosAvanzadosActivos > 0 && <span className="rounded-full bg-[#0D2D6B] px-1.5 text-[11px] text-white">{filtrosAvanzadosActivos}</span>}
+              {bloqueado ? <Hourglass size={16} /> : dentroDeRango ? <RefreshCw size={16} /> : <DatabaseZap size={16} />}
+              {accionConsulta}
+              {bloqueado && restante > 0 && <span className="rounded-md bg-white/20 px-1.5 text-xs tabular-nums">{mmss(restante)}</span>}
             </button>
-            <Boton variante="fantasma" disabled={!hayFiltros} onClick={limpiarFiltros} title="Limpiar filtros" aria-label="Limpiar filtros" className="!px-2 !py-1.5">
-              <Eraser size={16} />
-            </Boton>
 
-            {masFiltros && (
-              <div className="absolute right-3 top-full z-30 mt-1 grid w-[min(560px,calc(100vw-2rem))] grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
-                <Filtro etiqueta="Fecha programada">
-                  <select value={filtroFecha} onChange={(e) => setFiltroFecha(e.target.value)} className={`${CLASE_CAMPO} w-full`}>
-                    <option value="">Todas</option>
-                    {opciones.fechas.map((d) => <option key={d} value={d}>{d.slice(8, 10)}/{d.slice(5, 7)}/{d.slice(0, 4)}</option>)}
-                  </select>
-                </Filtro>
-                <Filtro etiqueta="Contrato">
-                  <select value={filtroContrato} onChange={(e) => setFiltroContrato(e.target.value)} className={`${CLASE_CAMPO} w-full`}>
-                    <option value="">Todos</option>
-                    {opciones.contratos.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </Filtro>
-                <Filtro etiqueta="Boleta">
-                  <select value={filtroBoleta} onChange={(e) => setFiltroBoleta(e.target.value as '' | 'con' | 'sin')} className={`${CLASE_CAMPO} w-full`}>
-                    <option value="">Todas</option>
-                    <option value="con">Con boleta</option>
-                    <option value="sin">Sin boleta</option>
-                  </select>
-                </Filtro>
-                <Filtro etiqueta="Estado en GoMedisys">
-                  <select value={filtroEstadoGM} onChange={(e) => setFiltroEstadoGM(e.target.value)} className={`${CLASE_CAMPO} w-full`}>
-                    <option value="">Todos</option>
-                    {opciones.estados.map((e) => <option key={e} value={e}>{e}</option>)}
-                  </select>
-                </Filtro>
-                <div className="col-span-2">
-                  <Filtro etiqueta="Procedimiento">
-                    <input value={filtroProcedimiento} onChange={(e) => setFiltroProcedimiento(e.target.value)} placeholder="Código o nombre del procedimiento…" className={`${CLASE_CAMPO} w-full`} />
-                  </Filtro>
-                </div>
-                <div className="col-span-2 flex justify-end">
-                  <Boton variante="secundario" onClick={() => setMasFiltros(false)} className="!py-1.5">Listo</Boton>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+            {/* Estado del sistema: última consulta e intervalo */}
+            <div className="ml-auto flex items-center gap-3">
+              {hayNueva && (
+                <button onClick={() => cargarResultado(ultima!.id)} className="flex items-center gap-1.5 rounded-full bg-amber-300 px-3 py-1 text-xs font-semibold text-[#0D2D6B] shadow hover:bg-amber-200">
+                  <History size={13} /> Ver consulta más reciente{ultima?.nombre ? ` de ${ultima.nombre.split(' ')[0]}` : ''}
+                </button>
+              )}
+              <EstadoIntervalo
+                cargando={cargandoInicial}
+                enCurso={enCursoOtro}
+                ahora={ahoraServidor}
+                restante={restante}
+                intervaloMs={intervaloMs}
+                ultima={origen ? { nombre: origen.propia ? 'usted' : origen.nombre, terminado: origen.terminado } : ultima ? { nombre: ultima.nombre, terminado: ultima.terminado_en ?? ultima.creado_en } : null}
+                duracion={duracion}
+              />
+            </div>
+          </div>
+
+          {!filas && (
+            <div className="mt-6 grid gap-2 sm:grid-cols-3 lg:max-w-3xl">
+              <TarjetaVidrio icono={Hourglass} titulo={`${estadoMasiva?.intervalo_minutos ?? 15} min entre consultas`} texto="Para todos los usuarios: protege el rendimiento de GoMedisys." />
+              <TarjetaVidrio icono={CalendarDays} titulo="Hasta 62 días por consulta" texto="Dentro de lo consultado, las fechas filtran al instante." />
+              <TarjetaVidrio icono={ShieldCheck} titulo="Sin duplicados" texto="Lo ya marcado para gestión no vuelve a aparecer." />
+            </div>
+          )}
+        </div>
+      </section>
 
       {errores.length > 0 && (
         <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          <div className="flex items-center gap-2 font-medium"><AlertTriangle size={16} /> La consulta no se completó:</div>
+          <div className="flex items-center gap-2 font-medium"><AlertTriangle size={16} /> {filas ? 'Algunos días no se pudieron consultar:' : 'La consulta no se completó:'}</div>
           <ul className="ml-6 mt-1 list-disc text-xs">{errores.map((e) => <li key={e}>{e}</li>)}</ul>
-          <Boton variante="secundario" onClick={consultar} className="mt-2 flex items-center gap-1.5 !py-1 text-xs"><RotateCw size={13} /> Reintentar</Boton>
+          <Boton variante="secundario" onClick={intentarConsultar} className="mt-2 flex items-center gap-1.5 !py-1 text-xs"><RotateCw size={13} /> Reintentar</Boton>
         </div>
       )}
 
-      {!filas && !consultando && (
-        <div className="neu-card">
-          <EstadoVacio
-            icono={<DatabaseZap size={40} className="text-[#0D2D6B]/40" />}
-            titulo="Seleccione el rango de fechas y consulte GoMedisys"
-            descripcion="Se traen todas las cirugías programadas del rango. Los pacientes que ya están en gestión no se muestran, para evitar registros duplicados."
-          />
-        </div>
+      {!filas && !consultando && cargandoInicial && (
+        <div className="neu-card"><EstadoVacio icono={<RefreshCw size={32} className="animate-spin text-[#0D2D6B]/40" />} titulo="Buscando la última consulta…" /></div>
       )}
 
       {filas && (
-        <>
-          {/* Indicadores compactos */}
-          <div className="mb-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
-            <Kpi color="azul" icono={CalendarDays} titulo="Programaciones" valor={totales.total}
-              sub={duracion != null ? `Consultadas en ${(duracion / 1000).toFixed(1)} s` : 'En el rango consultado'}
-              activo={vista === 'todos'} onClick={() => setVista('todos')} />
-            <Kpi color="verde" icono={CheckCircle2} titulo="Disponibles" valor={totales.disponibles} sub="Sin gestión en la app"
-              activo={vista === 'disponibles'} onClick={() => setVista('disponibles')} />
-            <Kpi color="ambar" icono={Lock} titulo="Ya en gestión" valor={totales.gestion} sub="Ocultos de la lista"
-              activo={vista === 'gestion'} onClick={() => setVista('gestion')} />
-            <Kpi color="violeta" icono={ListChecks} titulo="Seleccionadas" valor={seleccion.size} sub="Listas para marcar" />
-          </div>
-
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <div className="neu-inset inline-flex gap-1 p-1 text-sm">
-              {([['disponibles', 'Disponibles'], ['gestion', 'Ya en gestión'], ['todos', 'Todos']] as const).map(([k, l]) => (
-                <button key={k} onClick={() => setVista(k)} className={`flex items-center gap-1.5 rounded-lg px-3 py-1 ${vista === k ? 'bg-[#0D2D6B] text-white' : 'text-[#0D2D6B]'}`}>
-                  {l}
-                  <span className={`rounded-full px-1.5 text-[11px] font-semibold ${vista === k ? 'bg-white/20' : 'bg-[#0D2D6B]/10'}`}>{conteoVista[k]}</span>
-                </button>
-              ))}
+        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_290px]">
+          {/* Contenido: acciones + tabla */}
+          <div className="order-2 min-w-0 xl:order-1">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                <ContadorCircular valor={visibles.length} etiqueta={vista === 'gestion' ? 'en gestión' : vista === 'todos' ? 'registros' : 'disponibles'} de={filas.length} />
+                <div className="space-y-1">
+                  <div className="flex items-center gap-3">
+                    <span className="flex items-center gap-1.5"><span className="h-3 w-1.5 rounded-full bg-emerald-500" /> Con boleta quirúrgica</span>
+                    <span className="flex items-center gap-1.5"><span className="h-3 w-1.5 rounded-full bg-amber-400" /> Sin boleta</span>
+                  </div>
+                  <div className="hidden text-slate-400 2xl:block">Clic en un registro para ver su detalle</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Boton variante="secundario" onClick={exportar} disabled={exportando || visibles.length === 0} className="flex items-center gap-2">
+                  <FileSpreadsheet size={16} /> {exportando ? 'Exportando…' : 'Exportar Excel'}
+                </Boton>
+                <Boton onClick={abrirMarcar} disabled={seleccion.size === 0} className="flex items-center gap-2">
+                  <ListChecks size={16} /> Marcar para gestión ({seleccion.size})
+                </Boton>
+              </div>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="hidden text-xs text-slate-500 2xl:inline">Clic en un registro para ver su detalle</span>
-              <Boton variante="secundario" onClick={exportar} disabled={exportando || visibles.length === 0} className="flex items-center gap-2">
-                <FileSpreadsheet size={16} /> {exportando ? 'Exportando…' : 'Exportar Excel'}
-              </Boton>
-              <Boton onClick={abrirMarcar} disabled={seleccion.size === 0} className="flex items-center gap-2">
-                <ListChecks size={16} /> Marcar para gestión ({seleccion.size})
-              </Boton>
-            </div>
-          </div>
 
-          <div className="neu-card overflow-hidden">
-            <div className="max-h-[64vh] overflow-auto">
-              <table className="tabla-cac w-full text-sm">
-                <thead className="sticky top-0 z-10 bg-[#0D2D6B] text-left text-xs font-semibold uppercase text-white">
-                  <tr>
-                    <th className="px-3 py-2.5">
-                      <input type="checkbox" checked={todosMarcados} onChange={alternarTodos} disabled={visiblesSeleccionables.length === 0} title="Seleccionar todos los disponibles" />
-                    </th>
-                    <th className="px-3 py-2.5">Gestión</th>
-                    <th className="px-3 py-2.5">Programada</th>
-                    <th className="px-3 py-2.5">Paciente</th>
-                    <th className="px-3 py-2.5">Tipo de orden</th>
-                    <th className="px-3 py-2.5"># Ingreso</th>
-                    <th className="px-3 py-2.5">Contrato</th>
-                    <th className="px-3 py-2.5">Procedimientos</th>
-                    <th className="px-3 py-2.5">Ordena / Opera</th>
-                    <th className="px-3 py-2.5">Boleta</th>
-                    <th className="px-3 py-2.5">Estado GM</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibles.length === 0 ? (
-                    <tr><td colSpan={11}><EstadoVacio titulo="Sin resultados" descripcion={vista === 'disponibles' && totales.gestion > 0 && !hayFiltros
-                      ? `No quedan pacientes disponibles: ${totales.gestion} ya están en gestión.`
-                      : 'No hay programaciones para los filtros seleccionados'} /></td></tr>
-                  ) : visibles.map((f) => {
-                    const s = situacion(f)
-                    const puede = seleccionable(s)
-                    const otrosSel = seleccionadoPorOtros.get(f.idProgramming)
-                    const marcada = seleccion.has(f.idProgramming)
-                    const abierta = detalleId === f.idProgramming
-                    return (
-                      <tr
-                        key={f.idProgramming}
-                        onClick={() => setDetalleId(f.idProgramming)}
-                        className={`cursor-pointer border-t border-slate-100 align-top ${puede ? '' : 'opacity-60'} ${marcada ? '!bg-sky-50' : ''} ${abierta ? '!bg-amber-50 outline outline-2 -outline-offset-2 outline-amber-300' : ''}`}
-                      >
-                        <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
-                          {puede
-                            ? <input type="checkbox" checked={marcada} onChange={() => alternar(f.idProgramming)} />
-                            : <Lock size={14} className="text-slate-400" />}
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <BadgeSituacion s={s} />
-                          {otrosSel && puede && (
-                            <div className="mt-1 flex items-center gap-1 text-[11px] font-medium text-amber-700" title="Otro usuario lo tiene seleccionado en este momento">
-                              <Users size={11} /> {otrosSel.join(', ')} lo está seleccionando
+            <div className="neu-card overflow-hidden">
+              <div className="tabla-scroll">
+                <table className="tabla-cac w-full text-sm">
+                  <thead className="bg-[#0D2D6B] text-left text-xs font-semibold uppercase text-white">
+                    <tr>
+                      <th className="px-3 py-2.5">
+                        <input type="checkbox" checked={todosMarcados} onChange={alternarTodos} disabled={visiblesSeleccionables.length === 0} title="Seleccionar todos los disponibles" />
+                      </th>
+                      <th className="px-3 py-2.5">Gestión</th>
+                      <th className="px-3 py-2.5">Programada</th>
+                      <th className="min-w-[200px] px-3 py-2.5">Paciente</th>
+                      <th className="px-3 py-2.5">Boleta</th>
+                      <th className="px-3 py-2.5">Contrato</th>
+                      <th className="px-3 py-2.5">Procedimientos</th>
+                      <th className="px-3 py-2.5">Ordena / Opera</th>
+                      <th className="px-3 py-2.5">Estado GM</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibles.length === 0 ? (
+                      <tr><td colSpan={9}><EstadoVacio titulo="Sin resultados" descripcion={vista === 'disponibles' && conteoVista.gestion > 0 && !hayFiltros
+                        ? `No quedan pacientes disponibles: ${conteoVista.gestion} ya están en gestión.`
+                        : 'No hay programaciones para los filtros seleccionados — ajuste los filtros o el rango de fechas.'} /></td></tr>
+                    ) : visibles.map((f) => {
+                      const s = situacion(f)
+                      const puede = seleccionable(s)
+                      const otrosSel = seleccionadoPorOtros.get(f.idProgramming)
+                      const marcada = seleccion.has(f.idProgramming)
+                      const abierta = detalleId === f.idProgramming
+                      const boleta = tieneBoleta(f)
+                      return (
+                        <tr
+                          key={f.idProgramming}
+                          onClick={() => setDetalleId(f.idProgramming)}
+                          className={`cursor-pointer border-t border-slate-100 align-top ${puede ? '' : 'opacity-60'} ${marcada ? '!bg-sky-50' : ''} ${abierta ? '!bg-amber-50 outline outline-2 -outline-offset-2 outline-amber-300' : ''}`}
+                        >
+                          <td className={`border-l-4 px-3 py-2.5 ${boleta ? 'border-l-emerald-500' : 'border-l-amber-400'}`} onClick={(e) => e.stopPropagation()}>
+                            {puede
+                              ? <input type="checkbox" checked={marcada} onChange={() => alternar(f.idProgramming)} />
+                              : <Lock size={14} className="text-slate-400" />}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <BadgeSituacion s={s} />
+                            {otrosSel && puede && (
+                              <div className="mt-1 flex items-center gap-1 text-[11px] font-medium text-amber-700" title="Otro usuario lo tiene seleccionado en este momento">
+                                <Users size={11} /> {otrosSel.join(', ')} lo está seleccionando
+                              </div>
+                            )}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2.5">
+                            <div className="font-medium text-slate-700">{f.FechaProgramada}</div>
+                            <div className="text-xs text-slate-500">{f.HoraProgramada} · {f.Quirofano ?? '—'}</div>
+                            <div className="mt-1"><BadgeTipoOrden tipo={f.TipoOrden} /></div>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <div className="font-medium text-slate-800">{f.NombrePaciente}</div>
+                            <div className="text-xs text-slate-500">
+                              {f.DocumentoIdentificacion} · {f['Edad(Anos)'] ?? '—'} años{f.Genero ? ` · ${f.Genero}` : ''}
                             </div>
-                          )}
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-2.5">
-                          <div className="font-medium text-slate-700">{f.FechaProgramada}</div>
-                          <div className="text-xs text-slate-500">{f.HoraProgramada} · {f.Quirofano ?? '—'}</div>
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <div className="font-medium text-slate-800">{f.NombrePaciente}</div>
-                          <div className="text-xs text-slate-500">
-                            {f.TipoDocumento} {f.DocumentoIdentificacion} · {f['Edad(Anos)'] ?? '—'} años{f.Genero ? ` · ${f.Genero}` : ''}
-                          </div>
-                        </td>
-                        <td className="px-3 py-2.5"><BadgeTipoOrden tipo={f.TipoOrden} /></td>
-                        <td className="px-3 py-2.5 text-slate-600">
-                          {f.NumeroIngreso ?? '—'}
-                          {!!f.IngresoInferido && <div className="text-[10px] text-amber-600" title="La programación no traía ingreso; se tomó el último ingreso del paciente">inferido</div>}
-                        </td>
-                        <td className="px-3 py-2.5 text-xs">
-                          <div className="text-slate-700">{f.ContratoIngresoCirugia ?? '—'}</div>
-                          {f['Plan(Aseguradora)'] && f['Plan(Aseguradora)'] !== f.ContratoIngresoCirugia && <div className="text-slate-400">{f['Plan(Aseguradora)']}</div>}
-                        </td>
-                        <td className="max-w-[260px] px-3 py-2.5 text-xs text-slate-600">
-                          <div className="line-clamp-2 whitespace-pre-line" title={f.ProcedimientosProgramados ?? ''}>{f.ProcedimientosProgramados ?? '—'}</div>
-                        </td>
-                        <td className="px-3 py-2.5 text-xs">
-                          <div className="text-slate-700">{f.EspecialistaOrdena ?? '—'}</div>
-                          {f.FechaOrdenamiento && <div className="text-slate-400">Orden: {f.FechaOrdenamiento}</div>}
-                          {f.EspecialistaOpera && <div className="mt-1 text-slate-500">Opera: {f.EspecialistaOpera}</div>}
-                        </td>
-                        <td className="px-3 py-2.5 text-xs text-slate-600">
-                          {tieneBoleta(f)
-                            ? <><div>{f.DuracionBoleta != null && f.DuracionBoleta !== '' ? `${f.DuracionBoleta} min` : 'Con boleta'}</div>{f.PrioridadBoleta && <div className="text-slate-400">{f.PrioridadBoleta}</div>}</>
-                            : <div className="text-slate-400">Sin boleta</div>}
-                        </td>
-                        <td className="px-3 py-2.5 text-xs"><BadgeEstadoGM estado={f.Estado} /></td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <div className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
-              Mostrando {visibles.length} de {filas.length} programaciones
+                            <div className="text-xs text-slate-500">
+                              Ingreso <b className="font-medium text-slate-700">{f.NumeroIngreso ?? '—'}</b>
+                              {!!f.IngresoInferido && <span className="ml-1 text-[10px] text-amber-600" title="La programación no traía ingreso; se tomó el último ingreso del paciente">(inferido)</span>}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2.5"><BadgeBoleta f={f} /></td>
+                          <td className="px-3 py-2.5 text-xs">
+                            <div className="text-slate-700">{f.ContratoIngresoCirugia ?? '—'}</div>
+                            {f['Plan(Aseguradora)'] && f['Plan(Aseguradora)'] !== f.ContratoIngresoCirugia && <div className="text-slate-400">{f['Plan(Aseguradora)']}</div>}
+                          </td>
+                          <td className="min-w-[220px] max-w-[280px] px-3 py-2.5 text-xs text-slate-600">
+                            <div className="line-clamp-2 whitespace-pre-line" title={f.ProcedimientosProgramados ?? ''}>{f.ProcedimientosProgramados ?? '—'}</div>
+                          </td>
+                          <td className="px-3 py-2.5 text-xs">
+                            <div className="text-slate-700">{f.EspecialistaOrdena ?? '—'}</div>
+                            {f.FechaOrdenamiento && <div className="text-slate-400">Orden: {f.FechaOrdenamiento}</div>}
+                            {f.EspecialistaOpera && <div className="mt-1 text-slate-500">Opera: {f.EspecialistaOpera}</div>}
+                          </td>
+                          <td className="px-3 py-2.5 text-xs"><BadgeEstadoGM estado={f.Estado} /></td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
+                Mostrando {visibles.length} de {filas.length} programaciones consultadas
+              </div>
             </div>
           </div>
-        </>
+
+          {/* Barra lateral: indicadores que filtran + filtros sobre la foto de la clínica */}
+          <aside className="order-1 min-w-0 space-y-3 xl:sticky xl:top-0 xl:order-2 xl:max-h-[calc(100vh-7.5rem)] xl:overflow-y-auto xl:overscroll-contain xl:p-1">
+            <PanelIndicadores titulo="Resultado de la consulta" items={[
+              { label: 'Disponibles', hint: 'Sin gestión en la app', value: conteoVista.disponibles, icono: CheckCircle2, color: 'verde', activo: vista === 'disponibles', onClick: () => setVista('disponibles') },
+              { label: 'Ya en gestión', hint: 'Ocultos de la lista', value: conteoVista.gestion, icono: Lock, color: 'violeta', activo: vista === 'gestion', onClick: () => setVista('gestion') },
+              { label: 'Todas', hint: duracion != null ? `Consultadas en ${(duracion / 1000).toFixed(1)} s` : 'Programaciones', value: conteoVista.todos, icono: Layers, color: 'azul', activo: vista === 'todos', onClick: () => setVista('todos') },
+            ]} />
+
+            <PanelIndicadores titulo="Boleta quirúrgica" accion={filtroBoleta && <button onClick={() => setFiltroBoleta('')} className="text-xs font-medium text-[#16468E] hover:underline">Quitar filtro</button>} items={[
+              { label: 'Con boleta', hint: 'Duración, prioridad y destino', value: conteoBoleta.con, icono: ClipboardCheck, color: 'verde', activo: filtroBoleta === 'con', onClick: () => setFiltroBoleta(filtroBoleta === 'con' ? '' : 'con') },
+              { label: 'Sin boleta', hint: 'Revisar antes de programar', value: conteoBoleta.sin, icono: ClipboardX, color: 'ambar', activo: filtroBoleta === 'sin', onClick: () => setFiltroBoleta(filtroBoleta === 'sin' ? '' : 'sin') },
+            ]}>
+              <BarraProporcion con={conteoBoleta.con} sin={conteoBoleta.sin} />
+            </PanelIndicadores>
+
+            <section className="relative overflow-hidden rounded-2xl bg-[#0D2D6B] text-white shadow-lg">
+              <div className="h-28 overflow-hidden">
+                <img src={`${import.meta.env.BASE_URL}images/torre_salud.png`} alt="Torre de Salud — Clínica Santa Bárbara"
+                  className="h-[190px] w-full object-cover object-top" />
+              </div>
+              <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(13,45,107,0.05)_0,rgba(13,45,107,0.6)_70px,#0D2D6B_112px)]" />
+              <div className="relative -mt-10 space-y-2.5 p-4 pt-0">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold">Filtros</span>
+                  <button onClick={limpiarFiltros} disabled={!hayFiltros} className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-sky-100 transition hover:bg-white/15 disabled:opacity-40">
+                    <Eraser size={13} /> Limpiar
+                  </button>
+                </div>
+                <div className="filtros-columna">
+                  <CampoLateral etiqueta="Buscar">
+                    <div className="relative">
+                      <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Paciente, documento, ingreso, médico…" className={`${CLASE_CAMPO} w-full pl-8`} />
+                    </div>
+                  </CampoLateral>
+                  <CampoLateral etiqueta="Boleta quirúrgica">
+                    <div className="grid grid-cols-3 gap-1 rounded-lg bg-white/10 p-1">
+                      {([['', 'Todas'], ['con', 'Con'], ['sin', 'Sin']] as const).map(([v, l]) => (
+                        <button key={v} onClick={() => setFiltroBoleta(v)}
+                          className={`rounded-md py-1 text-xs font-semibold transition ${filtroBoleta === v ? 'bg-white text-[#0D2D6B] shadow' : 'text-white/80 hover:bg-white/15'}`}>{l}</button>
+                      ))}
+                    </div>
+                  </CampoLateral>
+                  <CampoLateral etiqueta="Tipo de orden">
+                    <select value={filtroTipoOrden} onChange={(e) => setFiltroTipoOrden(e.target.value)} className={`${CLASE_CAMPO} w-full`}>
+                      <option value="">Todas</option>
+                      {opciones.tiposOrden.map((t) => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </CampoLateral>
+                  <CampoLateral etiqueta="Contrato">
+                    <select value={filtroContrato} onChange={(e) => setFiltroContrato(e.target.value)} className={`${CLASE_CAMPO} w-full`}>
+                      <option value="">Todos</option>
+                      {opciones.contratos.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </CampoLateral>
+                  <CampoLateral etiqueta="Estado en GoMedisys">
+                    <select value={filtroEstadoGM} onChange={(e) => setFiltroEstadoGM(e.target.value)} className={`${CLASE_CAMPO} w-full`}>
+                      <option value="">Todos</option>
+                      {opciones.estados.map((e) => <option key={e} value={e}>{e}</option>)}
+                    </select>
+                  </CampoLateral>
+                  <CampoLateral etiqueta="Procedimiento">
+                    <input value={filtroProcedimiento} onChange={(e) => setFiltroProcedimiento(e.target.value)} placeholder="Código o nombre…" className={`${CLASE_CAMPO} w-full`} />
+                  </CampoLateral>
+                </div>
+              </div>
+            </section>
+          </aside>
+        </div>
       )}
 
       {/* Panel lateral de detalle */}
@@ -653,6 +842,85 @@ export default function ConsultaMasiva() {
       )}
 
       {consultando && <ProgresoConsulta tramos={tramos} inicio={inicio} estado={estadoTrabajo} />}
+
+      {/* Confirmación antes de consultar: condiciones del intervalo */}
+      <Modal open={modalConfirmar} onClose={() => setModalConfirmar(false)} titulo="Consultar GoMedisys" ancho="max-w-lg">
+        <div className="space-y-3 text-sm text-slate-600">
+          <div className="flex items-center gap-3 rounded-xl bg-[#0D2D6B]/5 p-3">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#0D2D6B] text-white"><CalendarDays size={20} /></span>
+            <div>
+              <div className="font-semibold text-[#0D2D6B]">{ddmmaaaa(desde)} a {ddmmaaaa(hasta)}</div>
+              <div className="text-xs text-slate-500">{diasRango} día(s) · se consulta un día a la vez</div>
+            </div>
+          </div>
+          <ul className="space-y-1.5">
+            <Condicion icono={Hourglass}>Después de esta consulta, la siguiente estará disponible en <b>{estadoMasiva?.intervalo_minutos ?? 15} minutos</b>, para todos los usuarios.</Condicion>
+            <Condicion icono={History}>Mientras tanto, cualquier usuario verá estos resultados y podrá filtrarlos por fecha sin volver a GoMedisys.</Condicion>
+            <Condicion icono={CalendarDays}>Verifique que el rango sea el que necesita: incluya todos los días que vaya a trabajar.</Condicion>
+          </ul>
+          <div className="flex justify-end gap-2 pt-1">
+            <Boton variante="fantasma" onClick={() => setModalConfirmar(false)}>Cancelar</Boton>
+            <Boton onClick={() => consultar()} className="flex items-center gap-2"><DatabaseZap size={16} /> Consultar ahora</Boton>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Advertencia: consulta en espera o en curso */}
+      <Modal open={modalEspera !== null} onClose={() => setModalEspera(null)} titulo={modalEspera?.motivo === 'en_curso' ? 'Hay una consulta en curso' : 'Consulta en espera'} ancho="max-w-lg">
+        {modalEspera?.motivo === 'en_curso' && estadoMasiva?.en_curso ? (
+          <div className="space-y-3 text-sm text-slate-600">
+            <div className="flex items-center gap-3 rounded-xl bg-sky-50 p-3 text-sky-900">
+              <RefreshCw size={22} className="shrink-0 animate-spin text-sky-600" />
+              <div>
+                <b>{estadoMasiva.en_curso.solicitado_por === session?.user.id ? 'Usted tiene' : `${estadoMasiva.en_curso.nombre ?? 'Otro usuario'} tiene`}</b> una consulta a GoMedisys en curso
+                ({ddmm(estadoMasiva.en_curso.parametros.desde)} – {ddmm(estadoMasiva.en_curso.parametros.hasta)}), iniciada {haceTexto(ahoraServidor - Date.parse(estadoMasiva.en_curso.creado_en))}.
+              </div>
+            </div>
+            <p>Para no cargar la base de datos con consultas simultáneas, espere a que termine: <b>los resultados aparecerán aquí automáticamente</b> y podrá trabajar con ellos.</p>
+            <div className="flex justify-end pt-1"><Boton onClick={() => setModalEspera(null)}>Entendido</Boton></div>
+          </div>
+        ) : (
+          <div className="space-y-3 text-sm text-slate-600">
+            <div className="flex items-center gap-4 rounded-xl bg-amber-50 p-3">
+              <AnilloEspera restante={restante} total={intervaloMs} />
+              <div className="text-amber-900">
+                <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">Próxima consulta disponible</div>
+                <div className="text-lg font-bold">{proxima ? `a las ${horaCO(new Date(proxima).toISOString())}` : 'en breve'}</div>
+                <div className="text-xs">Faltan {mmss(restante)} minutos</div>
+              </div>
+            </div>
+            <p className="flex gap-2">
+              <ShieldAlert size={18} className="mt-0.5 shrink-0 text-amber-600" />
+              <span>Para proteger el rendimiento de la base de datos de <b>GoMedisys</b>, entre una consulta masiva y la siguiente deben pasar <b>{estadoMasiva?.intervalo_minutos ?? 15} minutos</b>. La regla aplica a todos los usuarios.</span>
+            </p>
+            {ultima && (
+              <div className="rounded-xl border border-slate-200 p-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Última consulta</div>
+                <div className="mt-0.5 font-medium text-slate-700">
+                  {ddmmaaaa(ultima.parametros.desde)} a {ddmmaaaa(ultima.parametros.hasta)}
+                </div>
+                <div className="text-xs text-slate-500">
+                  {ultima.solicitado_por === session?.user.id ? 'Por usted' : `Por ${ultima.nombre ?? 'otro usuario'}`} · {fechaHoraCO(ultima.terminado_en ?? ultima.creado_en)}
+                </div>
+                <p className="mt-2 text-xs text-slate-500">Mientras tanto puede trabajar con esos resultados: filtrar por fecha dentro de ese rango y marcar pacientes para gestión.</p>
+              </div>
+            )}
+            <div className="flex flex-wrap justify-end gap-2 pt-1">
+              {esAdmin && (
+                <Boton variante="fantasma" onClick={() => consultar(true)} className="mr-auto flex items-center gap-1.5 !px-2 text-xs text-red-600 hover:!bg-red-50" title="Solo administrador: ignora el intervalo">
+                  <AlertTriangle size={14} /> Consultar de todos modos
+                </Boton>
+              )}
+              {ultima && (origen?.id !== ultima.id || !dentroDeRango) && (
+                <Boton variante="secundario" onClick={async () => { setModalEspera(null); if (origen?.id !== ultima.id) await cargarResultado(ultima.id); else { setDesde(ultima.parametros.desde); setHasta(ultima.parametros.hasta) } }} className="flex items-center gap-2">
+                  <History size={15} /> Ver la última consulta
+                </Boton>
+              )}
+              <Boton onClick={() => setModalEspera(null)}>Entendido</Boton>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Confirmación de la marcación */}
       <Modal open={modalMarcar} onClose={() => !marcando && setModalMarcar(false)} titulo={`Marcar ${seleccionadas.length} paciente(s) para gestión`} ancho="max-w-3xl" cerrableFuera={false}>
@@ -674,12 +942,13 @@ export default function ConsultaMasiva() {
         </div>
         <div className="max-h-[45vh] space-y-1.5 overflow-y-auto pr-1">
           {seleccionadas.map((f) => (
-            <div key={f.idProgramming} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <div key={f.idProgramming} className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border border-l-4 border-slate-200 px-3 py-2 text-sm ${tieneBoleta(f) ? 'border-l-emerald-500' : 'border-l-amber-400'}`}>
               <div className="min-w-0">
                 <div className="font-medium text-slate-800">{f.NombrePaciente}</div>
                 <div className="text-xs text-slate-500">
                   {f.FechaProgramada} {f.HoraProgramada} · Ingreso {f.NumeroIngreso ?? '—'}
                   {f.EspecialidadOpera ? ` · GoMedisys: ${f.EspecialidadOpera}` : ''}
+                  {!tieneBoleta(f) && <span className="font-medium text-amber-700"> · Sin boleta</span>}
                 </div>
                 {situacion(f).tipo === 'ingreso' && <div className="text-xs font-medium text-orange-600">⚠ Este # de ingreso ya tiene una solicitud abierta</div>}
               </div>
@@ -740,43 +1009,163 @@ export default function ConsultaMasiva() {
 // Subcomponentes
 // ---------------------------------------------------------------------------
 
-function Filtro({ etiqueta, crece, children }: { etiqueta: string; crece?: boolean; children: ReactNode }) {
+function CampoLateral({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
   return (
-    <div className={crece ? 'min-w-[200px] flex-1' : undefined}>
-      <label className="mb-1 block text-xs font-medium text-slate-500">{etiqueta}</label>
+    <label className="block">
+      <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-sky-100">{etiqueta}</span>
       {children}
+    </label>
+  )
+}
+
+function TarjetaVidrio({ icono: Icono, titulo, texto }: { icono: LucideIcon; titulo: string; texto: string }) {
+  return (
+    <div className="rounded-xl border border-white/15 bg-white/10 p-3 backdrop-blur-sm transition hover:bg-white/15">
+      <div className="flex items-center gap-2 text-sm font-semibold"><Icono size={15} className="text-sky-200" /> {titulo}</div>
+      <p className="mt-0.5 text-xs text-white/70">{texto}</p>
     </div>
   )
 }
 
-const COLORES_KPI = {
-  azul: { fondo: 'bg-sky-50 border-sky-100', icono: 'bg-sky-100 text-sky-700', anillo: 'ring-sky-400' },
-  verde: { fondo: 'bg-emerald-50 border-emerald-100', icono: 'bg-emerald-500 text-white', anillo: 'ring-emerald-400' },
-  ambar: { fondo: 'bg-amber-50 border-amber-100', icono: 'bg-amber-400 text-white', anillo: 'ring-amber-400' },
-  violeta: { fondo: 'bg-violet-50 border-violet-100', icono: 'bg-violet-100 text-violet-700', anillo: 'ring-violet-400' },
-} as const
+function Condicion({ icono: Icono, children }: { icono: LucideIcon; children: ReactNode }) {
+  return <li className="flex gap-2"><Icono size={16} className="mt-0.5 shrink-0 text-[#16468E]" /><span>{children}</span></li>
+}
 
-/** Indicador compacto (una sola línea de alto) */
-function Kpi({ color, icono: Icono, titulo, valor, sub, activo, onClick }: {
-  color: keyof typeof COLORES_KPI; icono: LucideIcon; titulo: string; valor: number; sub: string
-  activo?: boolean; onClick?: () => void
-}) {
-  const c = COLORES_KPI[color]
-  const Contenedor = onClick ? 'button' : 'div'
+/** Anillo con la cuenta regresiva del intervalo */
+function AnilloEspera({ restante, total, tamano = 64, claro = false }: { restante: number; total: number; tamano?: number; claro?: boolean }) {
+  const r = tamano / 2 - 5
+  const c = 2 * Math.PI * r
+  const pct = total > 0 ? Math.min(1, Math.max(0, 1 - restante / total)) : 1
   return (
-    <Contenedor
-      onClick={onClick}
-      className={`flex items-center gap-3 rounded-xl border px-3 py-2 text-left transition ${c.fondo} ${onClick ? 'hover:shadow-md' : ''} ${activo ? `ring-2 ${c.anillo}` : ''}`}
-    >
-      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${c.icono}`}><Icono size={20} /></span>
-      <div className="min-w-0">
-        <div className="text-xs font-medium text-slate-600">{titulo}</div>
-        <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-bold leading-tight text-[#0D2D6B]">{valor}</span>
-          <span className="truncate text-[11px] text-slate-500">{sub}</span>
+    <div className="relative shrink-0" style={{ width: tamano, height: tamano }}>
+      <svg width={tamano} height={tamano} className="-rotate-90">
+        <circle cx={tamano / 2} cy={tamano / 2} r={r} fill="none" strokeWidth={5} stroke={claro ? 'rgba(255,255,255,.18)' : '#fde68a'} />
+        <circle cx={tamano / 2} cy={tamano / 2} r={r} fill="none" strokeWidth={5} strokeLinecap="round"
+          stroke={claro ? '#fcd34d' : '#d97706'} strokeDasharray={c} strokeDashoffset={c * (1 - pct)} style={{ transition: 'stroke-dashoffset 1s linear' }} />
+      </svg>
+      <span className={`absolute inset-0 grid place-items-center text-[11px] font-bold tabular-nums ${claro ? 'text-white' : 'text-amber-800'}`}>{mmss(restante)}</span>
+    </div>
+  )
+}
+
+/** Estado del sistema en la franja: consulta en curso, cuenta regresiva o disponible */
+function EstadoIntervalo({ cargando, enCurso, ahora, restante, intervaloMs, ultima, duracion }: {
+  cargando: boolean
+  enCurso: EstadoMasiva['en_curso']
+  ahora: number
+  restante: number
+  intervaloMs: number
+  ultima: { nombre: string | null; terminado: string } | null
+  duracion: number | null
+}) {
+  const caja = 'flex items-center gap-3 rounded-xl border border-white/15 bg-white/10 px-3 py-2 backdrop-blur-sm'
+  if (cargando) return <div className={`${caja} text-xs text-white/70`}><RefreshCw size={14} className="animate-spin" /> Verificando la última consulta…</div>
+  if (enCurso) {
+    return (
+      <div className={caja}>
+        <RefreshCw size={20} className="animate-spin text-sky-200" />
+        <div className="text-xs leading-tight">
+          <div className="font-semibold">{enCurso.nombre ?? 'Otro usuario'} está consultando</div>
+          <div className="text-white/70">{ddmm(enCurso.parametros.desde)} – {ddmm(enCurso.parametros.hasta)} · los resultados llegan solos</div>
         </div>
       </div>
-    </Contenedor>
+    )
+  }
+  return (
+    <div className={caja}>
+      {restante > 0
+        ? <AnilloEspera restante={restante} total={intervaloMs} tamano={46} claro />
+        : <span className="grid h-[46px] w-[46px] place-items-center rounded-full bg-emerald-400/25 text-emerald-200"><CheckCircle2 size={22} /></span>}
+      <div className="text-xs leading-tight">
+        <div className="font-semibold">{restante > 0 ? 'Próxima consulta en espera' : 'Consulta disponible'}</div>
+        {ultima
+          ? <div className="text-white/70"><Clock size={11} className="mr-1 inline" />Última {haceTexto(ahora - Date.parse(ultima.terminado))}{ultima.nombre ? ` · ${ultima.nombre}` : ''}{duracion != null ? ` · ${(duracion / 1000).toFixed(0)} s` : ''}</div>
+          : <div className="text-white/70"><Info size={11} className="mr-1 inline" />Aún no hay consultas registradas</div>}
+      </div>
+    </div>
+  )
+}
+
+/** Conteo en tarjeta circular (skill cac-fullstack-app §3.3) */
+function ContadorCircular({ valor, etiqueta, de }: { valor: number; etiqueta: string; de?: number }) {
+  return (
+    <div className="grid h-[72px] w-[72px] shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#0D2D6B] to-[#16468E] p-[3px] shadow transition hover:from-[#16468E] hover:to-[#2563A8]">
+      <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-white text-center">
+        <span className="text-lg font-bold leading-none text-[#0D2D6B] tabular-nums">{valor}</span>
+        <span className="mt-0.5 text-[9px] font-medium uppercase leading-tight tracking-wide text-slate-500">{etiqueta}</span>
+        {de !== undefined && <span className="text-[9px] leading-tight text-slate-400">de {de}</span>}
+      </div>
+    </div>
+  )
+}
+
+const TONO_IND = {
+  azul: 'bg-sky-100 text-sky-700',
+  verde: 'bg-emerald-100 text-emerald-700',
+  ambar: 'bg-amber-100 text-amber-700',
+  violeta: 'bg-violet-100 text-violet-700',
+} as const
+
+type IndicadorItem = { label: string; hint?: string; value: number; icono: LucideIcon; color: keyof typeof TONO_IND; activo?: boolean; onClick?: () => void }
+
+/** Indicadores de la barra lateral: cada fila es también un filtro (skill §3.2) */
+function PanelIndicadores({ titulo, accion, items, children }: { titulo: string; accion?: ReactNode; items: IndicadorItem[]; children?: ReactNode }) {
+  return (
+    <section className="neu-card p-3">
+      <header className="mb-1.5 flex items-center justify-between gap-2 px-1">
+        <h2 className="text-sm font-semibold text-[#0D2D6B]">{titulo}</h2>
+        {accion}
+      </header>
+      {children}
+      <ul className="space-y-0.5">
+        {items.map((i) => {
+          const contenido = (
+            <>
+              <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${TONO_IND[i.color]}`}><i.icono size={16} /></span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm text-slate-700">{i.label}</span>
+                {i.hint && <span className="block truncate text-[11px] text-slate-500">{i.hint}</span>}
+              </span>
+              <span className="shrink-0 text-lg font-bold tabular-nums text-[#0D2D6B]">{i.value}</span>
+            </>
+          )
+          const cls = `flex w-full items-center gap-2.5 rounded-xl px-1.5 py-1.5 text-left transition-colors ${i.onClick ? 'hover:bg-[#0D2D6B]/5' : ''} ${i.activo ? 'bg-[#0D2D6B]/[0.07] ring-1 ring-[#16468E]/30' : ''}`
+          return (
+            <li key={i.label}>
+              {i.onClick ? <button onClick={i.onClick} aria-pressed={i.activo} className={cls}>{contenido}</button> : <div className={cls}>{contenido}</div>}
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+
+/** Proporción con / sin boleta */
+function BarraProporcion({ con, sin }: { con: number; sin: number }) {
+  const total = con + sin || 1
+  const pct = Math.round((con / total) * 100)
+  return (
+    <div className="mb-2 px-1">
+      <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full bg-slate-100">
+        <div className="bg-emerald-500 transition-all" style={{ width: `${(con / total) * 100}%` }} title={`Con boleta: ${con}`} />
+        <div className="bg-amber-400 transition-all" style={{ width: `${(sin / total) * 100}%` }} title={`Sin boleta: ${sin}`} />
+      </div>
+      <div className="mt-1 text-[11px] text-slate-500"><b className="text-emerald-700">{pct}%</b> de los registros mostrados tiene boleta</div>
+    </div>
+  )
+}
+
+function BadgeBoleta({ f }: { f: FilaGM }) {
+  if (!tieneBoleta(f)) {
+    return <Badge className="whitespace-nowrap border-amber-300 bg-amber-50 text-amber-700"><ClipboardX size={11} /> Sin boleta</Badge>
+  }
+  const duracion = f.DuracionBoleta != null && f.DuracionBoleta !== '' ? `${f.DuracionBoleta} min` : null
+  return (
+    <>
+      <Badge className="whitespace-nowrap border-emerald-300 bg-emerald-50 text-emerald-700"><ClipboardCheck size={11} /> Con boleta</Badge>
+      {(duracion || f.PrioridadBoleta) && <div className="mt-1 text-[11px] text-slate-500">{[duracion, f.PrioridadBoleta].filter(Boolean).join(' · ')}</div>}
+    </>
   )
 }
 

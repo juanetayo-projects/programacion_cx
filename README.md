@@ -38,7 +38,7 @@ src/
 sql/               consultas T-SQL de GoMedisys
 scripts/gomedisys/ runner de las consultas (GitHub Actions)
 supabase/
-├── migrations/    0001-0036 (esquema, RLS, MOS, recepción, notas, autorización…)
+├── migrations/    0001-0037 (esquema, RLS, MOS, recepción, notas, autorización…)
 └── functions/     admin-usuarios, consulta-gomedisys, notificar-paciente,
                    notificar-asegurador, notificar-proveedor, registrar-recepcion
 docs/
@@ -77,5 +77,11 @@ Requiere `.env.local` (no versionado) con `VITE_SUPABASE_URL` y
   registra como realizada la cirugía, ni se inicia MOS.
 - Sin **cierre de la cirugía** (inicio/fin reales, cirujano, procedimiento,
   destino) no se registran seguimientos posquirúrgicos.
+- Entre una **consulta masiva** a GoMedisys y la siguiente deben pasar
+  `consulta_masiva_config.intervalo_minutos` (15 por defecto, global para
+  todos los usuarios; las consultas fallidas no cuentan). Lo hace cumplir la
+  Edge Function `consulta-gomedisys`; mientras tanto la app muestra el
+  resultado de la última consulta (`masiva_resultado()`) y las fechas filtran
+  dentro del rango consultado. El administrador puede forzar una consulta.
 - Las notificaciones (asegurador, proveedor) no se modifican ni se reenvían;
   notas, correos y actas son evidencia inmutable para auditoría.

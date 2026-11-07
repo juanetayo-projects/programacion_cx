@@ -1,6 +1,6 @@
-import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ButtonHTMLAttributes, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { X } from 'lucide-react'
+import { GripHorizontal, X } from 'lucide-react'
 
 // --- Card de métrica con degradado institucional ---
 export function MetricCard({
@@ -47,7 +47,7 @@ export function TituloEnHeader({ titulo, subtitulo, children }: { titulo: string
 }
 
 // --- Campo de filtro con la etiqueta a la izquierda (ahorra una línea de alto) ---
-export const CLASE_CAMPO = 'rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm focus:border-[#0D2D6B] focus:outline-none focus:ring-2 focus:ring-[#0D2D6B]/20'
+export const CLASE_CAMPO = 'rounded-lg border border-slate-300 bg-white text-slate-700 px-3 py-1.5 text-sm focus:border-[#0D2D6B] focus:outline-none focus:ring-2 focus:ring-[#0D2D6B]/20'
 
 export function CampoLinea({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
   return (
@@ -78,7 +78,7 @@ export function FilterBar({ children }: { children: ReactNode }) {
   )
 }
 
-// --- Modal reutilizable ---
+// --- Modal reutilizable (flotante: se arrastra desde la barra de título) ---
 export function Modal({
   open,
   onClose,
@@ -97,17 +97,30 @@ export function Modal({
   /** Si es false, hacer clic fuera del modal (o Escape) no lo cierra — solo el botón de cerrar o las acciones internas. */
   cerrableFuera?: boolean
 }) {
+  const { pos, ref, iniciarArrastre, reiniciar, arrastrando } = useArrastre()
+  useEffect(() => { if (open) reiniciar() }, [open, reiniciar])
   if (!open) return null
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={cerrableFuera ? onClose : undefined}
+      onClick={cerrableFuera && !arrastrando ? onClose : undefined}
     >
-      <div className={`w-full ${ancho} max-h-[90vh] overflow-y-auto rounded-2xl ${fondo} shadow-2xl`} onClick={(e) => e.stopPropagation()}>
-        {titulo && (
-          <div className="sticky top-0 flex items-center justify-between gap-3 rounded-t-2xl bg-gradient-to-r from-[#0D2D6B] to-[#16468E] px-5 py-3 font-medium text-white">
-            <span>{titulo}</span>
+      <div
+        ref={ref}
+        style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}
+        className={`w-full ${ancho} max-h-[90vh] overflow-y-auto rounded-2xl ${fondo} shadow-2xl ${arrastrando ? 'select-none' : ''}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {titulo ? (
+          <div
+            onPointerDown={iniciarArrastre}
+            onDoubleClick={reiniciar}
+            title="Arrastre para mover · doble clic para centrar"
+            className={`sticky top-0 z-10 flex touch-none items-center justify-between gap-3 rounded-t-2xl bg-gradient-to-r from-[#0D2D6B] to-[#16468E] px-5 py-3 font-medium text-white ${arrastrando ? 'cursor-grabbing' : 'cursor-grab'}`}
+          >
+            <span className="flex min-w-0 items-center gap-2"><GripHorizontal size={16} className="shrink-0 text-white/50" />{titulo}</span>
             <button
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={onClose}
               aria-label="Cerrar"
               className="rounded-full p-1 text-white/80 transition hover:bg-white/15 hover:text-white"
@@ -115,11 +128,56 @@ export function Modal({
               <X size={18} />
             </button>
           </div>
+        ) : (
+          <div
+            onPointerDown={iniciarArrastre}
+            onDoubleClick={reiniciar}
+            title="Arrastre para mover"
+            className={`sticky top-0 z-10 flex touch-none justify-center rounded-t-2xl pt-1.5 text-slate-300 hover:text-slate-500 ${arrastrando ? 'cursor-grabbing' : 'cursor-grab'}`}
+          >
+            <GripHorizontal size={18} />
+          </div>
         )}
-        <div className="p-5">{children}</div>
+        <div className={titulo ? 'p-5' : 'px-5 pb-5 pt-2'}>{children}</div>
       </div>
     </div>
   )
+}
+
+/** Arrastre de una ventana flotante, limitado para que el título nunca salga de la pantalla */
+export function useArrastre() {
+  const ref = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState({ x: 0, y: 0 })
+  const [arrastrando, setArrastrando] = useState(false)
+  const reiniciar = useCallback(() => setPos({ x: 0, y: 0 }), [])
+  const iniciarArrastre = useCallback((e: ReactPointerEvent) => {
+    if (e.button !== 0) return
+    const el = ref.current
+    if (!el) return
+    e.preventDefault()
+    const inicio = { x: e.clientX, y: e.clientY }
+    let base = { x: 0, y: 0 }
+    setPos((p) => { base = p; return p })
+    const caja = el.getBoundingClientRect()
+    setArrastrando(true)
+    const mover = (ev: PointerEvent) => {
+      let dx = ev.clientX - inicio.x
+      let dy = ev.clientY - inicio.y
+      // Mantiene al menos 80 px de la ventana y su barra de título visibles
+      dx = Math.min(Math.max(dx, 80 - caja.right), window.innerWidth - 80 - caja.left)
+      dy = Math.min(Math.max(dy, -caja.top), window.innerHeight - 48 - caja.top)
+      setPos({ x: base.x + dx, y: base.y + dy })
+    }
+    const soltar = () => {
+      window.removeEventListener('pointermove', mover)
+      window.removeEventListener('pointerup', soltar)
+      // El clic que cierra el modal al soltar fuera se ignora
+      setTimeout(() => setArrastrando(false), 0)
+    }
+    window.addEventListener('pointermove', mover)
+    window.addEventListener('pointerup', soltar)
+  }, [])
+  return { pos, ref, iniciarArrastre, reiniciar, arrastrando }
 }
 
 // --- Botón primario institucional ---

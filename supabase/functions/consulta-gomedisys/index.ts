@@ -91,6 +91,41 @@ Deno.serve(async (req) => {
     .order('id', { ascending: false }).limit(1)
   if (enCurso?.length) return json(200, { ok: true, trabajoId: enCurso[0].id, reutilizado: true })
 
+  // Consulta masiva: intervalo mínimo global entre consultas (migración 0037),
+  // para no cargar la réplica de GoMedisys con consultas repetidas.
+  if (tipo === 'masiva') {
+    const { data: cfg } = await admin.from('consulta_masiva_config').select('intervalo_minutos').eq('id', 1).maybeSingle()
+    const intervalo = Number(cfg?.intervalo_minutos ?? 15)
+    const hace10min = new Date(Date.now() - 10 * 60000).toISOString()
+    const { data: otraEnCurso } = await admin.from('gomedisys_trabajos').select('id, solicitado_por, creado_en, parametros')
+      .eq('tipo', 'masiva').in('estado', ['pendiente', 'despachado', 'en_proceso']).gte('creado_en', hace10min)
+      .order('id', { ascending: false }).limit(1)
+    if (otraEnCurso?.length) {
+      const { data: quien } = await admin.from('perfiles').select('nombre').eq('id', otraEnCurso[0].solicitado_por).maybeSingle()
+      return json(200, {
+        ok: false, codigo: 'en_curso', error: `${quien?.nombre ?? 'Otro usuario'} está consultando GoMedisys en este momento.`,
+        en_curso: { id: otraEnCurso[0].id, nombre: quien?.nombre ?? null, creado_en: otraEnCurso[0].creado_en, parametros: otraEnCurso[0].parametros },
+      })
+    }
+    const forzar = body.forzar === true && perfil.rol === 'administrador'
+    if (!forzar) {
+      const { data: ultima } = await admin.from('gomedisys_trabajos').select('id, creado_en, terminado_en, parametros')
+        .eq('tipo', 'masiva').eq('estado', 'listo').order('id', { ascending: false }).limit(1)
+      if (ultima?.length) {
+        const base = Date.parse(ultima[0].terminado_en ?? ultima[0].creado_en)
+        const proxima = base + intervalo * 60000
+        if (Date.now() < proxima) {
+          return json(200, {
+            ok: false, codigo: 'espera',
+            error: `Debe esperar ${intervalo} minutos entre consultas masivas a GoMedisys.`,
+            intervalo_minutos: intervalo, proxima_permitida: new Date(proxima).toISOString(),
+            ultima: { id: ultima[0].id, parametros: ultima[0].parametros, terminado_en: ultima[0].terminado_en },
+          })
+        }
+      }
+    }
+  }
+
   const token = await tokenGitHub(admin)
   if (!token) return json(200, { ok: false, error: 'Falta configurar GITHUB_DISPATCH_TOKEN en Supabase para poder consultar GoMedisys.' })
 

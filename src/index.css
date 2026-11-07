@@ -74,11 +74,23 @@ table.tabla-cac tbody tr:hover {
   box-shadow: 0 0 14px rgba(56, 189, 248, 0.7);
 }
 
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+/* Barras de desplazamiento sutiles (skill cac-fullstack-app, diseño §2.12) */
+::-webkit-scrollbar { width: 6px; height: 6px }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent }
+::-webkit-scrollbar-button { display: none }
+::-webkit-scrollbar-thumb { background: rgba(13, 45, 107, 0.16); border-radius: 999px }
+::-webkit-scrollbar-thumb:hover { background: rgba(13, 45, 107, 0.34) }
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: thin; scrollbar-color: rgba(13, 45, 107, 0.2) transparent }
 }
-::-webkit-scrollbar-thumb {
-  background: #b9c2d4;
-  border-radius: 8px;
-}
+
+/* Tablas con la fila de títulos inmovilizada; el alto lo ajusta useTablasAlAlto (Shell) */
+.tabla-scroll { overflow: auto; max-height: calc(100vh - 10.5rem); overscroll-behavior: contain }
+.tabla-scroll thead tr { background-color: inherit }
+.tabla-scroll thead th { position: sticky; top: 0; z-index: 20; background-color: inherit }
+@media (max-width: 1279px) { .tabla-scroll { max-height: 75vh } }
+
+/* Filtros en la barra lateral derecha: fechas lado a lado, el resto a todo el ancho */
+.filtros-columna { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem }
+.filtros-columna > * { grid-column: span 2; width: 100%; min-width: 0 }
+.filtros-columna > .media { grid-column: span 1 }

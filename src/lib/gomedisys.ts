@@ -72,18 +72,29 @@ export type ProgramacionGM = {
 
 const TIEMPO_MAXIMO_MS = 8 * 60 * 1000
 
+/** Error de la Edge Function con su código (p. ej. 'espera' o 'en_curso' de la consulta masiva) */
+export class ErrorConsultaGM extends Error {
+  codigo: string | null
+  datos: Record<string, unknown>
+  constructor(mensaje: string, datos: Record<string, unknown> = {}) {
+    super(mensaje)
+    this.codigo = typeof datos.codigo === 'string' ? datos.codigo : null
+    this.datos = datos
+  }
+}
+
 /**
  * Lanza una consulta a GoMedisys y espera su resultado, notificando cada
  * cambio de estado/progreso. Lanza error si la consulta falla.
  */
 export async function consultarGoMedisys<R>(
   tipo: TipoTrabajo,
-  parametros: Record<string, string>,
+  parametros: Record<string, string | boolean>,
   onAvance?: (t: TrabajoGM<R>) => void,
 ): Promise<R> {
   const { data, error } = await supabase.functions.invoke('consulta-gomedisys', { body: { tipo, ...parametros } })
   if (error) throw new Error(error.message)
-  if (data?.ok === false || !data?.trabajoId) throw new Error(data?.error ?? 'No fue posible iniciar la consulta')
+  if (data?.ok === false || !data?.trabajoId) throw new ErrorConsultaGM(data?.error ?? 'No fue posible iniciar la consulta', data ?? {})
   const id = Number(data.trabajoId)
 
   return new Promise<R>((resolve, reject) => {
