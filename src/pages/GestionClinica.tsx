@@ -6,6 +6,7 @@ import { PanelLateral, Grupo, Dato } from '../components/PanelLateral'
 import { AvanceMos, type CamposAvanceMos } from '../components/AvanceMos'
 import { ListaEvidencias } from '../components/EvidenciasMos'
 import NotasSeguimiento, { fechaHora } from '../components/NotasSeguimiento'
+import { CeldaComponente, useComponentesGM } from '../components/ComponenteGM'
 import FiltroEtapaMos from '../components/FiltroEtapaMos'
 import { filtrarPorEtapaMos, type CamposFiltroMos } from '../lib/filtrosMos'
 import type { RegistroItem } from './Mos'
@@ -81,7 +82,7 @@ const DIA = 86400000
 // Orden de la planilla del área de Gestión clínica
 const COLUMNAS = ['Destino', 'Nombre e identificación', 'Admisión', 'Ubicación', 'Fecha de ingreso', 'Contrato', 'Tipo afiliado', 'Plan',
   'Procedimiento', 'Códigos CUPS', 'Observación de gestión', 'Fecha de ordenamiento', 'N.º autorización', 'Quién reporta',
-  'Fecha reporte', 'Días', 'Estado', '']
+  'Fecha reporte', 'Días', 'Nota adm. GC', 'Estado', '']
 const fechaCorta = (v: string | null) => (v ? new Date(v.length === 10 ? `${v}T12:00` : v).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—')
 const fechaHoraCorta = (v: string | null) => (v ? new Date(v).toLocaleString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '—')
 /** Días entre la fecha de ordenamiento y la fecha del reporte */
@@ -114,6 +115,10 @@ export default function GestionClinica() {
   const [filtroEstadoGC, setFiltroEstadoGC] = useState('')
   const [seleccion, setSeleccion] = useState<Solicitud | null>(null)
   const cat = useCatalogosGC()
+  // Nota administrativa GestionClinica (componente de GoMedisys): reemplaza lo que
+  // se registraba aquí; sin ella la gestión queda en solo lectura (migración 0038)
+  const idsFilas = useMemo(() => filas.map((f) => f.id), [filas])
+  const gmNota = useComponentesGM('nota_gestion_clinica', idsFilas)
   const nombreDe = (lista: { id: number; nombre: string }[] | undefined, id: number | null) => (id ? lista?.find((o) => o.id === id)?.nombre ?? null : null)
 
   async function cargar() {
@@ -268,6 +273,7 @@ export default function GestionClinica() {
                         <span className={`inline-flex min-w-[28px] justify-center rounded-full px-1.5 py-0.5 font-bold ${dias > 30 ? 'bg-red-100 text-red-700' : dias > 15 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'}`}>{dias}</span>
                       )}
                     </td>
+                    <td className="whitespace-nowrap px-2.5 py-2" onClick={(ev) => ev.stopPropagation()}><CeldaComponente s={s} codigo="nota_gestion_clinica" gm={gmNota} compacto /></td>
                     <td className="whitespace-nowrap px-2.5 py-2"><InsigniaEstadoGC estado={cat?.estados.find((e) => e.id === s.estado_gc_id)} /></td>
                     <td className="whitespace-nowrap px-2.5 py-2 text-right">
                       {notasPorSolicitud[s.id] ? <span title="Notas" className="mr-1.5 inline-flex min-w-[20px] justify-center rounded-full bg-[#0D2D6B] px-1.5 text-[10px] font-semibold text-white">{notasPorSolicitud[s.id]}</span> : null}
@@ -286,6 +292,7 @@ export default function GestionClinica() {
           s={seleccion}
           items={itemsDe(seleccion.id)}
           puedeEscribir={puedeEscribir}
+          gm={gmNota}
           onCerrar={() => setSeleccion(null)}
           onCambio={cargar}
         />
@@ -295,9 +302,12 @@ export default function GestionClinica() {
 }
 
 // --- Panel con toda la información del paciente y la gestión ---
-function PanelClinico({ s, items, puedeEscribir, onCerrar, onCambio }: {
-  s: Solicitud; items: ItemClinico[]; puedeEscribir: boolean; onCerrar: () => void; onCambio: () => void
+function PanelClinico({ s, items, puedeEscribir, gm, onCerrar, onCambio }: {
+  s: Solicitud; items: ItemClinico[]; puedeEscribir: boolean; gm: ReturnType<typeof useComponentesGM>; onCerrar: () => void; onCambio: () => void
 }) {
+  // La autorización del asegurador se sigue gestionando aquí; el resto exige la Nota administrativa
+  const sinNota = gm.bloquea(s)
+  const escribe = puedeEscribir && !sinNota
   const [item, setItem] = useState<ItemClinico | null>(null)
   const [recargarNotas, setRecargarNotas] = useState(0)
   const etiquetas = Object.fromEntries(items.map((i) => [i.id, `${i.orden}. ${i.descripcion}`]))
@@ -314,9 +324,16 @@ function PanelClinico({ s, items, puedeEscribir, onCerrar, onCambio }: {
       </>}
       onCerrar={onCerrar}
     >
+      <div className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 text-xs ${sinNota ? 'border-red-200 bg-red-50 text-red-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>
+        <CeldaComponente s={s} codigo="nota_gestion_clinica" gm={gm} />
+        <span>{sinNota
+          ? 'Sin la Nota administrativa GestionClinica de GoMedisys, la gestión clínica queda en solo lectura (excepto la autorización del asegurador). Clic en la insignia para ver qué hacer.'
+          : 'Nota administrativa diligenciada en GoMedisys: clic en la insignia para ver su contenido.'}</span>
+      </div>
+
       <Grupo color="gestion" icono={ClipboardCheck} titulo="Estado de la gestión y datos del paciente">
         <div className="col-span-2">
-          <PanelEstadoGC solicitudId={s.id} puedeEscribir={puedeEscribir} onCambio={onCambio} />
+          <PanelEstadoGC solicitudId={s.id} puedeEscribir={escribe} onCambio={onCambio} />
         </div>
       </Grupo>
 
@@ -392,7 +409,7 @@ function PanelClinico({ s, items, puedeEscribir, onCerrar, onCambio }: {
 
       <Grupo color="gestion" icono={StickyNote} titulo="Notas de gestión clínica">
         <div className="col-span-2">
-          <NotasSeguimiento key={recargarNotas} solicitudId={s.id} ambito="gestion_clinica" etiquetasItems={etiquetas} puedeEscribir={puedeEscribir} />
+          <NotasSeguimiento key={recargarNotas} solicitudId={s.id} ambito="gestion_clinica" etiquetasItems={etiquetas} puedeEscribir={escribe} />
         </div>
       </Grupo>
 
@@ -408,7 +425,7 @@ function PanelClinico({ s, items, puedeEscribir, onCerrar, onCambio }: {
 
       {item && (
         <ModalItem
-          s={s} item={item} puedeEscribir={puedeEscribir}
+          s={s} item={item} puedeEscribir={escribe}
           onCerrar={() => setItem(null)}
           onGuardado={() => { onCambio(); setRecargarNotas((r) => r + 1) }}
         />

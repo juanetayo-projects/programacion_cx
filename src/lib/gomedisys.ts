@@ -6,7 +6,7 @@ import type { TablesUpdate } from './database.types'
 // la Edge Function crea el trabajo y dispara GitHub Actions; el runner escribe
 // progreso y resultado en gomedisys_trabajos y aquí se sigue por Realtime.
 
-export type TipoTrabajo = 'masiva' | 'paciente' | 'detalle'
+export type TipoTrabajo = 'masiva' | 'paciente' | 'detalle' | 'componente'
 export type EstadoTrabajo = 'pendiente' | 'despachado' | 'en_proceso' | 'listo' | 'error'
 
 export type TrabajoGM<R = unknown> = {

@@ -38,7 +38,7 @@ src/
 sql/               consultas T-SQL de GoMedisys
 scripts/gomedisys/ runner de las consultas (GitHub Actions)
 supabase/
-├── migrations/    0001-0037 (esquema, RLS, MOS, recepción, notas, autorización…)
+├── migrations/    0001-0038 (esquema, RLS, MOS, recepción, notas, autorización…)
 └── functions/     admin-usuarios, consulta-gomedisys, notificar-paciente,
                    notificar-asegurador, notificar-proveedor, registrar-recepcion
 docs/
@@ -83,5 +83,17 @@ Requiere `.env.local` (no versionado) con `VITE_SUPABASE_URL` y
   Edge Function `consulta-gomedisys`; mientras tanto la app muestra el
   resultado de la última consulta (`masiva_resultado()`) y las fechas filtran
   dentro del rango consultado. El administrador puede forzar una consulta.
+- **Componentes de GoMedisys** (migración 0038, `componentes_gomedisys` /
+  `notas_gomedisys`): Boleta quirúrgica (Gestión Programación Cx) y Notas
+  administrativas MOS, GestionClinica y PosQx. Cada módulo muestra Sí/No; con
+  «No» bloquea el avance (si `exige`) y pide al usuario que el médico lo
+  diligencie en GoMedisys; el botón «Traer datos de GoMedisys» se habilita
+  con `script_disponible` (script en desarrollo). Las notas reemplazan lo
+  registrado en la app: sin la nota, Gestión clínica (salvo la autorización)
+  y el seguimiento PosQx quedan en solo lectura. Se administra en
+  Catálogos → Componentes GoMedisys.
+- **Programar / reprogramar** exige además la Boleta quirúrgica y, si
+  GoMedisys marca `requiere_mos`, el material recibido (hito 5). La
+  programación de quirófanos pasará a leerse de GoMedisys (script en construcción).
 - Las notificaciones (asegurador, proveedor) no se modifican ni se reenvían;
   notas, correos y actas son evidencia inmutable para auditoría.

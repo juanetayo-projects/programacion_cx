@@ -3,6 +3,7 @@ import { PageHeader } from '../../components/ui'
 import { CrudTable } from '../../components/CrudTable'
 
 const TABS = [
+  { key: 'componentes_gomedisys', label: 'Componentes GoMedisys' },
   { key: 'especialidades', label: 'Especialidades' },
   { key: 'eps', label: 'EPS' },
   { key: 'aseguradores', label: 'Aseguradores / contratos' },
@@ -37,6 +38,25 @@ export default function Catalogos() {
         ))}
       </div>
 
+      {tab === 'componentes_gomedisys' && (
+        <div className="space-y-3">
+          <p className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+            Formularios de GoMedisys que gobiernan el avance de cada módulo. <b>Exige</b>: sin el componente diligenciado el módulo
+            bloquea el avance. <b>Script disponible</b>: habilita el botón «Traer datos de GoMedisys» (actívelo solo cuando el script de ese componente esté en producción).
+          </p>
+          <CrudTable
+            tabla="componentes_gomedisys"
+            titulo="Componentes de GoMedisys"
+            columnas={[
+              { key: 'nombre', label: 'Componente', tipo: 'text', requerido: true },
+              { key: 'modulo', label: 'Módulo', tipo: 'text', requerido: true },
+              { key: 'exige', label: 'Exige (bloquea)', tipo: 'boolean' },
+              { key: 'script_disponible', label: 'Script disponible', tipo: 'boolean' },
+              { key: 'mensaje', label: 'Mensaje al usuario', tipo: 'textarea' },
+            ]}
+          />
+        </div>
+      )}
       {tab === 'especialidades' && (
         <CrudTable
           tabla="especialidades"

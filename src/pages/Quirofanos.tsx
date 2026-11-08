@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { PageHeader, Boton, Modal } from '../components/ui'
-import { ChevronLeft, ChevronRight, Clock, User, Stethoscope } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Clock, User, Stethoscope, DatabaseZap } from 'lucide-react'
 
 type Quirofano = { id: number; numero: number; nombre: string; color_calendario: string; estado: string }
 type Cirugia = {
@@ -151,6 +151,15 @@ export default function Quirofanos() {
 
   return (
     <div>
+      {/* Nov-2026: la programación de quirófanos se gestiona en GoMedisys; el mapa
+          pasará a leerla de allá cuando el script de consulta esté listo */}
+      <div className="mb-3 flex items-start gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+        <DatabaseZap size={18} className="mt-0.5 shrink-0 text-sky-600" />
+        <div>
+          <b>La programación de quirófanos se gestiona en GoMedisys.</b>{' '}
+          La consulta automática del mapa desde GoMedisys está en construcción; mientras tanto se muestra lo programado en esta app.
+        </div>
+      </div>
       <PageHeader
         titulo="Mapa de quirófanos"
         subtitulo="Ocupación de salas — clic en un bloque para ver el detalle"

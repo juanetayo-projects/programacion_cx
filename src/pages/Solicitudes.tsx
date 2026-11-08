@@ -8,6 +8,7 @@ import RichTextEditor from '../components/RichTextEditor'
 import { ModalDetalleMos } from './Mos'
 import { ModalCierreCirugia, type CamposCierre } from '../components/CierreCirugia'
 import { IndicadorAutorizacion, AlertaAutorizacion, PanelAutorizacion } from '../components/Autorizacion'
+import { CeldaComponente, useComponentesGM, useBloqueoComponente } from '../components/ComponenteGM'
 import { autorizacionVigente, type CamposAutorizacion } from '../lib/autorizacion'
 import {
   IndicadorClinico, IndicadorPostquirurgico, IndicadorEsterilizacion, ModalGestionClinica, ModalPostquirurgico, ModalEsterilizacion,
@@ -34,6 +35,7 @@ import {
 
 type Solicitud = CamposAutorizacion & {
   id: number
+  requiere_mos?: boolean | null
   numero_ingreso: string
   documento_paciente: string
   especialidad_id: number
@@ -148,6 +150,12 @@ export default function Solicitudes() {
   const [masFiltros, setMasFiltros] = useState(false)
   const [detalleMos, setDetalleMos] = useState<number | null>(null)
   const [sinAutorizacion, setSinAutorizacion] = useState<Solicitud | null>(null)
+  // La cirugía requiere MOS (dato de GoMedisys) y el material aún no está en la clínica
+  const [sinMos, setSinMos] = useState<Solicitud | null>(null)
+  // Boleta quirúrgica (componente de GoMedisys): Sí/No en la tabla y requisito para programar
+  const idsSolicitudes = useMemo(() => filas.map((f) => f.id), [filas])
+  const gmBoleta = useComponentesGM('boleta', idsSolicitudes)
+  const bloqueoBoleta = useBloqueoComponente('boleta', gmBoleta)
   const [seguimiento, setSeguimiento] = useState<{ id: number; tipo: 'clinica' | 'postquirurgico' | 'esterilizacion'; titulo: string } | null>(null)
   const [resumen, setResumen] = useState<{ notas: ResumenNota[]; items: ResumenItem[]; actas: Record<number, number> }>({ notas: [], items: [], actas: {} })
   const notasDe = (id: number) => resumen.notas.filter((n) => n.solicitud_id === id)
@@ -320,6 +328,12 @@ export default function Solicitudes() {
     if (['programar', 'reprogramar', 'realizada'].includes(m) && !autorizacionVigente(fila)) {
       setSinAutorizacion(fila)
       return
+    }
+    // Programar / reprogramar exige además la Boleta quirúrgica de GoMedisys y,
+    // si la cirugía requiere MOS, el material recibido (también lo valida la BD, 0038)
+    if (m === 'programar' || m === 'reprogramar') {
+      if (!bloqueoBoleta.verificar(fila)) return
+      if (fila.requiere_mos && fila.estado_mos !== 'material_recibido') { setSinMos(fila); return }
     }
     setSeleccion(fila)
     setModal(m)
@@ -574,6 +588,7 @@ export default function Solicitudes() {
                 <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Fecha</th>
                 <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Paciente</th>
                 <th className="sticky top-0 z-10 w-56 bg-[#0D2D6B] px-4 py-2.5">Especialidad</th>
+                <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Boleta Qx</th>
                 <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Estado</th>
                 <th className="sticky top-0 z-10 w-56 bg-[#0D2D6B] px-4 py-2.5">Programación</th>
                 <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5 text-right">Acciones</th>
@@ -581,9 +596,9 @@ export default function Solicitudes() {
             </thead>
             <tbody>
               {cargando ? (
-                <tr><td colSpan={7} className="p-10 text-center"><Spinner className="mx-auto" /></td></tr>
+                <tr><td colSpan={8} className="p-10 text-center"><Spinner className="mx-auto" /></td></tr>
               ) : filtradas.length === 0 ? (
-                <tr><td colSpan={7}><EstadoVacio titulo="Sin solicitudes" descripcion="Ajusta los filtros o espera nuevos registros procesados" /></td></tr>
+                <tr><td colSpan={8}><EstadoVacio titulo="Sin solicitudes" descripcion="Ajusta los filtros o espera nuevos registros procesados" /></td></tr>
               ) : (
                 filtradas.map((f) => (
                   <tr
@@ -600,6 +615,15 @@ export default function Solicitudes() {
                     <td className="px-4 py-2.5">
                       <div>{f.especialidades?.nombre}</div>
                       <div className="text-xs text-slate-400">Dr(a). {medicoDe(f)}</div>
+                    </td>
+                    <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                      <CeldaComponente s={f} codigo="boleta" gm={gmBoleta} compacto />
+                      {f.requiere_mos === true && (
+                        <div title="Dato de GoMedisys: la cirugía requiere material de osteosíntesis" className={`mt-1 whitespace-nowrap text-[10px] font-semibold ${f.estado_mos === 'material_recibido' ? 'text-emerald-700' : 'text-amber-700'}`}>
+                          Requiere MOS{f.estado_mos === 'material_recibido' ? ' · recibido' : ''}
+                        </div>
+                      )}
+                      {f.requiere_mos === false && <div className="mt-1 whitespace-nowrap text-[10px] text-slate-400">No requiere MOS</div>}
                     </td>
                     <td className="px-4 py-2.5">
                       <Badge className={ESTADOS_COLOR[f.estado]}>{ICONO_ESTADO[f.estado]} {ESTADOS_LABEL[f.estado]}</Badge>
@@ -797,6 +821,27 @@ export default function Solicitudes() {
       {envioManual && <ModalEnvioManual {...envioManual} onClose={() => setEnvioManual(null)} />}
 
       {detalleMos !== null && <ModalDetalleMos solicitudId={detalleMos} onCerrar={() => setDetalleMos(null)} />}
+      {bloqueoBoleta.modal}
+
+      {sinMos && (
+        <Modal open onClose={() => setSinMos(null)} titulo="Material de osteosíntesis pendiente" ancho="max-w-lg">
+          <div className="space-y-3 text-sm text-slate-600">
+            <p className="flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900">
+              <AlertTriangle size={18} className="mt-0.5 shrink-0 text-amber-600" />
+              <span>
+                Según GoMedisys, la cirugía de <b>{sinMos.nombre_paciente ?? sinMos.documento_paciente}</b> requiere material de osteosíntesis (MOS).
+                Solo se puede programar cuando el material esté recibido en la clínica (hito 5 de la Gestión MOS).
+              </span>
+            </p>
+            <p className="text-xs text-slate-500">Estado MOS actual: <b>{sinMos.estado_mos ? ESTADOS_MOS_LABEL[sinMos.estado_mos as keyof typeof ESTADOS_MOS_LABEL] ?? sinMos.estado_mos : 'Sin iniciar'}</b></p>
+            <div className="flex justify-end gap-2">
+              {sinMos.estado_mos && <Boton variante="secundario" onClick={() => { setDetalleMos(sinMos.id); setSinMos(null) }}>Ver gestión MOS</Boton>}
+              <Boton onClick={() => setSinMos(null)}>Entendido</Boton>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {sinAutorizacion && (
         <Modal open onClose={() => setSinAutorizacion(null)} titulo={`Autorización del asegurador · ${sinAutorizacion.nombre_paciente ?? sinAutorizacion.documento_paciente}`} ancho="max-w-2xl">
           <div className="space-y-3">

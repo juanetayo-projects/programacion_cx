@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { CeldaComponente, useComponentesGM, useBloqueoComponente } from '../components/ComponenteGM'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { TituloEnHeader, CampoLinea, CLASE_CAMPO, Boton, Modal, Badge, EstadoVacio, Spinner } from '../components/ui'
@@ -34,6 +35,7 @@ const sb = supabase as any
 
 type Solicitud = SolicitudMos & CamposAvanceMos & CamposAutorizacion & {
   id: number
+  requiere_mos?: boolean | null
   estado: Estado
   fecha_reporte: string
   estado_mos: Exclude<EstadoMos, 'pendiente'> | null
@@ -149,9 +151,16 @@ export default function Mos() {
     return { ...c, total: base.length }
   }, [base])
 
+  // Nota administrativa MOS (componente de GoMedisys, migración 0038)
+  const idsFilas = useMemo(() => filas.map((f) => f.id), [filas])
+  const gmNota = useComponentesGM('nota_mos', idsFilas)
+  const bloqueoNota = useBloqueoComponente('nota_mos', gmNota)
+
   const hayFiltros = filtroBoleta !== 'con' || !!filtroEstadoMos || !!filtroEtapa || !!busqueda
 
   function abrir(s: Solicitud, m: 'ver' | 'gestion' | 'proveedor' | 'respuesta' | 'confirmacion') {
+    // Sin la Nota administrativa MOS de GoMedisys no avanza la gestión del material
+    if (m !== 'ver' && !bloqueoNota.verificar(s)) return
     setSeleccion(s)
     setModal(m)
   }
@@ -214,15 +223,16 @@ export default function Mos() {
                 <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Paciente</th>
                 <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Procedimiento</th>
                 <th className="sticky top-0 z-10 w-72 bg-[#0D2D6B] px-4 py-2.5">Boleta quirúrgica</th>
+                <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Nota adm. MOS</th>
                 <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Estado MOS</th>
                 <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
               {cargando ? (
-                <tr><td colSpan={6} className="p-10 text-center"><Spinner className="mx-auto" /></td></tr>
+                <tr><td colSpan={7} className="p-10 text-center"><Spinner className="mx-auto" /></td></tr>
               ) : filtradas.length === 0 ? (
-                <tr><td colSpan={6}><EstadoVacio icono={<Bone size={28} />} titulo="Sin pacientes para gestionar" descripcion="No hay solicitudes con boleta quirúrgica que coincidan con los filtros" /></td></tr>
+                <tr><td colSpan={7}><EstadoVacio icono={<Bone size={28} />} titulo="Sin pacientes para gestionar" descripcion="No hay solicitudes con boleta quirúrgica que coincidan con los filtros" /></td></tr>
               ) : (
                 filtradas.map((s) => (
                   <tr
@@ -243,6 +253,11 @@ export default function Mos() {
                       {tieneBoleta(s)
                         ? <div className="line-clamp-2 text-xs text-amber-800">{s.boleta_quirurgica}</div>
                         : <span className="text-xs text-slate-400">Sin boleta</span>}
+                    </td>
+                    <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                      <CeldaComponente s={s} codigo="nota_mos" gm={gmNota} compacto />
+                      {s.requiere_mos === true && <div className="mt-1 whitespace-nowrap text-[10px] font-semibold text-amber-700">Requiere MOS (GoMedisys)</div>}
+                      {s.requiere_mos === false && <div className="mt-1 whitespace-nowrap text-[10px] text-slate-400">No requiere MOS</div>}
                     </td>
                     <td className="px-4 py-2.5">
                       <BadgeMos s={s} />
@@ -287,14 +302,16 @@ export default function Mos() {
         <div className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">{filtradas.length} solicitudes</div>
       </div>
 
+      {bloqueoNota.modal}
+
       {modal === 'ver' && seleccion && (
         <PanelVer
           s={seleccion}
           puedeGestionar={puedeGestionar}
           onCerrar={() => setModal('')}
-          onGestionar={() => setModal('gestion')}
-          onProveedor={() => setModal('proveedor')}
-          onRespuesta={() => setModal('respuesta')}
+          onGestionar={() => seleccion && abrir(seleccion, 'gestion')}
+          onProveedor={() => seleccion && abrir(seleccion, 'proveedor')}
+          onRespuesta={() => seleccion && abrir(seleccion, 'respuesta')}
           onAnterior={posSeleccion > 0 ? () => setSeleccion(filtradas[posSeleccion - 1]) : undefined}
           onSiguiente={posSeleccion >= 0 && posSeleccion < filtradas.length - 1 ? () => setSeleccion(filtradas[posSeleccion + 1]) : undefined}
           posicion={posSeleccion >= 0 ? `${posSeleccion + 1} de ${filtradas.length}` : ''}

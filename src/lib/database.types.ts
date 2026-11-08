@@ -750,6 +750,18 @@ export type Database = {
         }
         Relationships: []
       }
+      componentes_gomedisys: {
+        Row: { codigo: string; exige: boolean; id: number; mensaje: string | null; modulo: string; nombre: string; script_disponible: boolean }
+        Insert: { codigo: string; exige?: boolean; id?: never; mensaje?: string | null; modulo: string; nombre: string; script_disponible?: boolean }
+        Update: { codigo?: string; exige?: boolean; id?: never; mensaje?: string | null; modulo?: string; nombre?: string; script_disponible?: boolean }
+        Relationships: []
+      }
+      notas_gomedisys: {
+        Row: { componente: string; consultado_en: string; consultado_por: string | null; datos: Json; fecha_registro: string | null; id: number; profesional: string | null; solicitud_id: number; texto: string | null }
+        Insert: { componente: string; consultado_en?: string; consultado_por?: string | null; datos?: Json; fecha_registro?: string | null; id?: never; profesional?: string | null; solicitud_id: number; texto?: string | null }
+        Update: { componente?: string; consultado_en?: string; consultado_por?: string | null; datos?: Json; fecha_registro?: string | null; id?: never; profesional?: string | null; solicitud_id?: number; texto?: string | null }
+        Relationships: []
+      }
       planes_paciente: {
         Row: {
           activo: boolean
@@ -1033,6 +1045,7 @@ export type Database = {
           quirofano_gomedisys: string | null
           quirofano_id: number | null
           realizado_en: string | null
+          requiere_mos: boolean | null
           reportado_por: string
           soporte_url: string | null
           subespecialidad: string | null
@@ -1129,6 +1142,7 @@ export type Database = {
           quirofano_gomedisys?: string | null
           quirofano_id?: number | null
           realizado_en?: string | null
+          requiere_mos?: boolean | null
           reportado_por: string
           soporte_url?: string | null
           subespecialidad?: string | null
@@ -1225,6 +1239,7 @@ export type Database = {
           quirofano_gomedisys?: string | null
           quirofano_id?: number | null
           realizado_en?: string | null
+          requiere_mos?: boolean | null
           reportado_por?: string
           soporte_url?: string | null
           subespecialidad?: string | null
@@ -1513,6 +1528,8 @@ export type Database = {
       masiva_estado: { Args: never; Returns: Json }
       masiva_resultado: { Args: { p_id?: number }; Returns: Json }
       puede_consulta_masiva: { Args: never; Returns: boolean }
+      tiene_componente: { Args: { p_componente: string; p_solicitud: number }; Returns: boolean }
+      componente_bloquea: { Args: { p_componente: string; p_solicitud: number }; Returns: boolean }
       mos_item_registrar_cobro: {
         Args: { p_item: number; p_responsable: string }
         Returns: undefined

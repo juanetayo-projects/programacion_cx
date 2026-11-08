@@ -6,6 +6,7 @@ import { PanelLateral, Grupo, Dato } from '../components/PanelLateral'
 import { AvanceMos, AvanceMosCompacto, type CamposAvanceMos } from '../components/AvanceMos'
 import NotasSeguimiento, { ESTADO_CITA, fechaHora, type Nota } from '../components/NotasSeguimiento'
 import { ModalRecordatorio } from '../components/RecordatorioCita'
+import { CeldaComponente, useComponentesGM } from '../components/ComponenteGM'
 import { AlertaCierre, faltantesCierre, fechaBasePosquirurgica, DESTINOS, type CamposCierre } from '../components/CierreCirugia'
 import { ESTADOS_LABEL, ESTADOS_COLOR, type Estado, type EstadoMos } from '../lib/constantes'
 import {
@@ -66,6 +67,9 @@ export default function Prequirurgico() {
   const [busqueda, setBusqueda] = useState('')
   const [seleccion, setSeleccion] = useState<Solicitud | null>(null)
   const [recordar, setRecordar] = useState<Cita | null>(null)
+  // Nota administrativa PosQx (componente de GoMedisys): sin ella el seguimiento queda en solo lectura (0038)
+  const idsFilas = useMemo(() => filas.map((f) => f.id), [filas])
+  const gmNota = useComponentesGM('nota_posqx', idsFilas)
 
   async function cargar() {
     setCargando(true)
@@ -207,7 +211,7 @@ export default function Prequirurgico() {
                     </td>
                     <td className="px-3 py-1.5">
                       <div className="flex justify-end gap-2">
-                        {puedeEscribir && (
+                        {puedeEscribir && !(p && gmNota.bloquea(p)) && (
                           <button onClick={() => setRecordar(c)} className="flex items-center gap-1 rounded bg-emerald-600 px-2 py-0.5 text-[11px] font-medium text-white hover:bg-emerald-700">
                             <MessageCircle size={12} /> WhatsApp
                           </button>
@@ -232,6 +236,7 @@ export default function Prequirurgico() {
                 <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Paciente</th>
                 <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Cirugía</th>
                 <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Estado</th>
+                <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Nota adm. PosQx</th>
                 <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5">Próxima cita</th>
                 <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5 text-center">Seguimientos</th>
                 <th className="sticky top-0 z-10 bg-[#0D2D6B] px-4 py-2.5 text-right">Acciones</th>
@@ -239,9 +244,9 @@ export default function Prequirurgico() {
             </thead>
             <tbody>
               {cargando ? (
-                <tr><td colSpan={7} className="p-10 text-center"><Spinner className="mx-auto" /></td></tr>
+                <tr><td colSpan={8} className="p-10 text-center"><Spinner className="mx-auto" /></td></tr>
               ) : filtradas.length === 0 ? (
-                <tr><td colSpan={7}><EstadoVacio icono={<ClipboardCheck size={28} />} titulo="Sin pacientes" descripcion="Ajuste los filtros o las alertas" /></td></tr>
+                <tr><td colSpan={8}><EstadoVacio icono={<ClipboardCheck size={28} />} titulo="Sin pacientes" descripcion="Ajuste los filtros o las alertas" /></td></tr>
               ) : filtradas.map((s) => {
                 const prox = proximaCita(s.id)
                 const venc = vencidasDe(s.id)
@@ -269,6 +274,7 @@ export default function Prequirurgico() {
                       )}
                       {s.estado_mos && <div onClick={(ev) => ev.stopPropagation()}><AvanceMosCompacto s={s} onClick={() => setSeleccion(s)} /></div>}
                     </td>
+                    <td className="px-4 py-2.5" onClick={(ev) => ev.stopPropagation()}><CeldaComponente s={s} codigo="nota_posqx" gm={gmNota} compacto /></td>
                     <td className="px-4 py-2.5 text-xs">
                       {prox ? (<>
                         <div className="font-semibold text-slate-700">{fechaHora(prox.fecha_cita)}</div>
@@ -340,8 +346,14 @@ export default function Prequirurgico() {
           <Grupo color="gestion" icono={CalendarClock} titulo="Seguimiento del paciente">
             <div className="col-span-2 space-y-2">
               <AlertaCierre s={seleccion} contexto="Seguimiento posquirúrgico" />
+              <div className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 text-xs ${gmNota.bloquea(seleccion) ? 'border-red-200 bg-red-50 text-red-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>
+                <CeldaComponente s={seleccion} codigo="nota_posqx" gm={gmNota} />
+                <span>{gmNota.bloquea(seleccion)
+                  ? 'Sin la Nota administrativa PosQx de GoMedisys, el seguimiento queda en solo lectura. Clic en la insignia para ver qué hacer.'
+                  : 'Nota administrativa diligenciada en GoMedisys: clic en la insignia para ver su contenido.'}</span>
+              </div>
               <NotasSeguimiento
-                solicitudId={seleccion.id} ambito="prequirurgico" puedeEscribir={puedeEscribir} conCita
+                solicitudId={seleccion.id} ambito="prequirurgico" puedeEscribir={puedeEscribir && !gmNota.bloquea(seleccion)} conCita
                 fechaCirugia={seleccion.fecha_programada}
                 fechaFinCirugia={fechaBasePosquirurgica(seleccion)}
                 faltantesCierre={faltantesCierre(seleccion)}
