@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CeldaComponente, useComponentesGM, useBloqueoComponente } from '../components/ComponenteGM'
+import { CeldaComponente, useComponentesGM } from '../components/ComponenteGM'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { TituloEnHeader, CampoLinea, CLASE_CAMPO, Boton, Modal, Badge, EstadoVacio, Spinner } from '../components/ui'
@@ -151,16 +151,14 @@ export default function Mos() {
     return { ...c, total: base.length }
   }, [base])
 
-  // Nota administrativa MOS (componente de GoMedisys, migración 0038)
+  // Nota administrativa MOS (componente de GoMedisys): informativa; la gestión
+  // y las notificaciones del material siguen en la app (migración 0039)
   const idsFilas = useMemo(() => filas.map((f) => f.id), [filas])
   const gmNota = useComponentesGM('nota_mos', idsFilas)
-  const bloqueoNota = useBloqueoComponente('nota_mos', gmNota)
 
   const hayFiltros = filtroBoleta !== 'con' || !!filtroEstadoMos || !!filtroEtapa || !!busqueda
 
   function abrir(s: Solicitud, m: 'ver' | 'gestion' | 'proveedor' | 'respuesta' | 'confirmacion') {
-    // Sin la Nota administrativa MOS de GoMedisys no avanza la gestión del material
-    if (m !== 'ver' && !bloqueoNota.verificar(s)) return
     setSeleccion(s)
     setModal(m)
   }
@@ -301,8 +299,6 @@ export default function Mos() {
         </div>
         <div className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">{filtradas.length} solicitudes</div>
       </div>
-
-      {bloqueoNota.modal}
 
       {modal === 'ver' && seleccion && (
         <PanelVer

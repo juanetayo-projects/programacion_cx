@@ -115,8 +115,8 @@ export default function GestionClinica() {
   const [filtroEstadoGC, setFiltroEstadoGC] = useState('')
   const [seleccion, setSeleccion] = useState<Solicitud | null>(null)
   const cat = useCatalogosGC()
-  // Nota administrativa GestionClinica (componente de GoMedisys): reemplaza lo que
-  // se registraba aquí; sin ella la gestión queda en solo lectura (migración 0038)
+  // Nota administrativa GestionClinica (componente de GoMedisys): informativa; la
+  // gestión clínica y sus notificaciones siguen en la app (migración 0039)
   const idsFilas = useMemo(() => filas.map((f) => f.id), [filas])
   const gmNota = useComponentesGM('nota_gestion_clinica', idsFilas)
   const nombreDe = (lista: { id: number; nombre: string }[] | undefined, id: number | null) => (id ? lista?.find((o) => o.id === id)?.nombre ?? null : null)
@@ -305,9 +305,8 @@ export default function GestionClinica() {
 function PanelClinico({ s, items, puedeEscribir, gm, onCerrar, onCambio }: {
   s: Solicitud; items: ItemClinico[]; puedeEscribir: boolean; gm: ReturnType<typeof useComponentesGM>; onCerrar: () => void; onCambio: () => void
 }) {
-  // La autorización del asegurador se sigue gestionando aquí; el resto exige la Nota administrativa
-  const sinNota = gm.bloquea(s)
-  const escribe = puedeEscribir && !sinNota
+  const conNota = gm.tiene(s)
+  const escribe = puedeEscribir
   const [item, setItem] = useState<ItemClinico | null>(null)
   const [recargarNotas, setRecargarNotas] = useState(0)
   const etiquetas = Object.fromEntries(items.map((i) => [i.id, `${i.orden}. ${i.descripcion}`]))
@@ -324,11 +323,11 @@ function PanelClinico({ s, items, puedeEscribir, gm, onCerrar, onCambio }: {
       </>}
       onCerrar={onCerrar}
     >
-      <div className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 text-xs ${sinNota ? 'border-red-200 bg-red-50 text-red-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>
+      <div className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 text-xs ${conNota ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
         <CeldaComponente s={s} codigo="nota_gestion_clinica" gm={gm} />
-        <span>{sinNota
-          ? 'Sin la Nota administrativa GestionClinica de GoMedisys, la gestión clínica queda en solo lectura (excepto la autorización del asegurador). Clic en la insignia para ver qué hacer.'
-          : 'Nota administrativa diligenciada en GoMedisys: clic en la insignia para ver su contenido.'}</span>
+        <span>{conNota
+          ? 'Nota administrativa diligenciada en GoMedisys: clic en la insignia para ver su contenido.'
+          : 'Aún no hay Nota administrativa GestionClinica en GoMedisys. La gestión clínica continúa en la app; clic en la insignia para ver cómo solicitarla.'}</span>
       </div>
 
       <Grupo color="gestion" icono={ClipboardCheck} titulo="Estado de la gestión y datos del paciente">

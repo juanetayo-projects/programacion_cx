@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useAdjuntos, SelectorAdjuntos } from './Adjuntos'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { Boton, Badge, Modal, Spinner, CLASE_CAMPO } from './ui'
 import { ModalRecordatorio } from './RecordatorioCita'
 import {
-  CalendarClock, FileText, Image as ImageIcon, Paperclip, Plus, Save, StickyNote, Upload, X, Download, BarChart3, MessageCircle,
+  CalendarClock, FileText, Image as ImageIcon, Plus, Save, StickyNote, Download, BarChart3, MessageCircle,
 } from 'lucide-react'
 
 // Notas de seguimiento (Gestión clínica y Gestión postquirúrgica): inmutables,
@@ -156,7 +157,7 @@ function FormNota({ solicitudId, ambito, itemId, tipos, conCita, fechaCirugia, f
   const [descripcion, setDescripcion] = useState('')
   const [conFecha, setConFecha] = useState(false)
   const [fechaCita, setFechaCita] = useState('')
-  const [archivos, setArchivos] = useState<File[]>([])
+  const adj = useAdjuntos({ max: MAX_ADJUNTOS, maxBytes: MAX_BYTES })
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
 
@@ -174,14 +175,6 @@ function FormNota({ solicitudId, ambito, itemId, tipos, conCita, fechaCirugia, f
     }
   }
 
-  function agregarArchivos(lista: FileList | null) {
-    setError('')
-    const nuevos = Array.from(lista ?? [])
-    if (nuevos.some((f) => f.size > MAX_BYTES)) { setError('Cada adjunto debe pesar máximo 10 MB.'); return }
-    if (archivos.length + nuevos.length > MAX_ADJUNTOS) { setError(`Máximo ${MAX_ADJUNTOS} adjuntos por nota.`); return }
-    setArchivos((a) => [...a, ...nuevos])
-  }
-
   async function guardar() {
     if (!descripcion.trim()) { setError('Escriba la descripción de la nota.'); return }
     if (conCita && !tipoId) { setError('Seleccione el tipo de seguimiento.'); return }
@@ -189,14 +182,7 @@ function FormNota({ solicitudId, ambito, itemId, tipos, conCita, fechaCirugia, f
     setGuardando(true)
     setError('')
     try {
-      const adjuntos: Adjunto[] = []
-      for (const [n, f] of archivos.entries()) {
-        const limpio = f.name.normalize('NFD').replace(/[^\w.-]+/g, '_').slice(-80)
-        const path = `${solicitudId}/${Date.now()}_${n}_${limpio}`
-        const { error: e } = await supabase.storage.from('notas').upload(path, f, { contentType: f.type || undefined })
-        if (e) throw new Error(`No se pudo cargar ${f.name}: ${e.message}`)
-        adjuntos.push({ nombre: f.name, path, bytes: f.size, tipo: f.type || 'application/octet-stream' })
-      }
+      const adjuntos: Adjunto[] = await adj.subir('notas', String(solicitudId))
       const { error: e } = await sb.from('notas_seguimiento').insert({
         solicitud_id: solicitudId, ambito, mos_item_id: itemId,
         tipo_id: tipoId ? Number(tipoId) : null,
@@ -263,22 +249,9 @@ function FormNota({ solicitudId, ambito, itemId, tipos, conCita, fechaCirugia, f
         )}
       </div>
       <div>
-        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Adjuntos (PDF, imágenes, Word, Excel · máx. {MAX_ADJUNTOS}, 10 MB c/u)</label>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {archivos.map((f, i) => (
-            <span key={i} className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-xs">
-              <Paperclip size={11} /> {f.name} <span className="text-slate-400">({tamano(f.size)})</span>
-              <button onClick={() => setArchivos((a) => a.filter((_, n) => n !== i))} className="text-slate-400 hover:text-red-600"><X size={12} /></button>
-            </span>
-          ))}
-          {archivos.length < MAX_ADJUNTOS && (
-            <label className="inline-flex cursor-pointer items-center gap-1 rounded border border-dashed border-slate-400 bg-white px-2 py-0.5 text-xs text-slate-600 hover:border-[#0D2D6B] hover:text-[#0D2D6B]">
-              <Upload size={12} /> Adjuntar
-              <input type="file" multiple className="hidden" accept=".pdf,image/*,.doc,.docx,.xls,.xlsx,.txt"
-                onChange={(e) => { agregarArchivos(e.target.files); e.target.value = '' }} />
-            </label>
-          )}
-        </div>
+        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Adjuntos</label>
+        <SelectorAdjuntos adj={adj} accept=".pdf,image/*,.doc,.docx,.xls,.xlsx,.txt" deshabilitado={guardando}
+          ayuda={`PDF, imágenes, Word o Excel · máximo ${MAX_ADJUNTOS} archivos de 10 MB c/u.`} />
       </div>
       {error && <p className="rounded-lg bg-red-50 px-3 py-1.5 text-sm text-red-600">{error}</p>}
       <div className="flex justify-end gap-2">
