@@ -1338,12 +1338,10 @@ function PanelNotificar({ seleccion, recomendaciones, error, guardando, onClose,
     }
   }, [recomendaciones]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function toggleCanal(c: string) {
-    const activo = canales.includes(c)
-    const n = activo ? canales.filter((x) => x !== c) : [...canales, c]
-    setCanales(n)
-    // La vista previa muestra el canal recién activado (o el primero que quede)
-    setVista(!activo ? c : n.includes(vista) ? vista : n[0] ?? 'email')
+  // Un solo medio por notificación: elegir uno desactiva el anterior
+  function elegirCanal(c: string) {
+    setCanales([c])
+    setVista(c)
   }
 
   const datos: DatosNotificacion | null = estadoDestino ? {
@@ -1422,21 +1420,26 @@ function PanelNotificar({ seleccion, recomendaciones, error, guardando, onClose,
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={campo} placeholder="paciente@correo.com" />
         </div>
         <div className="col-span-2 flex flex-wrap items-center gap-2">
-          {CANALES_NOTIFICACION.map((c) => {
-            const Icono = ICONO_CANAL[c]
-            const activo = canales.includes(c)
-            return (
-              <button
-                key={c}
-                type="button"
-                onClick={() => toggleCanal(c)}
-                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition ${activo ? 'border-[#0D2D6B] bg-[#0D2D6B] text-white' : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'}`}
-              >
-                <Icono size={14} /> {NOMBRE_CANAL[c]}
-              </button>
-            )
-          })}
-          <span className="text-[11px] text-slate-500">WhatsApp y SMS: por ahora se generan los textos para enviarlos a mano.</span>
+          <span className="text-xs font-medium text-slate-600">Medio de notificación:</span>
+          <div role="radiogroup" aria-label="Medio de notificación" className="inline-flex rounded-lg border border-slate-300 bg-slate-50 p-0.5">
+            {CANALES_NOTIFICACION.map((c) => {
+              const Icono = ICONO_CANAL[c]
+              const activo = canales.includes(c)
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  role="radio"
+                  aria-checked={activo}
+                  onClick={() => elegirCanal(c)}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition ${activo ? 'bg-[#0D2D6B] font-medium text-white shadow' : 'text-slate-600 hover:bg-white'}`}
+                >
+                  <Icono size={14} /> {NOMBRE_CANAL[c]}
+                </button>
+              )
+            })}
+          </div>
+          <span className="text-[11px] text-slate-500">Un medio a la vez. WhatsApp y SMS: por ahora se generan los textos para enviarlos a mano.</span>
         </div>
         {faltaCorreo && <div className="col-span-2 text-xs text-red-600">Para notificar por correo escriba un correo válido.</div>}
         {faltaTelefono && <div className="col-span-2 text-xs text-amber-700">Falta el teléfono del paciente para WhatsApp/SMS.</div>}
