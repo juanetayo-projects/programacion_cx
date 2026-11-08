@@ -20,6 +20,7 @@ import FiltroEtapaMos from '../components/FiltroEtapaMos'
 import { filtrarPorEtapaMos } from '../lib/filtrosMos'
 import {
   plantillaCorreo, textoWhatsApp, textoSms, segmentosSms, telefonoWhatsApp, LOGO_CORREO,
+  asuntoCorreo, mensajePorDefecto, LUGAR_POR_DEFECTO,
   type DatosNotificacion,
 } from '../lib/mensajesNotificacion'
 import {
@@ -31,6 +32,7 @@ import {
   CheckCircle2, Clock, Send, Repeat, PauseCircle, CircleSlash, FileSpreadsheet, AlertTriangle,
   Search, SlidersHorizontal, Eraser, UserRound, ClipboardList, ShieldCheck, Save, LayoutGrid,
   Bone, FileWarning, XCircle, Mail, MessageCircle, Smartphone, Copy, ExternalLink, Eye as EyeIcon,
+  PencilLine, RotateCcw, Paperclip, X as XIcon,
 } from 'lucide-react'
 
 type Solicitud = CamposAutorizacion & {
@@ -160,7 +162,7 @@ export default function Solicitudes() {
   const [resumen, setResumen] = useState<{ notas: ResumenNota[]; items: ResumenItem[]; actas: Record<number, number> }>({ notas: [], items: [], actas: {} })
   const notasDe = (id: number) => resumen.notas.filter((n) => n.solicitud_id === id)
   const itemsDe = (id: number) => resumen.items.filter((i) => i.solicitud_id === id)
-  const [envioManual, setEnvioManual] = useState<{ datos: DatosNotificacion; canales: string[]; telefono: string } | null>(null)
+  const [envioManual, setEnvioManual] = useState<{ datos: DatosNotificacion; canales: string[]; telefono: string; textos: { whatsapp: string; sms: string } } | null>(null)
   const [especialidades, setEspecialidades] = useState<{ id: number; nombre: string }[]>([])
   const [quirofanos, setQuirofanos] = useState<{ id: number; nombre: string; numero: number }[]>([])
   const [recomendaciones, setRecomendaciones] = useState<{ especialidad_id: number; titulo: string; contenido: string }[]>([])
@@ -430,14 +432,29 @@ export default function Solicitudes() {
     cargar()
   }
 
-  async function notificar(canales: string[], notas: string, telefono: string, email: string, estadoDestino: EstadoNotificable) {
+  async function notificar(canales: string[], notas: string, telefono: string, email: string, estadoDestino: EstadoNotificable, contenido: ContenidoNotificacion) {
     if (!seleccion) return
     setGuardando(true)
     setError('')
     try {
+      // Adjuntos del correo: se suben al bucket privado `soportes` y la Edge Function los adjunta
+      const adjuntos: { ruta: string; nombre: string; tipo: string; tamano: number }[] = []
+      if (canales.includes('email') && contenido.adjuntos.length) {
+        for (const archivo of contenido.adjuntos) {
+          const limpio = archivo.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w.-]+/g, '_')
+          const ruta = `notificaciones/${seleccion.id}/${Date.now()}-${limpio}`
+          const { error: upErr } = await supabase.storage.from('soportes').upload(ruta, archivo, { contentType: archivo.type || undefined })
+          if (upErr) throw new Error(`No se pudo subir ${archivo.name}: ${upErr.message}`)
+          adjuntos.push({ ruta, nombre: archivo.name, tipo: archivo.type, tamano: archivo.size })
+        }
+      }
       if (canales.includes('email') && email) {
         const { data: fnData, error: fnError } = await supabase.functions.invoke('notificar-paciente', {
-          body: { solicitudId: seleccion.id, email, notas, estado: estadoDestino },
+          body: {
+            solicitudId: seleccion.id, email, notas, estado: estadoDestino,
+            asunto: contenido.asunto, mensaje: contenido.mensaje, lugar: contenido.lugar, adicional: contenido.adicionalHtml,
+            adjuntos: adjuntos.map((a) => ({ ruta: a.ruta, nombre: a.nombre })),
+          },
         })
         if (fnError) {
           // La Edge Function responde 4xx con { error } (p. ej. falta RESEND_API_KEY)
@@ -458,12 +475,20 @@ export default function Solicitudes() {
       }).eq('id', seleccion.id)
       if (error) throw error
       await supabase.from('solicitudes_historial').insert({
-        solicitud_id: seleccion.id, accion: 'notificado', usuario_id: session!.user.id, detalle: { canales, estado: estadoDestino },
+        solicitud_id: seleccion.id, accion: 'notificado', usuario_id: session!.user.id,
+        // Evidencia de lo que recibió el paciente por cada canal (textos editados incluidos)
+        detalle: {
+          canales, estado: estadoDestino, asunto: contenido.asunto, mensaje: contenido.mensaje, lugar: contenido.lugar,
+          adicional: contenido.adicionalHtml,
+          ...(adjuntos.length ? { adjuntos } : {}),
+          ...(canales.includes('whatsapp') ? { texto_whatsapp: contenido.whatsapp } : {}),
+          ...(canales.includes('sms') ? { texto_sms: contenido.sms } : {}),
+        },
       })
       // WhatsApp y SMS se envían a mano por ahora: se muestran los textos para copiar
       const manuales = canales.filter((c) => c === 'whatsapp' || c === 'sms')
       if (manuales.length) {
-        setEnvioManual({ datos: datosNotificacion(seleccion, estadoDestino, notas), canales: manuales, telefono })
+        setEnvioManual({ datos: datosNotificacion(seleccion, estadoDestino, notas), canales: manuales, telefono, textos: { whatsapp: contenido.whatsapp, sms: contenido.sms } })
       }
       cerrar()
       cargar()
@@ -1279,7 +1304,7 @@ function PanelNotificar({ seleccion, recomendaciones, error, guardando, onClose,
   seleccion: Solicitud
   recomendaciones: { especialidad_id: number; titulo: string; contenido: string }[]
   error: string; guardando: boolean; onClose: () => void
-  onGuardar: (canales: string[], notas: string, telefono: string, email: string, estadoDestino: EstadoNotificable) => void
+  onGuardar: (canales: string[], notas: string, telefono: string, email: string, estadoDestino: EstadoNotificable, contenido: ContenidoNotificacion) => void
 }) {
   const [canales, setCanales] = useState<string[]>(['email'])
   const [contenido, setContenido] = useState(() => seleccion.notas_notificacion || recomendaciones
@@ -1289,6 +1314,21 @@ function PanelNotificar({ seleccion, recomendaciones, error, guardando, onClose,
   const [email, setEmail] = useState(seleccion.email_paciente ?? '')
   const [estadoDestino, setEstadoDestino] = useState<EstadoNotificable | ''>('')
   const [vista, setVista] = useState('email')
+  // Contenido editable: null = texto por defecto (se ajusta solo al cambiar el estado)
+  const [asunto, setAsunto] = useState<string | null>(null)
+  const [mensaje, setMensaje] = useState<string | null>(null)
+  const [lugar, setLugar] = useState(LUGAR_POR_DEFECTO)
+  const [adicional, setAdicional] = useState('')
+  const [textoWa, setTextoWa] = useState<string | null>(null)
+  const [textoSmsEditado, setTextoSmsEditado] = useState<string | null>(null)
+  const [adjuntos, setAdjuntos] = useState<File[]>([])
+  const pesoAdjuntos = adjuntos.reduce((t, a) => t + a.size, 0)
+  const excedeAdjuntos = pesoAdjuntos > MAX_ADJUNTOS_MB * 1024 * 1024 || adjuntos.length > MAX_ADJUNTOS
+  function agregarAdjuntos(lista: FileList | null) {
+    if (!lista) return
+    const nuevos = [...lista].filter((f) => !adjuntos.some((a) => a.name === f.name && a.size === f.size))
+    setAdjuntos([...adjuntos, ...nuevos])
+  }
 
   // Las recomendaciones pueden llegar después de abrir el panel
   useEffect(() => {
@@ -1306,7 +1346,24 @@ function PanelNotificar({ seleccion, recomendaciones, error, guardando, onClose,
     setVista(!activo ? c : n.includes(vista) ? vista : n[0] ?? 'email')
   }
 
-  const datos = estadoDestino ? datosNotificacion(seleccion, estadoDestino, contenido) : null
+  const datos: DatosNotificacion | null = estadoDestino ? {
+    ...datosNotificacion(seleccion, estadoDestino, contenido),
+    asunto: asunto ?? asuntoCorreo(estadoDestino),
+    mensaje: mensaje ?? mensajePorDefecto(estadoDestino),
+    lugar,
+    adicionalHtml: htmlConTexto(adicional) ? adicional : null,
+  } : null
+  const waFinal = datos ? textoWa ?? textoWhatsApp(datos) : ''
+  const smsFinal = datos ? textoSmsEditado ?? textoSms(datos) : ''
+  const editado = asunto !== null || mensaje !== null || lugar !== LUGAR_POR_DEFECTO || htmlConTexto(adicional) || textoWa !== null || textoSmsEditado !== null
+  function restablecer() {
+    setAsunto(null); setMensaje(null); setLugar(LUGAR_POR_DEFECTO); setAdicional(''); setTextoWa(null); setTextoSmsEditado(null)
+  }
+  function elegirEstado(e: EstadoNotificable) {
+    setEstadoDestino(e)
+    // Los textos de WhatsApp/SMS editados correspondían al estado anterior
+    setTextoWa(null); setTextoSmsEditado(null)
+  }
   const correo = datos ? plantillaCorreo(datos) : null
   const faltaCorreo = canales.includes('email') && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
   const faltaTelefono = (canales.includes('whatsapp') || canales.includes('sms')) && telefono.replace(/\D/g, '').length < 7
@@ -1322,9 +1379,13 @@ function PanelNotificar({ seleccion, recomendaciones, error, guardando, onClose,
       pie={<>
         <Boton variante="secundario" onClick={onClose}>Cancelar</Boton>
         <Boton
-          disabled={guardando || !estadoDestino || canales.length === 0 || faltaCorreo}
+          disabled={guardando || !estadoDestino || canales.length === 0 || faltaCorreo || (canales.includes('email') && excedeAdjuntos)}
           className="flex flex-1 items-center justify-center gap-1.5"
-          onClick={() => estadoDestino && onGuardar(canales, contenido, telefono, email, estadoDestino)}
+          onClick={() => estadoDestino && datos && onGuardar(canales, contenido, telefono, email, estadoDestino, {
+            asunto: datos.asunto ?? null, mensaje: datos.mensaje ?? null, lugar: datos.lugar ?? null,
+            adicionalHtml: datos.adicionalHtml ?? null, whatsapp: waFinal, sms: smsFinal,
+            adjuntos: canales.includes('email') ? adjuntos : [],
+          })}
         >
           <Send size={14} /> {guardando ? 'Enviando…' : `Notificar${canales.length ? ` por ${canales.map((c) => NOMBRE_CANAL[c]).join(', ')}` : ''}`}
         </Boton>
@@ -1342,7 +1403,7 @@ function PanelNotificar({ seleccion, recomendaciones, error, guardando, onClose,
             <button
               key={e}
               type="button"
-              onClick={() => setEstadoDestino(e)}
+              onClick={() => elegirEstado(e)}
               className={`rounded-lg border px-2 py-1.5 text-xs transition ${estadoDestino === e ? `${ESTADOS_COLOR_SOLIDO[e]} font-medium` : `${ESTADOS_COLOR[e]} opacity-70 hover:opacity-100`}`}
             >
               {ESTADOS_LABEL[e]}
@@ -1381,6 +1442,57 @@ function PanelNotificar({ seleccion, recomendaciones, error, guardando, onClose,
         {faltaTelefono && <div className="col-span-2 text-xs text-amber-700">Falta el teléfono del paciente para WhatsApp/SMS.</div>}
       </Grupo>
 
+      {estadoDestino && (
+        <Grupo color="gestion" icono={PencilLine} titulo="Contenido de la notificación (editable)"
+          accion={editado ? <button type="button" onClick={restablecer} className="flex items-center gap-1 text-xs font-medium text-[#16468E] hover:underline"><RotateCcw size={12} /> Restablecer textos</button> : undefined}>
+          <div className="col-span-2">
+            <label className="mb-1 block text-xs font-medium text-slate-600">Asunto del correo</label>
+            <input value={asunto ?? asuntoCorreo(estadoDestino)} onChange={(e) => setAsunto(e.target.value)} className={campo} maxLength={150} />
+          </div>
+          <div className="col-span-2">
+            <label className="mb-1 block text-xs font-medium text-slate-600">Mensaje principal</label>
+            <textarea value={mensaje ?? mensajePorDefecto(estadoDestino)} onChange={(e) => setMensaje(e.target.value)} rows={3} className={campo} maxLength={1500} />
+          </div>
+          <div className="col-span-2">
+            <label className="mb-1 block text-xs font-medium text-slate-600">Lugar</label>
+            <input value={lugar} onChange={(e) => setLugar(e.target.value)} className={campo} maxLength={200} placeholder="Sede, piso, área de admisión…" />
+          </div>
+          <div className="col-span-2">
+            <label className="mb-1 block text-xs font-medium text-slate-600">Información adicional <span className="font-normal text-slate-400">(va en el correo y en WhatsApp: indicaciones de llegada, documentos, preparación, cambios de último momento…)</span></label>
+            <RichTextEditor value={adicional} onChange={setAdicional} placeholder="Escriba aquí la información que surja durante el proceso…" minHeight="70px" />
+          </div>
+          <p className="col-span-2 text-[11px] text-slate-500">Los textos de WhatsApp y SMS también se pueden editar directamente en la vista previa.</p>
+        </Grupo>
+      )}
+
+      {estadoDestino && canales.includes('email') && (
+        <Grupo color="paciente" icono={Paperclip} titulo={`Adjuntos del correo${adjuntos.length ? ` (${adjuntos.length})` : ''}`}>
+          <div className="col-span-2 space-y-2">
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-300 bg-white px-3 py-3 text-sm text-slate-600 transition hover:border-[#16468E] hover:bg-[#0D2D6B]/5"
+              onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); agregarAdjuntos(e.dataTransfer.files) }}>
+              <Paperclip size={16} /> Arrastre archivos aquí o haga clic para seleccionarlos
+              <input type="file" multiple accept={ACEPTA_ADJUNTOS} className="hidden" onChange={(e) => { agregarAdjuntos(e.target.files); e.target.value = '' }} />
+            </label>
+            {adjuntos.length > 0 && (
+              <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white text-sm">
+                {adjuntos.map((a, i) => (
+                  <li key={`${a.name}-${a.size}`} className="flex items-center gap-2 px-3 py-1.5">
+                    <Paperclip size={13} className="shrink-0 text-slate-400" />
+                    <span className="min-w-0 flex-1 truncate text-slate-700" title={a.name}>{a.name}</span>
+                    <span className="shrink-0 text-xs text-slate-400">{tamanoLegible(a.size)}</span>
+                    <button type="button" onClick={() => setAdjuntos(adjuntos.filter((_, j) => j !== i))} title="Quitar" className="rounded p-0.5 text-slate-400 hover:bg-red-50 hover:text-red-600"><XIcon size={14} /></button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className={`text-[11px] ${excedeAdjuntos ? 'font-semibold text-red-600' : 'text-slate-500'}`}>
+              PDF, imágenes, Word o Excel · máximo {MAX_ADJUNTOS} archivos y {MAX_ADJUNTOS_MB} MB en total{adjuntos.length ? ` · usado: ${tamanoLegible(pesoAdjuntos)}` : ''}.
+              {' '}Quedan guardados como evidencia de la notificación.
+            </p>
+          </div>
+        </Grupo>
+      )}
+
       <Grupo color="boleta" icono={ClipboardList} titulo="Recomendaciones a enviar">
         <div className="col-span-2">
           <RichTextEditor value={contenido} onChange={setContenido} placeholder="Recomendaciones pre-quirúrgicas e indicaciones para el paciente…" minHeight="90px" />
@@ -1408,17 +1520,20 @@ function PanelNotificar({ seleccion, recomendaciones, error, guardando, onClose,
           <div>
             <div className="mb-2 rounded-lg bg-slate-50 px-3 py-1.5 text-xs text-slate-600">
               <b>Para:</b> {email || '—'} · <b>Asunto:</b> {correo.asunto}
+              {adjuntos.length > 0 && <div className="mt-0.5"><b>Adjuntos:</b> {adjuntos.map((a) => a.name).join(', ')}</div>}
             </div>
             <iframe title="Vista previa del correo" srcDoc={correo.html} className="h-[520px] w-full rounded-lg border border-slate-200" sandbox="" />
           </div>
         ) : vista === 'whatsapp' ? (
           <div className="rounded-lg bg-[#E5DDD5] p-4">
-            <div className="ml-auto max-w-[85%] whitespace-pre-wrap rounded-lg rounded-tr-none bg-[#DCF8C6] px-3 py-2 text-sm text-slate-800 shadow">{textoWhatsApp(datos)}</div>
+            <TextoEditable valor={waFinal} editado={textoWa !== null} onChange={setTextoWa} onRegenerar={() => setTextoWa(null)}
+              className="ml-auto max-w-[85%] rounded-lg rounded-tr-none bg-[#DCF8C6]" filas={14} />
           </div>
         ) : (
           <div className="rounded-lg bg-slate-100 p-4">
-            <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-white px-3 py-2 text-sm text-slate-800 shadow">{textoSms(datos)}</div>
-            <div className="mt-1 text-[11px] text-slate-500">{textoSms(datos).length} caracteres · {segmentosSms(textoSms(datos))} SMS</div>
+            <TextoEditable valor={smsFinal} editado={textoSmsEditado !== null} onChange={setTextoSmsEditado} onRegenerar={() => setTextoSmsEditado(null)}
+              className="max-w-[85%] rounded-2xl bg-white" filas={4} />
+            <div className="mt-1 text-[11px] text-slate-500">{smsFinal.length} caracteres · {segmentosSms(smsFinal)} SMS</div>
           </div>
         )}
       </section>
@@ -1428,8 +1543,41 @@ function PanelNotificar({ seleccion, recomendaciones, error, guardando, onClose,
   )
 }
 
+/** Contenido editado al notificar: viaja al correo (Edge Function) y queda en el historial */
+type ContenidoNotificacion = {
+  asunto: string | null; mensaje: string | null; lugar: string | null; adicionalHtml: string | null
+  whatsapp: string; sms: string
+  adjuntos: File[]
+}
+
+const MAX_ADJUNTOS = 5
+const MAX_ADJUNTOS_MB = 15
+const ACEPTA_ADJUNTOS = '.pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx'
+const tamanoLegible = (b: number) => (b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`)
+
+/** ¿El HTML del editor tiene texto? (el editor vacío deja etiquetas sueltas) */
+const htmlConTexto = (html: string) => html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim().length > 0
+
+/** Texto de WhatsApp / SMS editable en la vista previa */
+function TextoEditable({ valor, editado, onChange, onRegenerar, className, filas }: {
+  valor: string; editado: boolean; onChange: (v: string) => void; onRegenerar: () => void; className: string; filas: number
+}) {
+  return (
+    <div className={`${className} shadow`}>
+      <textarea value={valor} onChange={(e) => onChange(e.target.value)} rows={filas}
+        className="block w-full resize-y rounded-[inherit] border border-transparent bg-transparent px-3 py-2 text-sm text-slate-800 focus:border-[#16468E]/40 focus:outline-none"
+        title="Puede editar el mensaje antes de enviarlo" />
+      <div className="flex items-center justify-end gap-2 px-2 pb-1 text-[10px]">
+        {editado
+          ? <><span className="font-semibold text-amber-700">Editado a mano</span><button type="button" onClick={onRegenerar} className="font-medium text-[#16468E] hover:underline">Regenerar desde los datos</button></>
+          : <span className="text-slate-500">Clic en el texto para editarlo</span>}
+      </div>
+    </div>
+  )
+}
+
 /** Textos listos para copiar y enviar a mano por WhatsApp Web / plataforma de SMS */
-function ModalEnvioManual({ datos, canales, telefono, onClose }: { datos: DatosNotificacion; canales: string[]; telefono: string; onClose: () => void }) {
+function ModalEnvioManual({ datos, canales, telefono, textos, onClose }: { datos: DatosNotificacion; canales: string[]; telefono: string; textos?: { whatsapp: string; sms: string }; onClose: () => void }) {
   const [copiado, setCopiado] = useState('')
   async function copiar(clave: string, texto: string) {
     try {
@@ -1448,7 +1596,7 @@ function ModalEnvioManual({ datos, canales, telefono, onClose }: { datos: DatosN
           La notificación quedó registrada. Copie el mensaje y envíelo manualmente por el canal correspondiente.
         </p>
         {canales.includes('whatsapp') && (() => {
-          const texto = textoWhatsApp(datos)
+          const texto = textos?.whatsapp || textoWhatsApp(datos)
           return (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -1473,7 +1621,7 @@ function ModalEnvioManual({ datos, canales, telefono, onClose }: { datos: DatosN
           )
         })()}
         {canales.includes('sms') && (() => {
-          const texto = textoSms(datos)
+          const texto = textos?.sms || textoSms(datos)
           return (
             <div className="rounded-xl border border-sky-200 bg-sky-50 p-3">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">

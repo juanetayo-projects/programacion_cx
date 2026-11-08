@@ -15,6 +15,11 @@ export type DatosNotificacion = {
   estado: EstadoNotificado
   recomendacionesHtml: string | null // HTML del editor (contenido interno de la clínica)
   logoUrl: string
+  // Contenido editable por el usuario al notificar (si no viene, se usa el texto por defecto)
+  asunto?: string | null
+  mensaje?: string | null
+  lugar?: string | null
+  adicionalHtml?: string | null // información adicional que surge durante el proceso
 }
 
 const CLINICA = 'Clínica CAC Santa Bárbara'
@@ -72,6 +77,12 @@ export function asuntoCorreo(estado: EstadoNotificado) {
   return `${TEXTOS[estado].asunto} — ${CLINICA}`
 }
 
+/** Textos por defecto (punto de partida editable en la app) */
+export const LUGAR_POR_DEFECTO = `${CLINICA} — Área de Cirugía`
+export function mensajePorDefecto(estado: EstadoNotificado) {
+  return TEXTOS[estado].mensaje
+}
+
 export function plantillaCorreo(d: DatosNotificacion): { asunto: string; html: string } {
   const t = TEXTOS[d.estado]
   const conFecha = d.estado === 'programado' && d.fecha
@@ -83,7 +94,7 @@ export function plantillaCorreo(d: DatosNotificacion): { asunto: string; html: s
 
   const html = `<!doctype html>
 <html lang="es">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapar(t.asunto)}</title></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapar(d.asunto?.trim() || t.asunto)}</title></head>
 <body style="margin:0;padding:0;background:#EEF2F7;font-family:Arial,Helvetica,sans-serif">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#EEF2F7;padding:24px 12px">
     <tr><td align="center">
@@ -105,7 +116,7 @@ export function plantillaCorreo(d: DatosNotificacion): { asunto: string; html: s
 
         <tr><td style="padding:24px 28px 8px">
           <p style="margin:0 0 6px;color:#0F172A;font-size:15px">Hola <strong>${escapar(d.paciente) || 'paciente'}</strong>,</p>
-          <p style="margin:0;color:#334155;font-size:14px;line-height:1.6">${t.mensaje}</p>
+          <p style="margin:0;color:#334155;font-size:14px;line-height:1.6">${escapar(d.mensaje?.trim() || t.mensaje).replace(/\n/g, '<br>')}</p>
         </td></tr>
 
         ${conFecha ? `
@@ -131,9 +142,18 @@ export function plantillaCorreo(d: DatosNotificacion): { asunto: string; html: s
             ${fila('Documento', escapar(d.documento))}
             ${fila('Procedimiento', escapar(d.procedimiento).replace(/\n/g, '<br>'))}
             ${fila('Especialidad', escapar(d.especialidad))}
-            ${fila('Lugar', `${CLINICA} — Área de Cirugía`)}
+            ${fila('Lugar', escapar(d.lugar?.trim() || LUGAR_POR_DEFECTO))}
           </table>
         </td></tr>
+
+        ${d.adicionalHtml ? `
+        <!-- Información adicional (editable al notificar) -->
+        <tr><td style="padding:18px 28px 0">
+          <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:16px 20px;color:#334155;font-size:14px;line-height:1.6">
+            <div style="color:#B45309;font-size:13px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Información adicional</div>
+            ${d.adicionalHtml}
+          </div>
+        </td></tr>` : ''}
 
         ${d.recomendacionesHtml ? `
         <!-- Recomendaciones -->
@@ -172,5 +192,5 @@ export function plantillaCorreo(d: DatosNotificacion): { asunto: string; html: s
 </body>
 </html>`
 
-  return { asunto: asuntoCorreo(d.estado), html }
+  return { asunto: d.asunto?.trim() || asuntoCorreo(d.estado), html }
 }

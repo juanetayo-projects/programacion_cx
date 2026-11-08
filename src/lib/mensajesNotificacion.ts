@@ -1,10 +1,10 @@
-import { fechaLarga, horaAmPm, type DatosNotificacion, type EstadoNotificado } from '../../supabase/functions/notificar-paciente/plantilla'
+import { fechaLarga, horaAmPm, LUGAR_POR_DEFECTO, type DatosNotificacion, type EstadoNotificado } from '../../supabase/functions/notificar-paciente/plantilla'
 
 // Textos para notificar por WhatsApp y SMS mientras esos canales se envían a
 // mano (copiar y pegar en WhatsApp Web / plataforma de SMS). El correo usa la
 // plantilla HTML compartida con la Edge Function notificar-paciente.
 
-export { plantillaCorreo, type DatosNotificacion, type EstadoNotificado } from '../../supabase/functions/notificar-paciente/plantilla'
+export { plantillaCorreo, asuntoCorreo, mensajePorDefecto, LUGAR_POR_DEFECTO, type DatosNotificacion, type EstadoNotificado } from '../../supabase/functions/notificar-paciente/plantilla'
 
 export const LOGO_CORREO = 'https://juanetayo-projects.github.io/programacion_cx/images/logo_cacsb2.png'
 
@@ -44,7 +44,9 @@ export function textoWhatsApp(d: DatosNotificacion) {
   }
   if (d.procedimiento) lineas.push(`🩺 *Procedimiento:* ${d.procedimiento.replace(/\n/g, '; ')}`)
   if (d.especialidad) lineas.push(`*Especialidad:* ${d.especialidad}`)
-  lineas.push('📍 *Lugar:* Clínica CAC Santa Bárbara — Área de Cirugía')
+  lineas.push(`📍 *Lugar:* ${d.lugar?.trim() || LUGAR_POR_DEFECTO}`)
+  const adicional = htmlATexto(d.adicionalHtml ?? null)
+  if (adicional) lineas.push('', '*Información adicional:*', adicional)
   const recs = htmlATexto(d.recomendacionesHtml)
   if (recs) lineas.push('', '*Recomendaciones importantes:*', recs)
   lineas.push('', 'Si tienes dudas, comunícate con el área de Programación de Cirugías.', '_Mensaje informativo de la Clínica CAC Santa Bárbara._')
