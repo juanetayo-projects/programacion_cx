@@ -36,7 +36,7 @@ const ADMIN_NAV = [
 ]
 
 export default function Shell({ children }: { children: ReactNode }) {
-  const { perfil, permisos } = useAuth()
+  const { perfil, permisos, desfaseReloj } = useAuth()
   const [menuAbierto, setMenuAbierto] = useState(false)
   const location = useLocation()
   // Las tablas .tabla-scroll terminan en el borde inferior de la ventana (títulos siempre visibles)
@@ -130,6 +130,13 @@ export default function Shell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
+        {desfaseReloj !== null && (
+          <div className="shrink-0 border-b border-amber-300 bg-amber-50 px-6 py-1.5 text-xs text-amber-900">
+            <b>La hora de este equipo está desfasada {Math.abs(desfaseReloj)} min</b> respecto al servidor
+            ({desfaseReloj > 0 ? 'adelantada' : 'atrasada'}). Esto puede cerrar su sesión o dejar la app cargando:
+            ajuste la fecha y hora automáticas de Windows (zona horaria Bogotá, UTC-5).
+          </div>
+        )}
         <main className="min-h-0 flex-1 overflow-y-auto p-6">{children}</main>
       </div>
     </div>

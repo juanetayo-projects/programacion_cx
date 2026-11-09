@@ -1,4 +1,5 @@
-import type { ReactElement } from 'react'
+import { useState, type ReactElement } from 'react'
+import { supabase } from './lib/supabase'
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/auth'
 import Shell from './components/Shell'
@@ -23,7 +24,7 @@ import type { Modulo } from './lib/constantes'
 import { Spinner, EstadoVacio } from './components/ui'
 
 function Guard({ modulo, children }: { modulo?: Modulo; children: ReactElement }) {
-  const { session, perfil, permisos, loading } = useAuth()
+  const { session, perfil, permisos, loading, errorPerfil, recargarPerfil } = useAuth()
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#dbe1ec]">
@@ -33,6 +34,7 @@ function Guard({ modulo, children }: { modulo?: Modulo; children: ReactElement }
   }
   if (!session) return <Navigate to="/login" replace />
   // El perfil y los permisos llegan después de la sesión: esperar evita redirigir antes de tiempo
+  if (!perfil && errorPerfil) return <ErrorPerfil mensaje={errorPerfil} onReintentar={recargarPerfil} />
   if (!perfil) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#dbe1ec]">
@@ -50,6 +52,27 @@ function Guard({ modulo, children }: { modulo?: Modulo; children: ReactElement }
     return <Navigate to="/" replace />
   }
   return <Shell>{children}</Shell>
+}
+
+/** El perfil no cargó (sesión vencida, red caída…): explica el motivo en vez de un spinner eterno */
+function ErrorPerfil({ mensaje, onReintentar }: { mensaje: string; onReintentar: () => Promise<void> }) {
+  const [reintentando, setReintentando] = useState(false)
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#dbe1ec] p-4">
+      <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
+        <div className="bg-gradient-to-r from-[#0D2D6B] to-[#16468E] px-5 py-3 font-medium text-white">No fue posible cargar su sesión</div>
+        <div className="space-y-4 p-5 text-sm text-slate-600">
+          <p>{mensaje}</p>
+          <div className="flex justify-end gap-2">
+            <button onClick={() => supabase.auth.signOut({ scope: 'local' })}
+              className="rounded-lg border border-[#0D2D6B]/30 px-4 py-2 font-medium text-[#0D2D6B] hover:bg-[#0D2D6B]/5">Ingresar de nuevo</button>
+            <button disabled={reintentando} onClick={async () => { setReintentando(true); await onReintentar(); setReintentando(false) }}
+              className="rounded-lg bg-[#0D2D6B] px-4 py-2 font-medium text-white hover:bg-[#16468E] disabled:opacity-60">{reintentando ? 'Reintentando…' : 'Reintentar'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // Orden en que se busca la página de inicio de un rol sin Dashboard

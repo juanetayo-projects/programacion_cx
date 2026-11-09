@@ -1,11 +1,19 @@
 import { useState, type FormEvent } from 'react'
+import { AVISO_LOGIN } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import { Boton, Modal } from '../components/ui'
 
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  // Aviso cuando la sesión anterior expiró y se cerró sola (lib/auth.tsx)
+  const [error, setError] = useState(() => {
+    try {
+      const aviso = sessionStorage.getItem(AVISO_LOGIN)
+      if (aviso) sessionStorage.removeItem(AVISO_LOGIN)
+      return aviso ?? ''
+    } catch { return '' }
+  })
   const [cargando, setCargando] = useState(false)
   const [modoRegistro, setModoRegistro] = useState(false)
   const [nombre, setNombre] = useState('')
