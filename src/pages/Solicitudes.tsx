@@ -24,7 +24,7 @@ import {
   type DatosNotificacion,
 } from '../lib/mensajesNotificacion'
 import {
-  ESTADOS, ESTADOS_LABEL, ESTADOS_COLOR, ESTADOS_MOS_LABEL, ESTADOS_COLOR_HEX, ESTADOS_COLOR_SOLIDO, ESTADOS_NOTIFICABLES, CANALES_NOTIFICACION,
+  ESTADOS, ESTADOS_LABEL, ESTADOS_COLOR, ESTADOS_MOS_LABEL, ESTADOS_COLOR_HEX, ESTADOS_NOTIFICABLES, CANALES_NOTIFICACION,
   type Estado, type EstadoNotificable, type EstadoMos,
 } from '../lib/constantes'
 import {
@@ -32,7 +32,7 @@ import {
   CheckCircle2, Clock, Send, Repeat, PauseCircle, CircleSlash, FileSpreadsheet, AlertTriangle,
   Search, SlidersHorizontal, Eraser, UserRound, ClipboardList, ShieldCheck, Save, LayoutGrid,
   Bone, FileWarning, XCircle, Mail, MessageCircle, Smartphone, Copy, ExternalLink, Eye as EyeIcon,
-  PencilLine, RotateCcw, Paperclip, X as XIcon,
+  PencilLine, RotateCcw, Paperclip, X as XIcon, CalendarCheck,
 } from 'lucide-react'
 import { hoyBogota } from '../lib/fechas'
 
@@ -1301,6 +1301,16 @@ function datosNotificacion(s: Solicitud, estado: EstadoNotificable, recomendacio
 const ICONO_CANAL: Record<string, typeof Mail> = { email: Mail, whatsapp: MessageCircle, sms: Smartphone }
 const NOMBRE_CANAL: Record<string, string> = { email: 'Correo', whatsapp: 'WhatsApp', sms: 'SMS' }
 
+// Botones de "¿Qué se le va a comunicar al paciente?": icono y color propio por
+// opción, todos con el mismo peso visual (antes "Cancelado" se veía tachado y
+// gris, como si estuviera deshabilitado).
+const OPCION_COMUNICAR: Record<EstadoNotificable, { icono: typeof CalendarCheck; activo: string; inactivo: string }> = {
+  programado: { icono: CalendarCheck, activo: 'border-emerald-600 bg-emerald-600 text-white', inactivo: 'border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50' },
+  aplazado: { icono: CalendarClock, activo: 'border-amber-500 bg-amber-500 text-white', inactivo: 'border-amber-300 bg-white text-amber-700 hover:bg-amber-50' },
+  suspendido: { icono: PauseCircle, activo: 'border-orange-600 bg-orange-600 text-white', inactivo: 'border-orange-300 bg-white text-orange-700 hover:bg-orange-50' },
+  cancelado: { icono: XCircle, activo: 'border-red-600 bg-red-600 text-white', inactivo: 'border-red-300 bg-white text-red-700 hover:bg-red-50' },
+}
+
 function PanelNotificar({ seleccion, recomendaciones, error, guardando, onClose, onGuardar }: {
   seleccion: Solicitud
   recomendaciones: { especialidad_id: number; titulo: string; contenido: string }[]
@@ -1397,17 +1407,25 @@ function PanelNotificar({ seleccion, recomendaciones, error, guardando, onClose,
       </Grupo>
 
       <Grupo color="gestion" icono={BellRing} titulo="¿Qué se le va a comunicar al paciente? *">
-        <div className="col-span-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-          {ESTADOS_NOTIFICABLES.map((e) => (
-            <button
-              key={e}
-              type="button"
-              onClick={() => elegirEstado(e)}
-              className={`rounded-lg border px-2 py-1.5 text-xs transition ${estadoDestino === e ? `${ESTADOS_COLOR_SOLIDO[e]} font-medium` : `${ESTADOS_COLOR[e]} opacity-70 hover:opacity-100`}`}
-            >
-              {ESTADOS_LABEL[e]}
-            </button>
-          ))}
+        <div role="radiogroup" aria-label="Qué se comunica al paciente" className="col-span-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {ESTADOS_NOTIFICABLES.map((e) => {
+            const o = OPCION_COMUNICAR[e]
+            const activo = estadoDestino === e
+            return (
+              <button
+                key={e}
+                type="button"
+                role="radio"
+                aria-checked={activo}
+                onClick={() => elegirEstado(e)}
+                className={`flex items-center justify-center gap-1.5 rounded-lg border-2 px-2 py-1.5 text-sm font-medium transition ${activo ? `${o.activo} shadow-sm` : o.inactivo}`}
+              >
+                <o.icono size={16} className="shrink-0" />
+                {ESTADOS_LABEL[e]}
+                {activo && <CheckCircle2 size={14} className="shrink-0 opacity-90" />}
+              </button>
+            )
+          })}
         </div>
       </Grupo>
 
@@ -1449,10 +1467,13 @@ function PanelNotificar({ seleccion, recomendaciones, error, guardando, onClose,
       {estadoDestino && (
         <Grupo color="gestion" icono={PencilLine} titulo="Contenido de la notificación (editable)"
           accion={editado ? <button type="button" onClick={restablecer} className="flex items-center gap-1 text-xs font-medium text-[#16468E] hover:underline"><RotateCcw size={12} /> Restablecer textos</button> : undefined}>
-          <div className="col-span-2">
-            <label className="mb-1 block text-xs font-medium text-slate-600">Asunto del correo</label>
-            <input value={asunto ?? asuntoCorreo(estadoDestino)} onChange={(e) => setAsunto(e.target.value)} className={campo} maxLength={150} />
-          </div>
+          {/* El asunto solo aplica al correo: SMS y WhatsApp no lo usan */}
+          {canales.includes('email') && (
+            <div className="col-span-2">
+              <label className="mb-1 block text-xs font-medium text-slate-600">Asunto del correo</label>
+              <input value={asunto ?? asuntoCorreo(estadoDestino)} onChange={(e) => setAsunto(e.target.value)} className={campo} maxLength={150} />
+            </div>
+          )}
           <div className="col-span-2">
             <label className="mb-1 block text-xs font-medium text-slate-600">Mensaje principal</label>
             <textarea value={mensaje ?? mensajePorDefecto(estadoDestino)} onChange={(e) => setMensaje(e.target.value)} rows={3} className={campo} maxLength={1500} />
