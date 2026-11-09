@@ -87,6 +87,7 @@ export function Modal({
   ancho = 'max-w-lg',
   fondo = 'bg-white',
   cerrableFuera = true,
+  pie,
 }: {
   open: boolean
   onClose: () => void
@@ -96,6 +97,8 @@ export function Modal({
   fondo?: string
   /** Si es false, hacer clic fuera del modal (o Escape) no lo cierra — solo el botón de cerrar o las acciones internas. */
   cerrableFuera?: boolean
+  /** Botones de acción: quedan fijos abajo, siempre visibles aunque el contenido se desplace. */
+  pie?: ReactNode
 }) {
   const { pos, ref, iniciarArrastre, reiniciar, arrastrando } = useArrastre()
   useEffect(() => { if (open) reiniciar() }, [open, reiniciar])
@@ -110,7 +113,7 @@ export function Modal({
       <div
         ref={ref}
         style={pos.x || pos.y ? { transform: `translate(${pos.x}px, ${pos.y}px)` } : undefined}
-        className={`w-full ${ancho} max-h-[90vh] overflow-y-auto rounded-2xl ${fondo} shadow-2xl ${arrastrando ? 'select-none' : ''}`}
+        className={`flex w-full ${ancho} max-h-[95vh] flex-col overflow-hidden rounded-2xl ${fondo} shadow-2xl ${arrastrando ? 'select-none' : ''}`}
         onClick={(e) => e.stopPropagation()}
       >
         {titulo ? (
@@ -118,7 +121,7 @@ export function Modal({
             onPointerDown={iniciarArrastre}
             onDoubleClick={reiniciar}
             title="Arrastre para mover · doble clic para centrar"
-            className={`sticky top-0 z-10 flex touch-none items-center justify-between gap-3 rounded-t-2xl bg-gradient-to-r from-[#0D2D6B] to-[#16468E] px-5 py-3 font-medium text-white ${arrastrando ? 'cursor-grabbing' : 'cursor-grab'}`}
+            className={`flex shrink-0 touch-none items-center justify-between gap-3 rounded-t-2xl bg-gradient-to-r from-[#0D2D6B] to-[#16468E] px-5 py-2.5 font-medium text-white ${arrastrando ? 'cursor-grabbing' : 'cursor-grab'}`}
           >
             <span className="flex min-w-0 items-center gap-2"><GripHorizontal size={16} className="shrink-0 text-white/50" />{titulo}</span>
             <button
@@ -135,12 +138,14 @@ export function Modal({
             onPointerDown={iniciarArrastre}
             onDoubleClick={reiniciar}
             title="Arrastre para mover"
-            className={`sticky top-0 z-10 flex touch-none justify-center rounded-t-2xl pt-1.5 text-slate-300 hover:text-slate-500 ${arrastrando ? 'cursor-grabbing' : 'cursor-grab'}`}
+            className={`flex shrink-0 touch-none justify-center rounded-t-2xl pt-1.5 text-slate-300 hover:text-slate-500 ${arrastrando ? 'cursor-grabbing' : 'cursor-grab'}`}
           >
             <GripHorizontal size={18} />
           </div>
         )}
-        <div className={titulo ? 'p-5' : 'px-5 pb-5 pt-2'}>{children}</div>
+        {/* Solo el cuerpo se desplaza; el título y el pie quedan fijos */}
+        <div className={`modal-cuerpo min-h-0 flex-1 overflow-y-auto ${titulo ? 'px-5 py-4' : 'px-5 pb-4 pt-2'}`}>{children}</div>
+        {pie && <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-slate-100 px-5 py-3">{pie}</div>}
       </div>
     </div>,
     document.body,

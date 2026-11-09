@@ -98,3 +98,10 @@ table.tabla-cac tbody tr:hover {
 /* Barras de desplazamiento sobre fondos oscuros (barra lateral de filtros) */
 .scroll-oscuro::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18) }
 .scroll-oscuro::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.36) }
+
+/* Modales: la fila de botones al final del contenido (patrón «flex justify-end
+   border-t») queda fija abajo mientras el cuerpo se desplaza. */
+.modal-cuerpo div.justify-end.border-t:last-child {
+  position: sticky; bottom: -1rem; z-index: 5; margin-bottom: -1rem; padding-bottom: 1rem;
+  background-color: #fff; box-shadow: 0 -8px 12px -10px rgb(15 23 42 / 0.25);
+}

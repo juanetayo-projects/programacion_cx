@@ -274,8 +274,8 @@ function useFormCorreo(sol: DatosSolicitudCorreo | null) {
 }
 
 /** Campos del correo + vista previa (se usa al registrar y al enviar desde el historial) */
-function FormCorreoAutorizacion({ form, sol, aseguradores, registro, adjuntos, remitente }: {
-  form: ReturnType<typeof useFormCorreo>; sol: DatosSolicitudCorreo | null; aseguradores: Asegurador[]
+function FormCorreoAutorizacion({ form, sol, aseguradores, registro, adjuntos, remitente, compacto = false }: {
+  form: ReturnType<typeof useFormCorreo>; sol: DatosSolicitudCorreo | null; aseguradores: Asegurador[]; compacto?: boolean
   registro: { aseguradora: string | null; numero_radicado: string | null; fecha_solicitud: string | null }
   adjuntos: string[]; remitente: string | null
 }) {
@@ -322,17 +322,20 @@ function FormCorreoAutorizacion({ form, sol, aseguradores, registro, adjuntos, r
       </div>
       <div className="sm:col-span-2">
         <label className={etiqueta}>Mensaje</label>
-        <textarea value={form.mensaje} onChange={(e) => form.setMensaje(e.target.value)} rows={5} className={campo} maxLength={4000} />
+        <textarea value={form.mensaje} onChange={(e) => form.setMensaje(e.target.value)} rows={compacto ? 4 : 5} className={campo} maxLength={4000} />
         <p className="mt-1 text-[11px] text-slate-500">
           El correo incluye además los datos del paciente, el procedimiento, el radicado{adjuntos.length ? ` y ${adjuntos.length} soporte(s) adjunto(s)` : ''}. Las respuestas llegan a su correo.
         </p>
       </div>
       {form.invalidos.length > 0 && <p className="text-xs text-red-600 sm:col-span-2">Correo(s) inválido(s): {form.invalidos.join(', ')}</p>}
       <div className="sm:col-span-2">
-        <button type="button" onClick={() => setVista((v) => !v)} className="flex items-center gap-1 text-xs font-medium text-[#16468E] hover:underline">
-          <Eye size={13} /> {vista ? 'Ocultar vista previa' : 'Ver vista previa del correo'}
+        <button type="button" onClick={() => setVista(true)} className="flex items-center gap-1 text-xs font-medium text-[#16468E] hover:underline">
+          <Eye size={13} /> Ver vista previa del correo
         </button>
-        {vista && <iframe title="Vista previa del correo" srcDoc={html} sandbox="" className="mt-2 h-[420px] w-full rounded-lg border border-slate-200" />}
+        {/* En ventana flotante aparte: no alarga el formulario */}
+        <Modal open={vista} onClose={() => setVista(false)} titulo="Vista previa del correo" ancho="max-w-3xl">
+          <iframe title="Vista previa del correo" srcDoc={html} sandbox="" className="h-[72vh] w-full rounded-lg border border-slate-200" />
+        </Modal>
       </div>
     </div>
   )
@@ -428,21 +431,33 @@ function ModalRegistrarAutorizacion({ solicitudId, s, onCerrar, onGuardado }: {
   const faltaCorreo = admiteCorreo && enviarCorreo && !form.valido
   const textoBoton = registradoId !== null ? 'Enviar correo' : admiteCorreo && enviarCorreo ? 'Registrar y enviar correo' : 'Registrar'
 
-  return (
-    <Modal open onClose={onCerrar} titulo="Autorización del asegurador" ancho="max-w-3xl" cerrableFuera={false}>
-      <fieldset disabled={registradoId !== null} className="space-y-3 disabled:opacity-70">
-        <div className="grid gap-2 sm:grid-cols-5">
-          {OPCIONES.map((o) => (
-            <button key={o.estado} type="button" onClick={() => setEstado(o.estado)}
-              className={`flex flex-col items-center gap-1 rounded-xl border-2 px-2 py-2 text-center text-xs transition ${estado === o.estado ? o.activo : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'}`}>
-              <o.icono size={18} />
-              <span className="font-semibold">{o.titulo}</span>
-              <span className="text-[10px] leading-tight opacity-80">{o.ayuda}</span>
-            </button>
-          ))}
-        </div>
+  const pie = (<>
+    <p className="mr-auto max-w-md text-[11px] leading-tight text-slate-500">Se registra con fecha, hora y usuario ({perfil?.nombre ?? '—'}). Cada gestión queda en el historial y no se modifica.</p>
+    <Boton variante="secundario" onClick={() => (registradoId !== null ? onGuardado('Gestión registrada (el correo no se envió).') : onCerrar())} disabled={guardando}>Cerrar</Boton>
+    <Boton onClick={guardar} disabled={guardando || faltaCorreo} className="flex items-center gap-1.5">
+      {admiteCorreo && enviarCorreo ? <Send size={14} /> : <Save size={14} />} {guardando ? 'Guardando…' : textoBoton}
+    </Boton>
+  </>)
 
-        <div className="grid gap-3 sm:grid-cols-2">
+  return (
+    <Modal open onClose={onCerrar} titulo="Autorización del asegurador" ancho={admiteCorreo ? 'max-w-6xl' : 'max-w-3xl'} cerrableFuera={false} pie={pie}>
+      {/* Estado: tarjetas compactas en una sola fila */}
+      <fieldset disabled={registradoId !== null} className="grid gap-2 disabled:opacity-70 sm:grid-cols-5">
+        {OPCIONES.map((o) => (
+          <button key={o.estado} type="button" onClick={() => setEstado(o.estado)} title={o.ayuda}
+            className={`flex items-center gap-2 rounded-xl border-2 px-2.5 py-1.5 text-left text-xs transition ${estado === o.estado ? o.activo : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'}`}>
+            <o.icono size={17} className="shrink-0" />
+            <span className="min-w-0">
+              <span className="block font-semibold leading-tight">{o.titulo}</span>
+              <span className="block text-[10px] leading-tight opacity-80">{o.ayuda}</span>
+            </span>
+          </button>
+        ))}
+      </fieldset>
+
+      <div className={`mt-3 grid gap-4 ${admiteCorreo ? 'lg:grid-cols-2' : ''}`}>
+        {/* Columna 1: datos de la gestión y soportes */}
+        <fieldset disabled={registradoId !== null} className="grid content-start gap-3 disabled:opacity-70 sm:grid-cols-2">
           {(estado === 'solicitada' || estado === 'devuelta') && (<>
             <div><label className={etiqueta}>Fecha de la solicitud *</label><input type="date" max={hoyLocal()} value={fechaSolicitud} onChange={(e) => setFechaSolicitud(e.target.value)} className={campo} /></div>
             <div><label className={etiqueta}>N.º de radicado</label><input value={radicado} onChange={(e) => setRadicado(e.target.value)} className={campo} placeholder="Radicado de la EPS" /></div>
@@ -471,35 +486,31 @@ function ModalRegistrarAutorizacion({ solicitudId, s, onCerrar, onGuardado }: {
             <SelectorAdjuntos adj={adj} accept=".pdf,image/*" deshabilitado={guardando || registradoId !== null}
               ayuda="PDF o imágenes · máximo 5 archivos de 10 MB c/u. Se cargan al registrar y quedan en el historial." />
           </div>
-        </div>
-      </fieldset>
+        </fieldset>
 
-      {admiteCorreo && (
-        <div className={`mt-3 rounded-xl border p-3 ${enviarCorreo ? 'border-[#16468E]/30 bg-[#0D2D6B]/[0.03]' : 'border-slate-200'}`}>
-          <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-[#0D2D6B]">
-            <input type="checkbox" checked={enviarCorreo} disabled={registradoId !== null} onChange={(e) => setEnviarCorreo(e.target.checked)} className="h-4 w-4 accent-[#0D2D6B]" />
-            <Mail size={16} /> Enviar la solicitud por correo al asegurador
-          </label>
-          <p className="ml-6 text-[11px] text-slate-500">Con los soportes adjuntos. El correo queda guardado en el historial como evidencia.</p>
-          {enviarCorreo && (
-            <div className="mt-3">
-              <FormCorreoAutorizacion form={form} sol={sol} aseguradores={aseguradores}
-                registro={{ aseguradora: sol?.eps_gomedisys ?? null, numero_radicado: radicado || null, fecha_solicitud: fechaSolicitud }}
-                adjuntos={adj.archivos.map((f) => f.name)} remitente={perfil?.nombre ?? null} />
-            </div>
-          )}
-        </div>
-      )}
-
-      <p className="mt-3 text-[11px] text-slate-500">Se registra con fecha, hora y usuario ({perfil?.nombre ?? '—'}). Cada gestión queda en el historial y no se modifica.</p>
-      {registradoId !== null && !error && <p className="mt-2 flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700"><CheckCircle2 size={15} /> Gestión registrada.</p>}
-      {error && <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
-      <div className="mt-3 flex justify-end gap-2 border-t border-slate-100 pt-3">
-        <Boton variante="secundario" onClick={() => (registradoId !== null ? onGuardado('Gestión registrada (el correo no se envió).') : onCerrar())} disabled={guardando}>Cerrar</Boton>
-        <Boton onClick={guardar} disabled={guardando || faltaCorreo} className="flex items-center gap-1.5">
-          {admiteCorreo && enviarCorreo ? <Send size={14} /> : <Save size={14} />} {guardando ? 'Guardando…' : textoBoton}
-        </Boton>
+        {/* Columna 2: envío de la solicitud por correo */}
+        {admiteCorreo && (
+          <div className={`rounded-xl border p-3 ${enviarCorreo ? 'border-[#16468E]/30 bg-[#0D2D6B]/[0.03]' : 'border-slate-200'}`}>
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-[#0D2D6B]">
+              <input type="checkbox" checked={enviarCorreo} disabled={registradoId !== null} onChange={(e) => setEnviarCorreo(e.target.checked)} className="h-4 w-4 accent-[#0D2D6B]" />
+              <Mail size={16} /> Enviar la solicitud por correo al asegurador
+            </label>
+            <p className="ml-6 text-[11px] text-slate-500">Con los soportes adjuntos. El correo queda guardado en el historial como evidencia.</p>
+            {enviarCorreo ? (
+              <div className="mt-3">
+                <FormCorreoAutorizacion form={form} sol={sol} aseguradores={aseguradores} compacto
+                  registro={{ aseguradora: sol?.eps_gomedisys ?? null, numero_radicado: radicado || null, fecha_solicitud: fechaSolicitud }}
+                  adjuntos={adj.archivos.map((f) => f.name)} remitente={perfil?.nombre ?? null} />
+              </div>
+            ) : (
+              <p className="ml-6 mt-3 text-xs text-slate-400">Márquelo para escribir los destinatarios, el asunto y el mensaje. Se marca solo cuando el canal es «Correo electrónico».</p>
+            )}
+          </div>
+        )}
       </div>
+
+      {registradoId !== null && !error && <p className="mt-3 flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700"><CheckCircle2 size={15} /> Gestión registrada.</p>}
+      {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
     </Modal>
   )
 }
@@ -528,7 +539,11 @@ function ModalEnviarCorreoAutorizacion({ solicitudId, registro, onCerrar, onEnvi
   }
 
   return (
-    <Modal open onClose={onCerrar} titulo="Enviar la solicitud de autorización por correo" ancho="max-w-3xl" cerrableFuera={false}>
+    <Modal open onClose={onCerrar} titulo="Enviar la solicitud de autorización por correo" ancho="max-w-3xl" cerrableFuera={false}
+      pie={<>
+        <Boton variante="secundario" onClick={onCerrar} disabled={enviando}>Cancelar</Boton>
+        <Boton onClick={enviar} disabled={enviando || !form.valido} className="flex items-center gap-1.5"><Send size={14} /> {enviando ? 'Enviando…' : 'Enviar correo'}</Boton>
+      </>}>
       <div className="mb-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
         Gestión <b>{ESTADOS_AUT[registro.estado].corto}</b> del {fechaHora(registro.created_at)}
         {registro.numero_radicado ? ` · Radicado ${registro.numero_radicado}` : ''}
@@ -538,10 +553,6 @@ function ModalEnviarCorreoAutorizacion({ solicitudId, registro, onCerrar, onEnvi
         registro={{ aseguradora: registro.aseguradora, numero_radicado: registro.numero_radicado, fecha_solicitud: registro.fecha_solicitud }}
         adjuntos={registro.adjuntos.map((a) => a.nombre)} remitente={perfil?.nombre ?? null} />
       {error && <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
-      <div className="mt-3 flex justify-end gap-2 border-t border-slate-100 pt-3">
-        <Boton variante="secundario" onClick={onCerrar} disabled={enviando}>Cancelar</Boton>
-        <Boton onClick={enviar} disabled={enviando || !form.valido} className="flex items-center gap-1.5"><Send size={14} /> {enviando ? 'Enviando…' : 'Enviar correo'}</Boton>
-      </div>
     </Modal>
   )
 }

@@ -869,7 +869,7 @@ export default function Solicitudes() {
       )}
 
       {sinAutorizacion && (
-        <Modal open onClose={() => setSinAutorizacion(null)} titulo={`Autorización del asegurador · ${sinAutorizacion.nombre_paciente ?? sinAutorizacion.documento_paciente}`} ancho="max-w-2xl">
+        <Modal open onClose={() => setSinAutorizacion(null)} titulo={`Autorización del asegurador · ${sinAutorizacion.nombre_paciente ?? sinAutorizacion.documento_paciente}`} ancho="max-w-4xl">
           <div className="space-y-3">
             <AlertaAutorizacion s={sinAutorizacion} contexto="Programar / reprogramar / registrar la cirugía" />
             <PanelAutorizacion solicitudId={sinAutorizacion.id} s={sinAutorizacion}
