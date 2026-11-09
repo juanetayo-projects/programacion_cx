@@ -27,6 +27,7 @@ import {
   CheckCircle2, AlertTriangle, Phone, Mail, Paperclip, Clock, X, History,
   Plus, Trash2, Stethoscope, MessageSquareText, Truck, Info, Save, MapPin, Hash, ShieldCheck, ShieldX, PackageCheck,
 } from 'lucide-react'
+import { hoyBogota } from '../lib/fechas'
 
 // Las tablas del módulo MOS (aseguradores, mos_correos) son posteriores a
 // database.types.ts; se consultan con el cliente sin tipar, como CrudTable.
@@ -826,7 +827,7 @@ function PanelGestion({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () =
 // con vista previa que los pasos anteriores).
 type Asignacion = { proveedorId: string; fechaEstimada: string }
 
-const hoyISO = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+const hoyISO = () => hoyBogota()
 
 function PanelProveedor({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () => void; onEnviado: (correoIds: number[]) => void }) {
   const { perfil } = useAuth()

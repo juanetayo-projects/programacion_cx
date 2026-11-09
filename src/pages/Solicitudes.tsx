@@ -34,6 +34,7 @@ import {
   Bone, FileWarning, XCircle, Mail, MessageCircle, Smartphone, Copy, ExternalLink, Eye as EyeIcon,
   PencilLine, RotateCcw, Paperclip, X as XIcon,
 } from 'lucide-react'
+import { hoyBogota } from '../lib/fechas'
 
 type Solicitud = CamposAutorizacion & {
   id: number
@@ -132,7 +133,7 @@ const ICONO_ESTADO: Partial<Record<Estado, React.ReactNode>> = {
 const ESTADOS_PROGRAMADOS: Estado[] = ['programado', 'notificado', 'aplazado', 'suspendido']
 
 // Hoy en hora local (YYYY-MM-DD) para alertar cirugías pasadas sin registrar como realizadas
-const hoyISO = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+const hoyISO = hoyBogota()
 
 export default function Solicitudes() {
   const { session, perfil } = useAuth()

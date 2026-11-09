@@ -20,6 +20,7 @@ import {
   Activity, Timer, AlertTriangle, Eraser, Hospital, Ambulance, Users, Receipt, Truck, BellRing, ClipboardX, ShieldAlert,
   ChevronLeft, ChevronRight, Siren, TrendingUp, Workflow, Flame,
 } from 'lucide-react'
+import { hoyBogota, enBogota, isoLocal, aFecha, sumarDiasISO } from '../lib/fechas'
 
 // Dashboard de gestión quirúrgica por fases del proceso:
 // GoMedisys → Programación Cx (tipo de orden) → Autorización del asegurador →
@@ -84,7 +85,7 @@ const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0)
 const dias = (a: string | null, b: string | null) => (a && b ? (new Date(b).getTime() - new Date(a).getTime()) / DIA : null)
 const promedio = (xs: (number | null)[]) => { const v = xs.filter((x): x is number => x !== null && x >= 0); return v.length ? v.reduce((t, x) => t + x, 0) / v.length : null }
 const fmtDias = (d: number | null) => (d === null ? '—' : d < 1 ? `${Math.round(d * 24)} h` : `${d.toFixed(1)} d`)
-const hoyISO = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+const hoyISO = () => hoyBogota()
 const COLS: PopCol<S>[] = [
   { header: 'ID', get: (s) => `SC-${String(s.id).padStart(6, '0')}` },
   { header: 'Paciente', get: (s) => s.nombre_paciente ?? s.documento_paciente },
@@ -105,7 +106,7 @@ export default function Dashboard() {
   const [tipoOrden, setTipoOrden] = useState('')
   const [origen, setOrigen] = useState('')
   const [popover, setPopover] = useState<PopoverState<S>>(null)
-  const [mesCal, setMesCal] = useState(() => ({ y: new Date().getFullYear(), m: new Date().getMonth() }))
+  const [mesCal, setMesCal] = useState(() => ({ y: enBogota().getFullYear(), m: enBogota().getMonth() }))
   const catGC = useCatalogosGC()
   const { perfil } = useAuth()
 
@@ -207,7 +208,7 @@ export default function Dashboard() {
   })).filter((x) => x.valor)
   const autPorVencer = activas.filter((s) => { const d = diasVigencia(s); return d !== null && d <= 7 && s.estado !== 'realizado' })
   const tAutorizacion = promedio(F.map((s) => (s.autorizacion_fecha_solicitud && s.autorizacion_fecha ? dias(s.autorizacion_fecha_solicitud, s.autorizacion_fecha) : null)))
-  const autSinRespuesta = activas.filter((s) => s.autorizacion_estado === 'solicitada' && s.autorizacion_fecha_solicitud && (Date.now() - new Date(s.autorizacion_fecha_solicitud).getTime()) / DIA > 5)
+  const autSinRespuesta = activas.filter((s) => s.autorizacion_estado === 'solicitada' && s.autorizacion_fecha_solicitud && (Date.now() - aFecha(s.autorizacion_fecha_solicitud).getTime()) / DIA > 5)
 
   // Fase 4: MOS
   const hitosMos = [
@@ -287,15 +288,15 @@ export default function Dashboard() {
   // Tendencia semanal: reportadas, programadas y realizadas (últimas 12 semanas)
   const tendencia = useMemo(() => {
     const semanas: { clave: string; semana: string; Reportadas: number; Programadas: number; Realizadas: number }[] = []
-    const base = new Date(); base.setHours(0, 0, 0, 0); base.setDate(base.getDate() - ((base.getDay() + 6) % 7))
+    const base = enBogota(); base.setHours(0, 0, 0, 0); base.setDate(base.getDate() - ((base.getDay() + 6) % 7))
     for (let i = 11; i >= 0; i--) {
       const d = new Date(base.getTime() - i * 7 * DIA)
-      semanas.push({ clave: d.toISOString().slice(0, 10), semana: d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }), Reportadas: 0, Programadas: 0, Realizadas: 0 })
+      semanas.push({ clave: isoLocal(d), semana: aFecha(isoLocal(d)).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }), Reportadas: 0, Programadas: 0, Realizadas: 0 })
     }
     const idx = (iso: string | null) => {
       if (!iso) return -1
-      const d = new Date(iso); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
-      return semanas.findIndex((s) => s.clave === d.toISOString().slice(0, 10))
+      const d = enBogota(iso); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7))
+      return semanas.findIndex((s) => s.clave === isoLocal(d))
     }
     for (const s of F) {
       const a = idx(s.fecha_reporte); if (a >= 0) semanas[a].Reportadas++
@@ -325,7 +326,7 @@ export default function Dashboard() {
   const ESCALA = ['#EAF0FA', '#B9CCE9', '#7FA0D6', '#3E6DAE', '#0D2D6B']
 
   // Alertas combinadas (por prioridad)
-  const en7 = new Date(Date.now() + 7 * DIA).toISOString().slice(0, 10)
+  const en7 = sumarDiasISO(hoyBogota(), 7)
   const alertas: { titulo: string; detalle: string; icono: typeof AlertTriangle; color: string; lista: S[] }[] = [
     { titulo: 'Cirugías próximas sin autorización vigente', detalle: 'Programadas en los próximos 7 días', icono: ShieldAlert, color: '#DC2626', lista: programadas.filter((s) => s.fecha_programada && s.fecha_programada <= en7 && !autorizacionVigente(s)) },
     { titulo: 'Autorizaciones por vencer', detalle: 'Vencen en ≤ 7 días sin cirugía realizada', icono: Timer, color: '#D97706', lista: autPorVencer },

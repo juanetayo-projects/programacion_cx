@@ -1,3 +1,4 @@
+import { hoyBogota } from './fechas'
 // Autorización del asegurador (Gestión clínica): estados, vigencia y alertas.
 // La regla de negocio se valida en la base de datos (autorizacion_vigente_de y
 // el trigger exigir_autorizacion_cirugia); aquí solo se replica para la UI.
@@ -24,7 +25,7 @@ export const ESTADOS_AUT: Record<EstadoAutEfectivo, { label: string; corto: stri
   no_requiere: { label: 'No requiere (urgencia)', corto: 'No requiere', color: 'bg-violet-100 text-violet-700 border-violet-300', hex: '#8B5CF6' },
 }
 
-export const hoyLocal = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+export const hoyLocal = () => hoyBogota()
 
 export function estadoAutorizacion(s: Partial<CamposAutorizacion>): EstadoAutEfectivo {
   if (!s.autorizacion_estado) return 'sin_gestionar'

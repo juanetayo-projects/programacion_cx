@@ -3,6 +3,7 @@ import { Play, Pause, Sparkles } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { autorizacionVigente, type CamposAutorizacion } from '../../lib/autorizacion'
 import type { EstadoMos } from '../../lib/constantes'
+import { enBogota, isoLocal, aFecha } from '../../lib/fechas'
 
 // Mapa de calor del Dashboard con cuatro vistas:
 //  1. Ocupación de quirófanos (quirófano × franja horaria, % del tiempo disponible)
@@ -61,8 +62,8 @@ const COLOR_AGENDA: Record<SubAgenda, string> = { programadas: '#F59E0B', realiz
 const DIA = 86400000
 
 const lunes = (d: Date) => { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x }
-const claveSemana = (d: Date) => lunes(d).toISOString().slice(0, 10)
-const inicioProgramado = (s: SolMapa) => (s.fecha_programada && s.hora_programada ? new Date(`${s.fecha_programada}T${s.hora_programada}`) : null)
+const claveSemana = (d: Date) => isoLocal(lunes(d))
+const inicioProgramado = (s: SolMapa) => (s.fecha_programada && s.hora_programada ? enBogota(`${s.fecha_programada}T${s.hora_programada}`) : null)
 
 function leerPreferencia() {
   try { return localStorage.getItem('dashboard.mapaCalor.movimiento') !== 'no' } catch { return true }
@@ -139,7 +140,7 @@ export default function MapaCalor<T extends SolMapa>({ solicitudes, items, notas
       const lista = solicitudes.filter((s) => (subAgenda === 'programadas' ? PROGRAMADAS.includes(s.estado)
         : subAgenda === 'realizadas' ? s.estado === 'realizado' : PROGRAMADAS.includes(s.estado) || s.estado === 'realizado'))
       for (const s of lista) {
-        const d = s.estado === 'realizado' && s.cirugia_inicio ? new Date(s.cirugia_inicio) : inicioProgramado(s)
+        const d = s.estado === 'realizado' && s.cirugia_inicio ? enBogota(s.cirugia_inicio) : inicioProgramado(s)
         if (!d) continue
         const h = Math.min(21, Math.max(6, d.getHours()))
         sumar(String((d.getDay() + 6) % 7), String(h), s)
@@ -153,9 +154,9 @@ export default function MapaCalor<T extends SolMapa>({ solicitudes, items, notas
     }
 
     if (vista === 'fases') {
-      const hoy = lunes(new Date())
+      const hoy = lunes(enBogota())
       const semanas = Array.from({ length: 12 }, (_, i) => new Date(hoy.getTime() - (11 - i) * 7 * DIA))
-      const claves = new Set(semanas.map((d) => d.toISOString().slice(0, 10)))
+      const claves = new Set(semanas.map((d) => isoLocal(d)))
       const FASES = [
         { clave: 'ingreso', etiqueta: 'Ingreso', color: colores.gomedisys },
         { clave: 'autorizacion', etiqueta: 'Autorización', color: colores.autorizacion },
@@ -169,7 +170,7 @@ export default function MapaCalor<T extends SolMapa>({ solicitudes, items, notas
       ]
       const marcar = (fase: string, fecha: string | null, s: T | undefined) => {
         if (!fecha || !s) return
-        const k = claveSemana(new Date(fecha.length === 10 ? `${fecha}T12:00` : fecha))
+        const k = claveSemana(enBogota(fecha))
         if (!claves.has(k)) return
         const cel = celdas.get(`${fase}|${k}`)
         if (cel?.lista.includes(s)) return // un paciente cuenta una vez por fase y semana
@@ -187,9 +188,9 @@ export default function MapaCalor<T extends SolMapa>({ solicitudes, items, notas
       for (const r of recepciones) marcar('esterilizacion', r.recibido_en, porId.get(r.solicitud_id))
       return {
         filas: FASES,
-        columnas: semanas.map((d) => ({ clave: d.toISOString().slice(0, 10), etiqueta: d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }) })),
+        columnas: semanas.map((d) => ({ clave: isoLocal(d), etiqueta: aFecha(isoLocal(d)).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }) })),
         celdas, max: maximo(), unidad: 'pacientes',
-        totalFila: (f) => String(new Set(semanas.flatMap((d) => celdas.get(`${f}|${d.toISOString().slice(0, 10)}`)?.lista ?? [])).size),
+        totalFila: (f) => String(new Set(semanas.flatMap((d) => celdas.get(`${f}|${isoLocal(d)}`)?.lista ?? [])).size),
       }
     }
 

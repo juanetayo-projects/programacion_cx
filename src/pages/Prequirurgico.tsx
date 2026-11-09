@@ -13,6 +13,7 @@ import {
   CalendarClock, Search, Eraser, Eye, UserRound, Stethoscope, Bone, ClipboardCheck, AlertTriangle, CalendarDays,
   BellRing, MessageCircle, HelpCircle, ClipboardX,
 } from 'lucide-react'
+import { hoyBogota } from '../lib/fechas'
 
 // Gestión postquirúrgica: seguimiento del paciente (antes y después de la
 // cirugía) por Programación de cirugía y Gestión clínica. Notas con fecha,
@@ -47,7 +48,7 @@ const ESTADOS_ACTIVOS: Estado[] = ['procesado', 'programado', 'notificado', 'apl
 const ESTADOS_PROGRAMADOS: Estado[] = ['programado', 'notificado', 'aplazado', 'suspendido']
 const codigo = (id: number) => `SC-${String(id).padStart(6, '0')}`
 const DIA = 24 * 60 * 60 * 1000
-const hoyISO = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+const hoyISO = () => hoyBogota()
 
 /** La cirugía ya debió hacerse (o se hizo) y falta su cierre completo */
 const cierrePendiente = (s: Solicitud) =>

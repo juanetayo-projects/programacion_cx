@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { Modal, Spinner } from './ui'
 import { CheckCircle2, Eye, FileText, MailCheck, PackageCheck, Truck, Users, Printer } from 'lucide-react'
+import { aFecha } from '../lib/fechas'
 
 // Evidencias del proceso MOS para auditoría, visibles en todo momento: los
 // correos enviados (asegurador, proveedores, aviso a Programación) y las actas
@@ -50,7 +51,7 @@ export type Recepcion = {
   recibido_en: string
 }
 
-export const fechaHora = (v: string | null) => (v ? new Date(v).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : '—')
+export const fechaHora = (v: string | null) => (v ? aFecha(v).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : '—')
 const tamano = (b: number) => (b >= 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`)
 
 const PASO: Record<PasoCorreo, { titulo: string; icono: typeof MailCheck; color: string }> = {

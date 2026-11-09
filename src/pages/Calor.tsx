@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { PageHeader, FilterBar, MetricCard, Boton } from '../components/ui'
 import HeatmapDiaHora from '../components/HeatmapDiaHora'
 import { CalendarRange, Building2, TrendingUp, X } from 'lucide-react'
+import { hoyBogota, sumarDiasISO } from '../lib/fechas'
 
 type Registro = {
   id: number
@@ -24,8 +25,8 @@ const OPCIONES_ESTADO = [
 ] as const
 
 export default function Calor() {
-  const hace90 = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10)
-  const en90 = new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10)
+  const hace90 = sumarDiasISO(hoyBogota(), -90)
+  const en90 = sumarDiasISO(hoyBogota(), 90)
   const [desde, setDesde] = useState(hace90)
   const [hasta, setHasta] = useState(en90)
   const [filtroQuirofano, setFiltroQuirofano] = useState('')

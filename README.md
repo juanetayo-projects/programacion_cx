@@ -38,7 +38,7 @@ src/
 sql/               consultas T-SQL de GoMedisys
 scripts/gomedisys/ runner de las consultas (GitHub Actions)
 supabase/
-├── migrations/    0001-0039 (esquema, RLS, MOS, recepción, notas, autorización…)
+├── migrations/    0001-0040 (esquema, RLS, MOS, recepción, notas, autorización…)
 └── functions/     admin-usuarios, consulta-gomedisys, notificar-paciente,
                    notificar-asegurador, notificar-proveedor, registrar-recepcion
 docs/
@@ -70,6 +70,16 @@ Requiere `.env.local` (no versionado) con `VITE_SUPABASE_URL` y
   `cacsantabarbara.co`), `GITHUB_DISPATCH_TOKEN` (consultas a GoMedisys).
 - Datos clínicos (Ley 1581): RLS por rol en todas las tablas; buckets
   privados `soportes`, `mos` y `notas`; credenciales locales (`db/`) fuera de git.
+
+## Zona horaria
+
+Toda la app trabaja en **America/Bogota (UTC-05:00)**, sin depender de la zona
+configurada en el equipo: `src/lib/fechas.ts` (`hoyBogota`, `aFecha`,
+`enBogota`, `aInputBogota` / `desdeInputBogota`) y `instalarZonaBogota()` en
+`main.tsx`, que hace que `toLocale*()` muestre hora de Bogotá por defecto. La
+base de datos también está en `America/Bogota` (migración 0040). No usar
+`new Date().toISOString().slice(0, 10)` para "hoy" ni `new Date('yyyy-mm-dd')`
+para mostrar columnas `date`.
 
 ## Reglas de negocio validadas en la base de datos
 

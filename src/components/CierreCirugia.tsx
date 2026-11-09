@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { Modal, Boton, CLASE_CAMPO } from './ui'
 import { Stethoscope, AlertTriangle, Save } from 'lucide-react'
+import { aFecha, aInputBogota } from '../lib/fechas'
 
 // Cierre de la cirugía (Programación de cirugía): fecha y hora real de inicio
 // y fin, cirujano, procedimiento realizado y destino posoperatorio. Sin este
@@ -71,12 +72,8 @@ export function AlertaCierre({ s, contexto }: { s: Partial<CamposCierre>; contex
   )
 }
 
-function aLocal(iso: string | null) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
-}
+/** Valor para datetime-local en hora de Bogotá (ver lib/fechas.ts) */
+const aLocal = (iso: string | null) => aInputBogota(iso)
 
 /** Modal para registrar (o completar) la cirugía realizada */
 export function ModalCierreCirugia({ s, onCerrar, onGuardado }: { s: CamposCierre; onCerrar: () => void; onGuardado: () => void }) {
@@ -84,7 +81,7 @@ export function ModalCierreCirugia({ s, onCerrar, onGuardado }: { s: CamposCierr
   const inicioSugerido = s.cirugia_inicio ? aLocal(s.cirugia_inicio)
     : s.fecha_programada ? `${s.fecha_programada}T${(s.hora_programada ?? '07:00').slice(0, 5)}` : ''
   const finSugerido = s.cirugia_fin ? aLocal(s.cirugia_fin)
-    : inicioSugerido && s.tiempo_estimado_minutos ? aLocal(new Date(new Date(inicioSugerido).getTime() + s.tiempo_estimado_minutos * 60000).toISOString()) : ''
+    : inicioSugerido && s.tiempo_estimado_minutos ? aLocal(new Date(aFecha(inicioSugerido).getTime() + s.tiempo_estimado_minutos * 60000).toISOString()) : ''
 
   const [inicio, setInicio] = useState(inicioSugerido)
   const [fin, setFin] = useState(finSugerido)
@@ -95,12 +92,12 @@ export function ModalCierreCirugia({ s, onCerrar, onGuardado }: { s: CamposCierr
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
 
-  const duracion = inicio && fin ? Math.round((new Date(fin).getTime() - new Date(inicio).getTime()) / 60000) : null
+  const duracion = inicio && fin ? Math.round((aFecha(fin).getTime() - aFecha(inicio).getTime()) / 60000) : null
   const errores = [
     !inicio && 'fecha y hora de inicio',
     !fin && 'fecha y hora final',
     duracion !== null && duracion <= 0 && 'la hora final debe ser posterior al inicio',
-    fin && new Date(fin).getTime() > Date.now() + 5 * 60000 && 'la hora final no puede ser futura',
+    fin && aFecha(fin).getTime() > Date.now() + 5 * 60000 && 'la hora final no puede ser futura',
     !cirujano.trim() && 'cirujano',
     !procedimiento.trim() && 'procedimiento realizado',
     !destino && 'destino posoperatorio',
@@ -110,11 +107,11 @@ export function ModalCierreCirugia({ s, onCerrar, onGuardado }: { s: CamposCierr
     if (errores.length) { setError(`Revise: ${errores.join(', ')}.`); return }
     setGuardando(true)
     setError('')
-    const finIso = new Date(fin).toISOString()
+    const finIso = aFecha(fin).toISOString()
     const { error: e } = await sb.from('solicitudes_cirugia').update({
       estado: 'realizado',
       realizado_en: finIso,
-      cirugia_inicio: new Date(inicio).toISOString(),
+      cirugia_inicio: aFecha(inicio).toISOString(),
       cirugia_fin: finIso,
       cirujano_realizo: cirujano.trim(),
       procedimiento_realizado: procedimiento.trim(),
@@ -126,7 +123,7 @@ export function ModalCierreCirugia({ s, onCerrar, onGuardado }: { s: CamposCierr
     if (e) { setGuardando(false); setError(e.message); return }
     await sb.from('solicitudes_historial').insert({
       solicitud_id: s.id, accion: 'realizado', usuario_id: session?.user.id,
-      detalle: { inicio: new Date(inicio).toISOString(), fin: finIso, cirujano: cirujano.trim(), destino },
+      detalle: { inicio: aFecha(inicio).toISOString(), fin: finIso, cirujano: cirujano.trim(), destino },
     })
     setGuardando(false)
     onGuardado()

@@ -15,6 +15,7 @@ import {
   PackageCheck, Eye, Search, Eraser, Stethoscope, Truck, ClipboardList, MessageSquareText, UserRound,
   AlertTriangle, CheckCircle2, FileText,
 } from 'lucide-react'
+import { hoyBogota } from '../lib/fechas'
 
 // Recepción de materiales de osteosíntesis por Esterilización: por cada
 // remisión del proveedor se registra la cantidad recibida de cada ítem, los
@@ -39,7 +40,7 @@ type Solicitud = CamposAvanceMos & CamposFiltroMos & {
 type Vista = 'pendientes' | 'recibidos' | 'todos'
 const PENDIENTES_DE_RECIBIR = ['proveedor_notificado', 'proveedor_confirmado', 'material_parcial']
 const codigo = (id: number) => `SC-${String(id).padStart(6, '0')}`
-const hoyISO = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+const hoyISO = () => hoyBogota()
 
 export default function Esterilizacion() {
   const { perfil } = useAuth()

@@ -7,6 +7,7 @@ import { ModalRecordatorio } from './RecordatorioCita'
 import {
   CalendarClock, FileText, Image as ImageIcon, Plus, Save, StickyNote, Download, BarChart3, MessageCircle,
 } from 'lucide-react'
+import { enBogota, isoLocal, aFecha, desdeInputBogota } from '../lib/fechas'
 
 // Notas de seguimiento (Gestión clínica y Gestión postquirúrgica): inmutables,
 // con fecha, hora, usuario y rol fijados por el servidor, adjuntos con vista
@@ -65,7 +66,7 @@ const ROL_LABEL: Record<string, string> = {
   mos: 'MOS', esterilizacion: 'Esterilización',
 }
 
-export const fechaHora = (v: string | null) => (v ? new Date(v).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : '—')
+export const fechaHora = (v: string | null) => (v ? aFecha(v).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : '—')
 const tamano = (b: number) => (b >= 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`)
 const esImagen = (a: Adjunto) => a.tipo.startsWith('image/')
 const esPdf = (a: Adjunto) => a.tipo === 'application/pdf' || a.nombre.toLowerCase().endsWith('.pdf')
@@ -187,7 +188,7 @@ function FormNota({ solicitudId, ambito, itemId, tipos, conCita, fechaCirugia, f
         solicitud_id: solicitudId, ambito, mos_item_id: itemId,
         tipo_id: tipoId ? Number(tipoId) : null,
         descripcion: descripcion.trim(),
-        fecha_cita: conFecha && fechaCita ? new Date(fechaCita).toISOString() : null,
+        fecha_cita: conFecha && fechaCita ? desdeInputBogota(fechaCita) : null,
         adjuntos,
       })
       if (e) throw new Error([e.message, e.hint].filter(Boolean).join(' '))
@@ -271,11 +272,11 @@ function GraficoNotas({ notas, conCita }: { notas: Nota[]; conCita: boolean }) {
   const datos = useMemo(() => {
     const porSemana = new Map<string, Record<string, number | string>>()
     for (const n of [...notas].reverse()) {
-      const d = new Date(n.created_at)
+      const d = enBogota(n.created_at)
       const lunes = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7))
-      const clave = lunes.toISOString().slice(0, 10)
+      const clave = isoLocal(lunes)
       const serie = conCita ? (n.fase ?? 'general') : (n.mos_item_id ? 'item' : 'general')
-      const fila = porSemana.get(clave) ?? { semana: lunes.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }) }
+      const fila = porSemana.get(clave) ?? { semana: aFecha(clave).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }) }
       fila[serie] = (Number(fila[serie] ?? 0)) + 1
       porSemana.set(clave, fila)
     }

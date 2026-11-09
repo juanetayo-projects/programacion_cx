@@ -4,6 +4,7 @@ import { Modal, Boton, Badge, CLASE_CAMPO } from './ui'
 import { textoRecordatorioCita } from '../lib/mensajesSeguimiento'
 import { telefonoWhatsApp } from '../lib/mensajesNotificacion'
 import { Copy, ExternalLink, MessageCircle, CheckCircle2, CalendarX2, RefreshCw, BellRing } from 'lucide-react'
+import { aFecha } from '../lib/fechas'
 
 // Recordatorio de cita por WhatsApp Web: mensaje listo para copiar o abrir,
 // registro de "paciente notificado" y respuesta (confirmó / reprogramar / cancela).
@@ -20,7 +21,7 @@ export type CitaRecordatorio = {
   recordatorio_por_nombre: string | null
 }
 
-const fechaHora = (v: string | null) => (v ? new Date(v).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : '—')
+const fechaHora = (v: string | null) => (v ? aFecha(v).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : '—')
 
 export function ModalRecordatorio({ cita, paciente, onCerrar, onCambio }: {
   cita: CitaRecordatorio

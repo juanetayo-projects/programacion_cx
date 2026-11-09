@@ -1,5 +1,6 @@
 import { CalendarClock, Stethoscope, Activity, ChevronRight, Clock } from 'lucide-react'
 import { NumeroAnimado } from './Graficos'
+import { hoyBogota, fechaISOBogota, enBogota } from '../../lib/fechas'
 
 // Card principal del Dashboard: imagen del quirófano con la agenda del día
 // (programadas hoy, en curso, realizadas) y las próximas cirugías. Usa todas
@@ -21,11 +22,11 @@ export type SolHero = {
 }
 
 const PROGRAMADAS = ['programado', 'notificado', 'aplazado', 'suspendido']
-const hoyISO = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
-const fechaLocal = (iso: string) => new Date(new Date(iso).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+const hoyISO = () => hoyBogota()
+const fechaLocal = (iso: string) => fechaISOBogota(iso)
 
 function saludo() {
-  const h = new Date().getHours()
+  const h = enBogota().getHours()
   return h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches'
 }
 

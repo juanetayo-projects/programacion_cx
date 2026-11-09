@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { PageHeader, Boton, Modal } from '../components/ui'
 import { ChevronLeft, ChevronRight, Clock, User, Stethoscope, DatabaseZap } from 'lucide-react'
+import { hoyBogota, isoLocal } from '../lib/fechas'
 
 type Quirofano = { id: number; numero: number; nombre: string; color_calendario: string; estado: string }
 type Cirugia = {
@@ -30,35 +31,35 @@ function minutosDesdeHora(hora: string) {
 }
 
 function inicioSemana(fecha: string) {
-  const d = new Date(fecha + 'T00:00:00')
+  const d = new Date(fecha + 'T12:00:00')
   const dow = (d.getDay() + 6) % 7 // lunes = 0
   d.setDate(d.getDate() - dow)
-  return d.toISOString().slice(0, 10)
+  return isoLocal(d)
 }
 function finSemana(fecha: string) {
-  const d = new Date(inicioSemana(fecha) + 'T00:00:00')
+  const d = new Date(inicioSemana(fecha) + 'T12:00:00')
   d.setDate(d.getDate() + 6)
-  return d.toISOString().slice(0, 10)
+  return isoLocal(d)
 }
 function inicioMes(fecha: string) {
-  const d = new Date(fecha + 'T00:00:00')
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10)
+  const d = new Date(fecha + 'T12:00:00')
+  return isoLocal(new Date(d.getFullYear(), d.getMonth(), 1, 12))
 }
 function finMes(fecha: string) {
-  const d = new Date(fecha + 'T00:00:00')
-  return new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10)
+  const d = new Date(fecha + 'T12:00:00')
+  return isoLocal(new Date(d.getFullYear(), d.getMonth() + 1, 0, 12))
 }
 function sumarDias(fecha: string, n: number) {
-  const d = new Date(fecha + 'T00:00:00')
+  const d = new Date(fecha + 'T12:00:00')
   d.setDate(d.getDate() + n)
-  return d.toISOString().slice(0, 10)
+  return isoLocal(d)
 }
 function formatDiaCorto(fecha: string) {
-  const d = new Date(fecha + 'T00:00:00')
+  const d = new Date(fecha + 'T12:00:00')
   return `${DIAS_SEMANA[(d.getDay() + 6) % 7]} ${d.getDate()}`
 }
 function formatFechaLarga(fecha: string) {
-  const d = new Date(fecha + 'T00:00:00')
+  const d = new Date(fecha + 'T12:00:00')
   return d.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })
 }
 
@@ -66,7 +67,7 @@ type Hover = { x: number; y: number; fecha: string; quirofanoId?: number; quirof
 
 export default function Quirofanos() {
   const [vista, setVista] = useState<Vista>('dia')
-  const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10))
+  const [fecha, setFecha] = useState(hoyBogota())
   const [quirofanos, setQuirofanos] = useState<Quirofano[]>([])
   const [cirugias, setCirugias] = useState<Cirugia[]>([])
   const [detalle, setDetalle] = useState<Cirugia | null>(null)
@@ -119,9 +120,9 @@ export default function Quirofanos() {
   function cambiarPeriodo(delta: number) {
     if (vista === 'dia') { setFecha((f) => sumarDias(f, delta)); return }
     if (vista === 'semana') { setFecha((f) => sumarDias(f, delta * 7)); return }
-    const d = new Date(fecha + 'T00:00:00')
+    const d = new Date(fecha + 'T12:00:00')
     d.setMonth(d.getMonth() + delta)
-    setFecha(d.toISOString().slice(0, 10))
+    setFecha(isoLocal(d))
   }
 
   const totalPeriodo = cirugias.length
@@ -286,7 +287,7 @@ export default function Quirofanos() {
                 {semanasDelMes.map((fila, i) => (
                   <tr key={i} className="border-t border-slate-100">
                     {fila.map((d) => {
-                      const enMes = new Date(d + 'T00:00:00').getMonth() === new Date(fecha + 'T00:00:00').getMonth()
+                      const enMes = new Date(d + 'T12:00:00').getMonth() === new Date(fecha + 'T12:00:00').getMonth()
                       const items = cirugiasDelDia(d)
                       return (
                         <td

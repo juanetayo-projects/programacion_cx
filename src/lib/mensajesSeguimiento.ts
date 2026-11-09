@@ -1,3 +1,4 @@
+import { aFecha } from './fechas'
 // Mensaje de WhatsApp para recordar al paciente una cita de seguimiento
 // (pre o posquirúrgica) y pedir confirmación de asistencia o reprogramación.
 
@@ -33,7 +34,7 @@ function indicacion(tipo: string | null) {
 }
 
 export function textoRecordatorioCita(d: DatosRecordatorio) {
-  const f = new Date(d.fechaCita)
+  const f = aFecha(d.fechaCita)
   const fecha = f.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })
   const hora = f.toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' })
   const nombre = (d.paciente ?? '').split(' ').filter(Boolean).slice(0, 2).join(' ').toLowerCase().replace(/\b\p{L}/gu, (c) => c.toUpperCase())

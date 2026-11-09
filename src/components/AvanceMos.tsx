@@ -1,4 +1,5 @@
 import { MailCheck, ShieldCheck, ShieldX, Truck, PackageCheck, Building2, type LucideIcon } from 'lucide-react'
+import { aFecha } from '../lib/fechas'
 
 // Avance del proceso MOS (materiales de osteosíntesis) en 5 hitos. Se muestra
 // en Gestión de solicitudes, Gestión MOS y los detalles, para identificar a
@@ -17,7 +18,7 @@ export type CamposAvanceMos = {
 type EstadoHito = 'hecho' | 'rechazado' | 'en_espera' | 'pendiente'
 type Hito = { clave: string; titulo: string; icono: LucideIcon; estado: EstadoHito; fecha: string | null; detalle?: string }
 
-const fechaHora = (v: string | null) => (v ? new Date(v).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : null)
+const fechaHora = (v: string | null) => (v ? aFecha(v).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : null)
 
 export function hitosMos(s: CamposAvanceMos): Hito[] {
   const rechazado = s.mos_respuesta_asegurador === 'rechazado'

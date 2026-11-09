@@ -18,6 +18,7 @@ import { separarProcedimientos } from '../lib/cups'
 import {
   Stethoscope, Search, Eraser, Eye, UserRound, ClipboardList, Receipt, History, StickyNote, Save, Bone, CalendarClock, ShieldCheck, ClipboardCheck,
 } from 'lucide-react'
+import { aFecha } from '../lib/fechas'
 
 // Gestión clínica: el gestor clínico gestiona la AUTORIZACIÓN del asegurador
 // (sin ella no se programa ni se inicia ningún proceso de la cirugía),
@@ -83,8 +84,8 @@ const DIA = 86400000
 const COLUMNAS = ['Destino', 'Nombre e identificación', 'Admisión', 'Ubicación', 'Fecha de ingreso', 'Contrato', 'Tipo afiliado', 'Plan',
   'Procedimiento', 'Códigos CUPS', 'Observación de gestión', 'Fecha de ordenamiento', 'N.º autorización', 'Quién reporta',
   'Fecha reporte', 'Días', 'Nota adm. GC', 'Estado', '']
-const fechaCorta = (v: string | null) => (v ? new Date(v.length === 10 ? `${v}T12:00` : v).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—')
-const fechaHoraCorta = (v: string | null) => (v ? new Date(v).toLocaleString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '—')
+const fechaCorta = (v: string | null) => (v ? aFecha(v).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—')
+const fechaHoraCorta = (v: string | null) => (v ? aFecha(v).toLocaleString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '—')
 /** Días entre la fecha de ordenamiento y la fecha del reporte */
 function diasOrdenReporte(s: { fecha_ordenamiento: string | null; fecha_reporte: string }) {
   if (!s.fecha_ordenamiento) return null
