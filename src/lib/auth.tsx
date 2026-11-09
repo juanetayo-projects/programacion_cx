@@ -33,14 +33,29 @@ const Ctx = createContext<AuthCtx>({
 export const AVISO_LOGIN = 'aviso_login'
 const ESPERA_PERFIL_MS = 15000
 
-/** Segundos de desfase del reloj local respecto a la emisión del token (iat del servidor) */
-function desfaseDeToken(token: string) {
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
-    return typeof payload.iat === 'number' ? Date.now() / 1000 - payload.iat : null
-  } catch {
-    return null
+const UMBRAL_DESFASE_S = 120
+
+/**
+ * Segundos de desfase del reloj del equipo frente a now() del servidor
+ * (hora_servidor, migración 0041). Toma 3 muestras y usa la de menor tiempo de
+ * ida y vuelta, descontando la mitad del trayecto. null si no se pudo medir.
+ * (Antes se usaba el `iat` del token, pero al recuperar una sesión existente el
+ * token ya tiene minutos de antigüedad y daba falsos avisos.)
+ */
+async function medirDesfaseReloj(): Promise<number | null> {
+  let mejor: { rtt: number; desfase: number } | null = null
+  for (let i = 0; i < 3; i++) {
+    const t0 = Date.now()
+    const { data, error } = await supabase.rpc('hora_servidor')
+    const t1 = Date.now()
+    if (error || !data) continue
+    const servidor = Date.parse(String(data))
+    if (Number.isNaN(servidor)) continue
+    const rtt = t1 - t0
+    const desfase = ((t0 + t1) / 2 - servidor) / 1000
+    if (!mejor || rtt < mejor.rtt) mejor = { rtt, desfase }
   }
+  return mejor ? mejor.desfase : null
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -87,13 +102,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       .finally(() => setLoading(false))
 
-    const { data: sub } = supabase.auth.onAuthStateChange((evento, s) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((_evento, s) => {
       setSession(s)
-      // Recién emitido por el servidor: sirve para medir el desfase del reloj del equipo
-      if (s && (evento === 'SIGNED_IN' || evento === 'TOKEN_REFRESHED')) {
-        const d = desfaseDeToken(s.access_token)
-        setDesfaseReloj(d !== null && Math.abs(d) > 120 ? Math.round(d / 60) : null)
-      }
       // Fuera del callback: consultar Supabase dentro de él puede bloquear el cliente de auth
       if (s) setTimeout(() => cargarPerfil(s.user.id), 0)
       else { setPerfil(null); setPermisos(new Set()); setErrorPerfil(null) }
@@ -106,9 +116,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     window.addEventListener(EVENTO_SESION_EXPIRADA, expirada)
 
+    // Reloj del equipo frente al servidor: al abrir la app y cada 30 min
+    let medido = 0
+    const revisarReloj = async () => {
+      if (Date.now() - medido < 30 * 60_000) return
+      medido = Date.now()
+      const d = await medirDesfaseReloj()
+      setDesfaseReloj(d !== null && Math.abs(d) > UMBRAL_DESFASE_S ? Math.round(d / 60) : null)
+    }
+    revisarReloj()
+
     // Al volver a la pestaña, se renueva el token si venció mientras estaba en segundo plano
     const alVolver = () => {
       if (document.visibilityState !== 'visible') return
+      revisarReloj()
       supabase.auth.getSession().then(({ data }) => {
         const exp = data.session?.expires_at
         if (exp && exp * 1000 - Date.now() < 60_000) renovarSesion()

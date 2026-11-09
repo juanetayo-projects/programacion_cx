@@ -1528,6 +1528,7 @@ export type Database = {
       masiva_estado: { Args: never; Returns: Json }
       masiva_resultado: { Args: { p_id?: number }; Returns: Json }
       puede_consulta_masiva: { Args: never; Returns: boolean }
+      hora_servidor: { Args: never; Returns: string }
       tiene_componente: { Args: { p_componente: string; p_solicitud: number }; Returns: boolean }
       componente_bloquea: { Args: { p_componente: string; p_solicitud: number }; Returns: boolean }
       mos_item_registrar_cobro: {
