@@ -103,6 +103,12 @@ export function PanelAutorizacion({ solicitudId, s, puedeEscribir, onCambio }: {
   const dias = diasVigencia(s)
   const espera = e === 'solicitada' ? diasDesdeSolicitud(s) : null
   const correosDe = (id: number) => correos.filter((c) => c.autorizacion_id === id)
+  // Ya hay código de autorización del asegurador vigente: no se registran más
+  // gestiones ni se envían solicitudes (también lo valida registrar_autorizacion)
+  const codigoVigente = !!s.autorizacion_numero && !!s.autorizacion_vigencia_hasta && s.autorizacion_vigencia_hasta >= hoyLocal()
+  const motivoBloqueo = codigoVigente
+    ? `Ya existe la autorización N.º ${s.autorizacion_numero}, vigente hasta ${fecha(s.autorizacion_vigencia_hasta ?? null)}. Podrá registrar una nueva gestión cuando venza.`
+    : ''
 
   return (
     <div className="space-y-2">
@@ -111,17 +117,22 @@ export function PanelAutorizacion({ solicitudId, s, puedeEscribir, onCambio }: {
         <div className="min-w-0 flex-1">
           <div className="text-sm font-bold">{ESTADOS_AUT[e].label}</div>
           <div className="text-xs opacity-90">
-            {s.autorizacion_numero && <>N.º <b>{s.autorizacion_numero}</b> · </>}
-            {s.autorizacion_fecha && <>autorizada el {fecha(s.autorizacion_fecha)} · </>}
-            {s.autorizacion_vigencia_hasta && <>vigente hasta <b>{fecha(s.autorizacion_vigencia_hasta)}</b></>}
-            {dias !== null && <> ({dias >= 0 ? `${dias} día(s) restantes` : 'vencida'})</>}
-            {espera !== null && <>solicitada hace {espera} día(s)</>}
+            {[
+              s.autorizacion_numero && <>N.º <b>{s.autorizacion_numero}</b></>,
+              s.autorizacion_fecha && <>autorizada el {fecha(s.autorizacion_fecha)}</>,
+              s.autorizacion_vigencia_hasta && <>vigente hasta <b>{fecha(s.autorizacion_vigencia_hasta)}</b>{dias !== null && <> ({dias >= 0 ? `${dias} día(s) restantes` : 'vencida'})</>}</>,
+              espera !== null && <>solicitada hace {espera} día(s)</>,
+            ].filter(Boolean).map((parte, i) => <span key={i}>{i > 0 && ' · '}{parte}</span>)}
           </div>
         </div>
         {puedeEscribir && (
-          <Boton onClick={() => setRegistrar(true)} className="flex items-center gap-1.5 !py-1.5 text-xs"><ShieldCheck size={14} /> Registrar gestión</Boton>
+          <Boton onClick={() => setRegistrar(true)} disabled={codigoVigente} title={motivoBloqueo || 'Registrar una gestión de la autorización'}
+            className="flex items-center gap-1.5 !py-1.5 text-xs"><ShieldCheck size={14} /> Registrar gestión</Boton>
         )}
       </div>
+      {puedeEscribir && codigoVigente && (
+        <p className="flex items-center gap-1.5 rounded-md bg-emerald-50 px-2 py-1 text-xs text-emerald-800"><ShieldCheck size={13} className="shrink-0" /> {motivoBloqueo}</p>
+      )}
       {confirmacion && (
         <p className="flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">
           <CheckCircle2 size={15} className="shrink-0" /> {confirmacion}
@@ -141,8 +152,8 @@ export function PanelAutorizacion({ solicitudId, s, puedeEscribir, onCambio }: {
                   <Badge className={ESTADOS_AUT[h.estado].color}>{ESTADOS_AUT[h.estado].corto}</Badge>
                   <span className="text-slate-500">{fechaHora(h.created_at)} · {h.registrado_por_nombre ?? '—'}</span>
                   {puedeEscribir && ['solicitada', 'devuelta'].includes(h.estado) && (
-                    <button type="button" onClick={() => setEnviarDe(h)}
-                      className="ml-auto flex items-center gap-1 rounded-md border border-[#0D2D6B]/30 px-2 py-0.5 text-[11px] font-medium text-[#0D2D6B] transition hover:bg-[#0D2D6B]/5">
+                    <button type="button" onClick={() => setEnviarDe(h)} disabled={codigoVigente} title={motivoBloqueo || undefined}
+                      className="ml-auto flex items-center gap-1 rounded-md border border-[#0D2D6B]/30 px-2 py-0.5 text-[11px] font-medium text-[#0D2D6B] transition enabled:hover:bg-[#0D2D6B]/5 disabled:cursor-not-allowed disabled:opacity-40">
                       <Mail size={12} /> {correosDe(h.id).length ? 'Reenviar por correo' : 'Enviar por correo'}
                     </button>
                   )}

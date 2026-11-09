@@ -100,14 +100,16 @@ export function Modal({
   const { pos, ref, iniciarArrastre, reiniciar, arrastrando } = useArrastre()
   useEffect(() => { if (open) reiniciar() }, [open, reiniciar])
   if (!open) return null
-  return (
+  // Se dibuja en <body>: un modal abierto desde otro modal (que puede estar
+  // desplazado con transform) quedaba recortado dentro del primero.
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onClick={cerrableFuera && !arrastrando ? onClose : undefined}
     >
       <div
         ref={ref}
-        style={{ transform: `translate(${pos.x}px, ${pos.y}px)` }}
+        style={pos.x || pos.y ? { transform: `translate(${pos.x}px, ${pos.y}px)` } : undefined}
         className={`w-full ${ancho} max-h-[90vh] overflow-y-auto rounded-2xl ${fondo} shadow-2xl ${arrastrando ? 'select-none' : ''}`}
         onClick={(e) => e.stopPropagation()}
       >
@@ -140,7 +142,8 @@ export function Modal({
         )}
         <div className={titulo ? 'p-5' : 'px-5 pb-5 pt-2'}>{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

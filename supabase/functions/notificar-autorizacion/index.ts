@@ -53,6 +53,9 @@ Deno.serve(async (req) => {
     .eq('id', Number(body.autorizacionId)).maybeSingle()
   if (!aut) return json(404, { error: 'Registro de autorización no encontrado' })
   if (!['solicitada', 'devuelta'].includes(aut.estado)) return json(400, { error: 'Solo se envían por correo las gestiones "Solicitada" o "Devuelta"' })
+  // Con código de autorización vigente no se vuelve a solicitar (migración 0042)
+  const { data: vigente } = await admin.rpc('autorizacion_con_codigo_vigente', { p_solicitud: aut.solicitud_id })
+  if (vigente === true) return json(400, { error: 'La cirugía ya tiene un código de autorización vigente; no se envía una nueva solicitud.' })
 
   const { data: s } = await admin.from('solicitudes_cirugia')
     .select('nombre_paciente, documento_paciente, numero_ingreso, procedimiento, diagnostico_preoperatorio, especialista_ordena, nombre_medico_reporta, eps_gomedisys, especialidades(nombre)')
