@@ -10,7 +10,7 @@ import { ESTADOS_LABEL, type Estado } from '../lib/constantes'
 import {
   DatabaseZap, Search, CheckCircle2, Lock, Users, AlertTriangle, ListChecks, ArrowRight, X, Ban, RotateCw,
   CalendarDays, Eraser, FileSpreadsheet, UserRound, Stethoscope, ClipboardList, ShieldCheck, Hourglass,
-  Clock, History, ClipboardX, ClipboardCheck, Layers, RefreshCw, Info, ShieldAlert,
+  Clock, History, ClipboardX, ClipboardCheck, RefreshCw, Info, ShieldAlert, SlidersHorizontal,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -543,7 +543,7 @@ export default function ConsultaMasiva() {
   const accionConsulta = !filas ? 'Consultar GoMedisys' : dentroDeRango ? 'Actualizar consulta' : 'Consultar nuevo rango'
 
   return (
-    <div>
+    <div className={filas ? 'flex flex-col xl:h-full xl:min-h-0' : undefined}>
       <TituloEnHeader titulo="Consulta masiva GoMedisys" subtitulo="Los pacientes marcados pasan a Gestión Programación Cx">
         {otros.length > 0 && (
           <span className="hidden shrink-0 items-center gap-1.5 rounded-full bg-amber-300/90 px-3 py-1 text-xs font-medium text-[#0D2D6B] xl:flex" title={otros.map((o) => o.nombre).join(', ')}>
@@ -553,7 +553,7 @@ export default function ConsultaMasiva() {
       </TituloEnHeader>
 
       {/* Franja con la foto de la clínica: rango, consulta y estado del intervalo */}
-      <section className={`relative mb-4 overflow-hidden rounded-2xl text-white shadow-lg ${filas ? '' : 'min-h-[320px]'}`}>
+      <section className={`relative mb-3 shrink-0 overflow-hidden rounded-2xl text-white shadow-lg ${filas ? '' : 'min-h-[320px]'}`}>
         <img src={`${import.meta.env.BASE_URL}images/fachada.jpg`} alt="" aria-hidden
           className="mc-zoom absolute inset-y-0 right-0 h-full w-full object-cover object-[50%_40%] lg:w-[55%]" />
         <div className="absolute inset-0 bg-gradient-to-r from-[#0D2D6B] from-30% via-[#0D2D6B]/75 via-50% to-[#0D2D6B]/5" />
@@ -568,7 +568,7 @@ export default function ConsultaMasiva() {
             </div>
           )}
 
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+          <div className="flex flex-wrap items-end gap-x-3 gap-y-3">
             <div>
               <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-sky-100">Fechas programadas</span>
               <div className="flex items-center gap-2">
@@ -578,18 +578,11 @@ export default function ConsultaMasiva() {
                 <input type="date" value={hasta} min={desde} max={sumarDias(desde, 61)} onChange={(e) => setHasta(e.target.value)} aria-label="Hasta"
                   className={`${CLASE_CAMPO} w-[9.5rem] border-white/30 ${rangoValido ? '' : '!border-red-400 !bg-red-50'}`} />
               </div>
-              {filas && rango && rangoValido && (
-                <span className={`mt-1.5 flex items-center gap-1.5 text-[11px] font-medium ${dentroDeRango ? 'text-emerald-200' : 'text-amber-200'}`}>
-                  {dentroDeRango
-                    ? <><CheckCircle2 size={12} /> Filtra lo consultado ({ddmm(rango.desde)} – {ddmm(rango.hasta)}) al instante</>
-                    : <><AlertTriangle size={12} /> Fuera de lo consultado ({ddmm(rango.desde)} – {ddmm(rango.hasta)}): solo se ven esos días</>}
-                </span>
-              )}
             </div>
             <button
               onClick={intentarConsultar}
               disabled={consultando || cargandoInicial || !rangoValido}
-              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold shadow transition disabled:cursor-not-allowed disabled:opacity-60 ${
+              className={`flex h-[34px] items-center gap-2 rounded-lg px-4 text-sm font-semibold shadow transition disabled:cursor-not-allowed disabled:opacity-60 ${
                 bloqueado ? 'bg-white/15 text-white ring-1 ring-white/30 hover:bg-white/25' : 'bg-white text-[#0D2D6B] hover:bg-sky-50'
               }`}
             >
@@ -599,7 +592,7 @@ export default function ConsultaMasiva() {
             </button>
 
             {/* Estado del sistema: última consulta e intervalo */}
-            <div className="ml-auto flex items-center gap-3">
+            <div className="ml-auto flex items-center gap-3 self-center">
               {hayNueva && (
                 <button onClick={() => cargarResultado(ultima!.id)} className="flex items-center gap-1.5 rounded-full bg-amber-300 px-3 py-1 text-xs font-semibold text-[#0D2D6B] shadow hover:bg-amber-200">
                   <History size={13} /> Ver consulta más reciente{ultima?.nombre ? ` de ${ultima.nombre.split(' ')[0]}` : ''}
@@ -617,6 +610,14 @@ export default function ConsultaMasiva() {
             </div>
           </div>
 
+          {filas && rango && rangoValido && (
+            <p className={`mt-1.5 flex items-center gap-1.5 text-[11px] font-medium ${dentroDeRango ? 'text-emerald-200' : 'text-amber-200'}`}>
+              {dentroDeRango
+                ? <><CheckCircle2 size={12} /> Las fechas filtran lo consultado ({ddmm(rango.desde)} – {ddmm(rango.hasta)}) al instante</>
+                : <><AlertTriangle size={12} /> Fuera de lo consultado ({ddmm(rango.desde)} – {ddmm(rango.hasta)}): solo se ven esos días</>}
+            </p>
+          )}
+
           {!filas && (
             <div className="mt-6 grid gap-2 sm:grid-cols-3 lg:max-w-3xl">
               <TarjetaVidrio icono={Hourglass} titulo={`${estadoMasiva?.intervalo_minutos ?? 15} min entre consultas`} texto="Para todos los usuarios: protege el rendimiento de GoMedisys." />
@@ -628,7 +629,7 @@ export default function ConsultaMasiva() {
       </section>
 
       {errores.length > 0 && (
-        <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mb-3 shrink-0 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           <div className="flex items-center gap-2 font-medium"><AlertTriangle size={16} /> {filas ? 'Algunos días no se pudieron consultar:' : 'La consulta no se completó:'}</div>
           <ul className="ml-6 mt-1 list-disc text-xs">{errores.map((e) => <li key={e}>{e}</li>)}</ul>
           <Boton variante="secundario" onClick={intentarConsultar} className="mt-2 flex items-center gap-1.5 !py-1 text-xs"><RotateCw size={13} /> Reintentar</Boton>
@@ -640,32 +641,32 @@ export default function ConsultaMasiva() {
       )}
 
       {filas && (
-        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_290px]">
-          {/* Contenido: acciones + tabla */}
-          <div className="order-2 min-w-0 xl:order-1">
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                <ContadorCircular valor={visibles.length} etiqueta={vista === 'gestion' ? 'en gestión' : vista === 'todos' ? 'registros' : 'disponibles'} de={filas.length} />
-                <div className="space-y-1">
-                  <div className="flex items-center gap-3">
-                    <span className="flex items-center gap-1.5"><span className="h-3 w-1.5 rounded-full bg-emerald-500" /> Con boleta quirúrgica</span>
-                    <span className="flex items-center gap-1.5"><span className="h-3 w-1.5 rounded-full bg-amber-400" /> Sin boleta</span>
-                  </div>
-                  <div className="hidden text-slate-400 2xl:block">Clic en un registro para ver su detalle</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Boton variante="secundario" onClick={exportar} disabled={exportando || visibles.length === 0} className="flex items-center gap-2">
-                  <FileSpreadsheet size={16} /> {exportando ? 'Exportando…' : 'Exportar Excel'}
+        <div className="grid min-h-0 flex-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_280px] xl:grid-rows-[minmax(0,1fr)] xl:items-stretch">
+          {/* Contenido: indicadores que filtran + acciones + tabla */}
+          <div className="order-2 min-w-0 xl:order-1 xl:flex xl:min-h-0 xl:flex-col">
+            <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2">
+              <Segmento titulo="Vista" items={[
+                { label: 'Disponibles', valor: conteoVista.disponibles, activo: vista === 'disponibles', onClick: () => setVista('disponibles'), punto: 'bg-emerald-500', ayuda: 'Sin gestión en la app' },
+                { label: 'En gestión', valor: conteoVista.gestion, activo: vista === 'gestion', onClick: () => setVista('gestion'), punto: 'bg-violet-500', ayuda: 'Ya marcados: ocultos de Disponibles' },
+                { label: 'Todas', valor: conteoVista.todos, activo: vista === 'todos', onClick: () => setVista('todos'), punto: 'bg-sky-500', ayuda: duracion != null ? `Consultadas en ${(duracion / 1000).toFixed(1)} s` : 'Todas las programaciones' },
+              ]} />
+              <Segmento titulo="Boleta" items={[
+                { label: 'Con', valor: conteoBoleta.con, activo: filtroBoleta === 'con', onClick: () => setFiltroBoleta(filtroBoleta === 'con' ? '' : 'con'), punto: 'bg-emerald-500', ayuda: 'Con boleta quirúrgica (franja verde en la tabla)' },
+                { label: 'Sin', valor: conteoBoleta.sin, activo: filtroBoleta === 'sin', onClick: () => setFiltroBoleta(filtroBoleta === 'sin' ? '' : 'sin'), punto: 'bg-amber-400', ayuda: 'Sin boleta quirúrgica (franja ámbar en la tabla)' },
+              ]} />
+              <div className="ml-auto flex items-center gap-2">
+                <Boton variante="secundario" onClick={exportar} disabled={exportando || visibles.length === 0} className="flex items-center gap-1.5 !px-3" title="Exportar a Excel lo que se ve en la tabla">
+                  <FileSpreadsheet size={16} /> {exportando ? 'Exportando…' : 'Excel'}
                 </Boton>
-                <Boton onClick={abrirMarcar} disabled={seleccion.size === 0} className="flex items-center gap-2">
+                <Boton onClick={abrirMarcar} disabled={seleccion.size === 0} className="flex items-center gap-1.5 !px-3">
                   <ListChecks size={16} /> Marcar para gestión ({seleccion.size})
                 </Boton>
               </div>
             </div>
 
-            <div className="neu-card overflow-hidden">
-              <div className="tabla-scroll">
+            <div className="neu-card overflow-hidden xl:flex xl:min-h-0 xl:flex-1 xl:flex-col">
+              {/* En pantallas anchas el alto lo da el layout (sin scroll de página) */}
+              <div className="tabla-scroll xl:!max-h-none xl:min-h-0 xl:flex-1" data-alto-fijo>
                 <table className="tabla-cac w-full text-sm">
                   <thead className="bg-[#0D2D6B] text-left text-xs font-semibold uppercase text-white">
                     <tr>
@@ -676,9 +677,9 @@ export default function ConsultaMasiva() {
                       <th className="px-3 py-2.5">Programada</th>
                       <th className="min-w-[200px] px-3 py-2.5">Paciente</th>
                       <th className="px-3 py-2.5">Boleta</th>
-                      <th className="px-3 py-2.5">Contrato</th>
+                      <th className="min-w-[150px] px-3 py-2.5">Contrato</th>
                       <th className="px-3 py-2.5">Procedimientos</th>
-                      <th className="px-3 py-2.5">Ordena / Opera</th>
+                      <th className="min-w-[190px] px-3 py-2.5">Ordena / Opera</th>
                       <th className="px-3 py-2.5">Estado GM</th>
                     </tr>
                   </thead>
@@ -754,70 +755,68 @@ export default function ConsultaMasiva() {
             </div>
           </div>
 
-          {/* Barra lateral: indicadores que filtran + filtros sobre la foto de la clínica */}
-          <aside className="order-1 min-w-0 space-y-3 xl:sticky xl:top-0 xl:order-2 xl:max-h-[calc(100vh-7.5rem)] xl:overflow-y-auto xl:overscroll-contain xl:p-1">
-            <PanelIndicadores titulo="Resultado de la consulta" items={[
-              { label: 'Disponibles', hint: 'Sin gestión en la app', value: conteoVista.disponibles, icono: CheckCircle2, color: 'verde', activo: vista === 'disponibles', onClick: () => setVista('disponibles') },
-              { label: 'Ya en gestión', hint: 'Ocultos de la lista', value: conteoVista.gestion, icono: Lock, color: 'violeta', activo: vista === 'gestion', onClick: () => setVista('gestion') },
-              { label: 'Todas', hint: duracion != null ? `Consultadas en ${(duracion / 1000).toFixed(1)} s` : 'Programaciones', value: conteoVista.todos, icono: Layers, color: 'azul', activo: vista === 'todos', onClick: () => setVista('todos') },
-            ]} />
-
-            <PanelIndicadores titulo="Boleta quirúrgica" accion={filtroBoleta && <button onClick={() => setFiltroBoleta('')} className="text-xs font-medium text-[#16468E] hover:underline">Quitar filtro</button>} items={[
-              { label: 'Con boleta', hint: 'Duración, prioridad y destino', value: conteoBoleta.con, icono: ClipboardCheck, color: 'verde', activo: filtroBoleta === 'con', onClick: () => setFiltroBoleta(filtroBoleta === 'con' ? '' : 'con') },
-              { label: 'Sin boleta', hint: 'Revisar antes de programar', value: conteoBoleta.sin, icono: ClipboardX, color: 'ambar', activo: filtroBoleta === 'sin', onClick: () => setFiltroBoleta(filtroBoleta === 'sin' ? '' : 'sin') },
-            ]}>
-              <BarraProporcion con={conteoBoleta.con} sin={conteoBoleta.sin} />
-            </PanelIndicadores>
-
-            <section className="relative overflow-hidden rounded-2xl bg-[#0D2D6B] text-white shadow-lg">
-              <div className="h-28 overflow-hidden">
+          {/* Barra lateral: filtros sobre la foto de la clínica (se desplaza sola si no cabe) */}
+          <aside className="order-1 min-w-0 xl:order-2 xl:h-full xl:min-h-0">
+            <section className="relative flex flex-col overflow-hidden rounded-2xl bg-[#0D2D6B] text-white shadow-lg xl:h-full">
+              <div className="relative h-20 shrink-0 overflow-hidden">
                 <img src={`${import.meta.env.BASE_URL}images/torre_salud.png`} alt="Torre de Salud — Clínica Santa Bárbara"
-                  className="h-[190px] w-full object-cover object-top" />
-              </div>
-              <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(13,45,107,0.05)_0,rgba(13,45,107,0.6)_70px,#0D2D6B_112px)]" />
-              <div className="relative -mt-10 space-y-2.5 p-4 pt-0">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold">Filtros</span>
-                  <button onClick={limpiarFiltros} disabled={!hayFiltros} className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-sky-100 transition hover:bg-white/15 disabled:opacity-40">
+                  className="h-[150px] w-full object-cover object-top" />
+                <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(13,45,107,0.1)_0,rgba(13,45,107,0.75)_55px,#0D2D6B_80px)]" />
+                <div className="absolute inset-x-4 bottom-1.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-sm font-semibold"><SlidersHorizontal size={15} /> Filtros</span>
+                  <button onClick={limpiarFiltros} disabled={!hayFiltros} title="Limpiar filtros"
+                    className="flex items-center gap-1 rounded-md bg-white/10 px-2 py-0.5 text-xs text-white transition hover:bg-white/25 disabled:opacity-40">
                     <Eraser size={13} /> Limpiar
                   </button>
                 </div>
-                <div className="filtros-columna">
-                  <CampoLateral etiqueta="Buscar">
-                    <div className="relative">
-                      <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                      <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Paciente, documento, ingreso, médico…" className={`${CLASE_CAMPO} w-full pl-8`} />
-                    </div>
-                  </CampoLateral>
-                  <CampoLateral etiqueta="Boleta quirúrgica">
-                    <div className="grid grid-cols-3 gap-1 rounded-lg bg-white/10 p-1">
-                      {([['', 'Todas'], ['con', 'Con'], ['sin', 'Sin']] as const).map(([v, l]) => (
-                        <button key={v} onClick={() => setFiltroBoleta(v)}
-                          className={`rounded-md py-1 text-xs font-semibold transition ${filtroBoleta === v ? 'bg-white text-[#0D2D6B] shadow' : 'text-white/80 hover:bg-white/15'}`}>{l}</button>
-                      ))}
-                    </div>
-                  </CampoLateral>
-                  <CampoLateral etiqueta="Tipo de orden">
-                    <select value={filtroTipoOrden} onChange={(e) => setFiltroTipoOrden(e.target.value)} className={`${CLASE_CAMPO} w-full`}>
-                      <option value="">Todas</option>
-                      {opciones.tiposOrden.map((t) => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </CampoLateral>
-                  <CampoLateral etiqueta="Contrato">
-                    <select value={filtroContrato} onChange={(e) => setFiltroContrato(e.target.value)} className={`${CLASE_CAMPO} w-full`}>
-                      <option value="">Todos</option>
-                      {opciones.contratos.map((c) => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </CampoLateral>
-                  <CampoLateral etiqueta="Estado en GoMedisys">
-                    <select value={filtroEstadoGM} onChange={(e) => setFiltroEstadoGM(e.target.value)} className={`${CLASE_CAMPO} w-full`}>
-                      <option value="">Todos</option>
-                      {opciones.estados.map((e) => <option key={e} value={e}>{e}</option>)}
-                    </select>
-                  </CampoLateral>
-                  <CampoLateral etiqueta="Procedimiento">
-                    <input value={filtroProcedimiento} onChange={(e) => setFiltroProcedimiento(e.target.value)} placeholder="Código o nombre…" className={`${CLASE_CAMPO} w-full`} />
-                  </CampoLateral>
+              </div>
+              <div className="scroll-oscuro min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 pb-4 pt-2">
+                <CampoLateral etiqueta="Buscar">
+                  <div className="relative">
+                    <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Paciente, documento, ingreso…" className={`${CLASE_CAMPO} w-full pl-8`} />
+                  </div>
+                </CampoLateral>
+                <CampoLateral etiqueta="Boleta quirúrgica">
+                  <div className="grid grid-cols-3 gap-1 rounded-lg bg-white/10 p-1">
+                    {([['', 'Todas'], ['con', 'Con'], ['sin', 'Sin']] as const).map(([v, l]) => (
+                      <button key={v} onClick={() => setFiltroBoleta(v)}
+                        className={`rounded-md py-1 text-xs font-semibold transition ${filtroBoleta === v ? 'bg-white text-[#0D2D6B] shadow' : 'text-white/80 hover:bg-white/15'}`}>{l}</button>
+                    ))}
+                  </div>
+                </CampoLateral>
+<div className="grid grid-cols-2 gap-2">
+                <CampoLateral etiqueta="Tipo de orden">
+                  <select value={filtroTipoOrden} onChange={(e) => setFiltroTipoOrden(e.target.value)} className={`${CLASE_CAMPO} w-full`}>
+                    <option value="">Todas</option>
+                    {opciones.tiposOrden.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </CampoLateral>
+                <CampoLateral etiqueta="Estado GM">
+                  <select value={filtroEstadoGM} onChange={(e) => setFiltroEstadoGM(e.target.value)} className={`${CLASE_CAMPO} w-full`}>
+                    <option value="">Todos</option>
+                    {opciones.estados.map((e) => <option key={e} value={e}>{e}</option>)}
+                  </select>
+                </CampoLateral>
+                </div>
+                <CampoLateral etiqueta="Contrato">
+                  <select value={filtroContrato} onChange={(e) => setFiltroContrato(e.target.value)} className={`${CLASE_CAMPO} w-full`} title={filtroContrato || 'Todos'}>
+                    <option value="">Todos</option>
+                    {opciones.contratos.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </CampoLateral>
+                <CampoLateral etiqueta="Procedimiento">
+                  <input value={filtroProcedimiento} onChange={(e) => setFiltroProcedimiento(e.target.value)} placeholder="Código o nombre…" className={`${CLASE_CAMPO} w-full`} />
+                </CampoLateral>
+                <div className="rounded-xl bg-white/10 px-3 py-2.5">
+                  <div className="mb-1.5 flex items-center justify-between text-[11px] font-medium uppercase tracking-wide text-sky-100">
+                    <span>Con boleta</span><span className="tabular-nums">{conteoBoleta.con + conteoBoleta.sin ? Math.round((conteoBoleta.con / (conteoBoleta.con + conteoBoleta.sin)) * 100) : 0}%</span>
+                  </div>
+                  <div className="flex h-2 gap-0.5 overflow-hidden rounded-full bg-white/15">
+                    <div className="bg-emerald-400 transition-all" style={{ width: `${(conteoBoleta.con / (conteoBoleta.con + conteoBoleta.sin || 1)) * 100}%` }} />
+                    <div className="bg-amber-300 transition-all" style={{ width: `${(conteoBoleta.sin / (conteoBoleta.con + conteoBoleta.sin || 1)) * 100}%` }} />
+                  </div>
+                  <p className="mt-1.5 text-[11px] text-white/70">{conteoBoleta.con} con boleta · {conteoBoleta.sin} sin boleta en la vista actual</p>
                 </div>
               </div>
             </section>
@@ -1009,6 +1008,26 @@ export default function ConsultaMasiva() {
 // Subcomponentes
 // ---------------------------------------------------------------------------
 
+/** Indicadores compactos que filtran (un clic activa / desactiva) */
+function Segmento({ titulo, items }: {
+  titulo: string
+  items: { label: string; valor: number; activo: boolean; onClick: () => void; punto: string; ayuda: string }[]
+}) {
+  return (
+    <div className="flex items-center gap-1 rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200">
+      <span className="px-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">{titulo}</span>
+      {items.map((i) => (
+        <button key={i.label} type="button" onClick={i.onClick} title={i.ayuda} aria-pressed={i.activo}
+          className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition ${i.activo ? 'bg-[#0D2D6B] text-white shadow' : 'text-slate-600 hover:bg-[#0D2D6B]/5'}`}>
+          <span className={`h-2 w-2 rounded-full ${i.punto}`} />
+          {i.label}
+          <span className={`rounded-full px-1.5 text-[11px] font-bold tabular-nums ${i.activo ? 'bg-white/20' : 'bg-slate-100 text-[#0D2D6B]'}`}>{i.valor}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function CampoLateral({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
   return (
     <label className="block">
@@ -1082,76 +1101,6 @@ function EstadoIntervalo({ cargando, enCurso, ahora, restante, intervaloMs, ulti
           ? <div className="text-white/70"><Clock size={11} className="mr-1 inline" />Última {haceTexto(ahora - Date.parse(ultima.terminado))}{ultima.nombre ? ` · ${ultima.nombre}` : ''}{duracion != null ? ` · ${(duracion / 1000).toFixed(0)} s` : ''}</div>
           : <div className="text-white/70"><Info size={11} className="mr-1 inline" />Aún no hay consultas registradas</div>}
       </div>
-    </div>
-  )
-}
-
-/** Conteo en tarjeta circular (skill cac-fullstack-app §3.3) */
-function ContadorCircular({ valor, etiqueta, de }: { valor: number; etiqueta: string; de?: number }) {
-  return (
-    <div className="grid h-[72px] w-[72px] shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#0D2D6B] to-[#16468E] p-[3px] shadow transition hover:from-[#16468E] hover:to-[#2563A8]">
-      <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-white text-center">
-        <span className="text-lg font-bold leading-none text-[#0D2D6B] tabular-nums">{valor}</span>
-        <span className="mt-0.5 text-[9px] font-medium uppercase leading-tight tracking-wide text-slate-500">{etiqueta}</span>
-        {de !== undefined && <span className="text-[9px] leading-tight text-slate-400">de {de}</span>}
-      </div>
-    </div>
-  )
-}
-
-const TONO_IND = {
-  azul: 'bg-sky-100 text-sky-700',
-  verde: 'bg-emerald-100 text-emerald-700',
-  ambar: 'bg-amber-100 text-amber-700',
-  violeta: 'bg-violet-100 text-violet-700',
-} as const
-
-type IndicadorItem = { label: string; hint?: string; value: number; icono: LucideIcon; color: keyof typeof TONO_IND; activo?: boolean; onClick?: () => void }
-
-/** Indicadores de la barra lateral: cada fila es también un filtro (skill §3.2) */
-function PanelIndicadores({ titulo, accion, items, children }: { titulo: string; accion?: ReactNode; items: IndicadorItem[]; children?: ReactNode }) {
-  return (
-    <section className="neu-card p-3">
-      <header className="mb-1.5 flex items-center justify-between gap-2 px-1">
-        <h2 className="text-sm font-semibold text-[#0D2D6B]">{titulo}</h2>
-        {accion}
-      </header>
-      {children}
-      <ul className="space-y-0.5">
-        {items.map((i) => {
-          const contenido = (
-            <>
-              <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${TONO_IND[i.color]}`}><i.icono size={16} /></span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm text-slate-700">{i.label}</span>
-                {i.hint && <span className="block truncate text-[11px] text-slate-500">{i.hint}</span>}
-              </span>
-              <span className="shrink-0 text-lg font-bold tabular-nums text-[#0D2D6B]">{i.value}</span>
-            </>
-          )
-          const cls = `flex w-full items-center gap-2.5 rounded-xl px-1.5 py-1.5 text-left transition-colors ${i.onClick ? 'hover:bg-[#0D2D6B]/5' : ''} ${i.activo ? 'bg-[#0D2D6B]/[0.07] ring-1 ring-[#16468E]/30' : ''}`
-          return (
-            <li key={i.label}>
-              {i.onClick ? <button onClick={i.onClick} aria-pressed={i.activo} className={cls}>{contenido}</button> : <div className={cls}>{contenido}</div>}
-            </li>
-          )
-        })}
-      </ul>
-    </section>
-  )
-}
-
-/** Proporción con / sin boleta */
-function BarraProporcion({ con, sin }: { con: number; sin: number }) {
-  const total = con + sin || 1
-  const pct = Math.round((con / total) * 100)
-  return (
-    <div className="mb-2 px-1">
-      <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full bg-slate-100">
-        <div className="bg-emerald-500 transition-all" style={{ width: `${(con / total) * 100}%` }} title={`Con boleta: ${con}`} />
-        <div className="bg-amber-400 transition-all" style={{ width: `${(sin / total) * 100}%` }} title={`Sin boleta: ${sin}`} />
-      </div>
-      <div className="mt-1 text-[11px] text-slate-500"><b className="text-emerald-700">{pct}%</b> de los registros mostrados tiene boleta</div>
     </div>
   )
 }
