@@ -157,7 +157,8 @@ export default function Solicitudes() {
   const [sinMos, setSinMos] = useState<Solicitud | null>(null)
   // Boleta quirúrgica (componente de GoMedisys): Sí/No en la tabla y requisito para programar
   const idsSolicitudes = useMemo(() => filas.map((f) => f.id), [filas])
-  const gmBoleta = useComponentesGM('boleta', idsSolicitudes)
+  // El botón del componente trae la boleta de GoMedisys por # de ingreso (migración 0043)
+  const gmBoleta = useComponentesGM('boleta', idsSolicitudes, () => { cargar() })
   const bloqueoBoleta = useBloqueoComponente('boleta', gmBoleta)
   const [seguimiento, setSeguimiento] = useState<{ id: number; tipo: 'clinica' | 'postquirurgico' | 'esterilizacion'; titulo: string } | null>(null)
   const [resumen, setResumen] = useState<{ notas: ResumenNota[]; items: ResumenItem[]; actas: Record<number, number> }>({ notas: [], items: [], actas: {} })

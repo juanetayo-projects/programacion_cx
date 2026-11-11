@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
-import { ClipboardCheck, ClipboardX, DatabaseZap, Lock, Stethoscope, Info, FileText } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ClipboardCheck, ClipboardX, DatabaseZap, Lock, Stethoscope, Info, FileText, Loader2, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { consultarGoMedisys } from '../lib/gomedisys'
+import { consultarGoMedisys, ErrorConsultaGM } from '../lib/gomedisys'
 import { Modal, Boton } from './ui'
 import { PanelLateral, Grupo, Dato } from './PanelLateral'
 
@@ -10,6 +10,10 @@ import { PanelLateral, Grupo, Dato } from './PanelLateral'
 // Sí → panel derecho con los datos del componente. No → aviso al usuario para
 // que el médico lo diligencie en GoMedisys + botón para traer solo ese
 // componente (el script está en desarrollo: `script_disponible`).
+//
+// Boleta quirúrgica (migración 0043): el botón de la celda / panel consulta
+// GoMedisys por el # de ingreso de la solicitud. Una vez traída, la consulta
+// queda inhabilitada para no consumir recursos de la base de datos.
 
 export type CodigoComponente = 'boleta' | 'nota_mos' | 'nota_gestion_clinica' | 'nota_posqx'
 
@@ -39,7 +43,9 @@ const CORTO: Record<CodigoComponente, string> = {
 }
 
 /** Configuración de los componentes y notas traídas de GoMedisys para un módulo */
-export function useComponentesGM(codigo: CodigoComponente, solicitudIds: number[]) {
+export function useComponentesGM(codigo: CodigoComponente, solicitudIds: number[], onTraido?: () => void) {
+  const alTraer = useRef(onTraido)
+  alTraer.current = onTraido
   const [config, setConfig] = useState<ConfigComponente | null>(null)
   const [notas, setNotas] = useState<Map<number, NotaGM>>(new Map())
   const clave = solicitudIds.join(',')
@@ -58,12 +64,39 @@ export function useComponentesGM(codigo: CodigoComponente, solicitudIds: number[
 
   useEffect(() => { recargar() }, [recargar])
 
+  // Consultas en curso por solicitud (compartidas por la celda, el panel y el aviso)
+  const [consultando, setConsultando] = useState<Set<number>>(new Set())
+  /** Ya se trajo de GoMedisys: la consulta queda inhabilitada */
+  const consultado = useCallback((s: SolicitudConBoleta) => notas.has(s.id), [notas])
+  const puedeConsultar = useCallback((s: SolicitudConBoleta) =>
+    !!config?.script_disponible && !notas.has(s.id) && !consultando.has(s.id) && !!s.numero_ingreso?.trim(), [config, notas, consultando])
+
+  /** Trae el componente de GoMedisys. Devuelve true si quedó guardado. */
+  const traer = useCallback(async (s: SolicitudConBoleta): Promise<boolean> => {
+    setConsultando((c) => new Set(c).add(s.id))
+    try {
+      await consultarGoMedisys('componente', { componente: codigo, solicitud: String(s.id) })
+      // El trigger de la migración 0043 guarda la nota al terminar el trabajo; se relee
+      const { data } = await supabase.from('notas_gomedisys').select('solicitud_id')
+        .eq('solicitud_id', s.id).eq('componente', codigo).maybeSingle()
+      await recargar()
+      if (!data) throw new Error(`GoMedisys no tiene ${config?.nombre ?? CORTO[codigo]} registrada para el ingreso ${s.numero_ingreso ?? '—'}. Solicite al médico diligenciarla y vuelva a consultar.`)
+      alTraer.current?.() // la solicitud pudo completarse con datos de la boleta
+      return true
+    } catch (e) {
+      if (e instanceof ErrorConsultaGM && e.codigo === 'ya_consultado') { await recargar(); alTraer.current?.(); return true }
+      throw e
+    } finally {
+      setConsultando((c) => { const n = new Set(c); n.delete(s.id); return n })
+    }
+  }, [codigo, config, recargar])
+
   const tiene = useCallback((s: SolicitudConBoleta) =>
     notas.has(s.id) || (codigo === 'boleta' && !!s.boleta_quirurgica?.trim()), [notas, codigo])
   // Mientras carga la configuración se asume que exige (no deja avanzar por error)
   const bloquea = useCallback((s: SolicitudConBoleta) => (config?.exige ?? true) && !tiene(s), [config, tiene])
 
-  return { config, notas, tiene, bloquea, recargar }
+  return { config, notas, tiene, bloquea, recargar, traer, consultando, consultado, puedeConsultar }
 }
 
 /** Celda Sí / No; el clic abre el panel con los datos o el aviso para diligenciarlo */
@@ -74,7 +107,7 @@ export function CeldaComponente({ s, codigo, gm, compacto = false }: {
   const si = gm.tiene(s)
   const exige = gm.config?.exige ?? true
   return (
-    <>
+    <span className="inline-flex items-center gap-1">
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); setAbierto(true) }}
@@ -90,10 +123,44 @@ export function CeldaComponente({ s, codigo, gm, compacto = false }: {
         {si ? 'Sí' : 'No'}
         {!si && exige && <Lock size={10} />}
       </button>
+      {gm.config?.script_disponible && <BotonConsultaGM s={s} gm={gm} />}
       {abierto && (si
         ? <PanelComponente s={s} codigo={codigo} gm={gm} onCerrar={() => setAbierto(false)} />
         : <ModalComponenteFaltante s={s} codigo={codigo} gm={gm} onCerrar={() => setAbierto(false)} />)}
-    </>
+    </span>
+  )
+}
+
+/** Botón compacto para traer el componente de GoMedisys; se inhabilita una vez consultado */
+function BotonConsultaGM({ s, gm }: { s: SolicitudConBoleta; gm: ReturnType<typeof useComponentesGM> }) {
+  const [error, setError] = useState('')
+  const nombre = gm.config?.nombre ?? 'componente'
+  const enCurso = gm.consultando.has(s.id)
+  const hecho = gm.consultado(s)
+  const sinIngreso = !s.numero_ingreso?.trim()
+  const titulo = hecho ? `${nombre} ya consultada en GoMedisys (consulta inhabilitada)`
+    : enCurso ? 'Consultando GoMedisys…'
+      : sinIngreso ? 'La solicitud no tiene # de ingreso'
+        : error || `Actualizar ${nombre} desde GoMedisys (ingreso ${s.numero_ingreso})`
+  return (
+    <button
+      type="button"
+      disabled={!gm.puedeConsultar(s)}
+      onClick={async (e) => {
+        e.stopPropagation()
+        setError('')
+        try { await gm.traer(s) } catch (err) { setError((err as Error).message) }
+      }}
+      title={titulo}
+      aria-label={titulo}
+      className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition ${
+        hecho ? 'cursor-default border-emerald-200 bg-emerald-50 text-emerald-500'
+          : error ? 'border-red-300 bg-red-50 text-red-600 hover:bg-red-100'
+            : 'border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50'
+      }`}
+    >
+      {enCurso ? <Loader2 size={12} className="animate-spin" /> : hecho ? <CheckCircle2 size={12} /> : <DatabaseZap size={12} />}
+    </button>
   )
 }
 
@@ -106,14 +173,31 @@ export function PanelComponente({ s, codigo, gm, onCerrar }: {
 }) {
   const nota = gm.notas.get(s.id)
   const datos = Object.entries(nota?.datos ?? {}).filter(([, v]) => v !== null && v !== '')
+  const [error, setError] = useState('')
+  const nombre = gm.config?.nombre ?? CORTO[codigo]
+  const enCurso = gm.consultando.has(s.id)
+  async function actualizar() {
+    setError('')
+    try { await gm.traer(s) } catch (e) { setError((e as Error).message) }
+  }
   return (
     <PanelLateral
       titulo={gm.config?.nombre ?? CORTO[codigo]}
       subtitulo={`${s.nombre_paciente ?? ''} · Doc ${s.documento_paciente ?? '—'} · Ingreso ${s.numero_ingreso ?? '—'}`}
       insignias={<span className="rounded-full bg-emerald-400/25 px-2 py-0.5 font-semibold text-emerald-100">Diligenciada en GoMedisys</span>}
       onCerrar={onCerrar}
-      pie={<Boton variante="fantasma" onClick={onCerrar} className="ml-auto">Cerrar</Boton>}
+      pie={<>
+        {gm.config?.script_disponible && (
+          <Boton onClick={actualizar} disabled={!gm.puedeConsultar(s)} className="flex items-center gap-2"
+            title={nota ? 'Consulta inhabilitada: los datos ya se trajeron de GoMedisys' : `Consultar ${nombre} en GoMedisys por el ingreso ${s.numero_ingreso ?? '—'}`}>
+            {enCurso ? <Loader2 size={16} className="animate-spin" /> : nota ? <CheckCircle2 size={16} /> : <DatabaseZap size={16} />}
+            {enCurso ? 'Consultando GoMedisys…' : nota ? 'Datos ya consultados' : 'Actualizar desde GoMedisys'}
+          </Boton>
+        )}
+        <Boton variante="fantasma" onClick={onCerrar} className="ml-auto">Cerrar</Boton>
+      </>}
     >
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{error}</p>}
       {codigo === 'boleta' && !nota ? (
         <Grupo color="boleta" icono={FileText} titulo="Boleta quirúrgica">
           <Dato etiqueta="Duración estimada" valor={s.tiempo_estimado_minutos ? `${s.tiempo_estimado_minutos} min` : null} />
@@ -139,23 +223,18 @@ export function PanelComponente({ s, codigo, gm, onCerrar }: {
 export function ModalComponenteFaltante({ s, codigo, gm, onCerrar }: {
   s: SolicitudConBoleta; codigo: CodigoComponente; gm: ReturnType<typeof useComponentesGM>; onCerrar: () => void
 }) {
-  const [trayendo, setTrayendo] = useState(false)
   const [error, setError] = useState('')
   const nombre = gm.config?.nombre ?? CORTO[codigo]
   const exige = gm.config?.exige ?? true
   const disponible = !!gm.config?.script_disponible
+  const trayendo = gm.consultando.has(s.id)
 
   async function traer() {
-    setTrayendo(true)
     setError('')
     try {
-      await consultarGoMedisys('componente', { componente: codigo, solicitud: String(s.id) })
-      await gm.recargar()
-      onCerrar()
+      if (await gm.traer(s)) onCerrar()
     } catch (e) {
       setError((e as Error).message)
-    } finally {
-      setTrayendo(false)
     }
   }
 
@@ -188,9 +267,9 @@ export function ModalComponenteFaltante({ s, codigo, gm, onCerrar }: {
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-1">
           <Boton variante="fantasma" onClick={onCerrar}>Cerrar</Boton>
-          <Boton onClick={traer} disabled={!disponible || trayendo} className="flex items-center gap-2"
-            title={disponible ? `Consultar solo ${nombre} en GoMedisys` : 'Script en desarrollo'}>
-            <DatabaseZap size={16} /> {trayendo ? 'Consultando GoMedisys…' : 'Traer datos de GoMedisys'}
+          <Boton onClick={traer} disabled={!gm.puedeConsultar(s)} className="flex items-center gap-2"
+            title={disponible ? `Consultar solo ${nombre} en GoMedisys por el ingreso ${s.numero_ingreso ?? '—'}` : 'Script en desarrollo'}>
+            {trayendo ? <Loader2 size={16} className="animate-spin" /> : <DatabaseZap size={16} />} {trayendo ? 'Consultando GoMedisys…' : 'Traer datos de GoMedisys'}
           </Boton>
         </div>
       </div>

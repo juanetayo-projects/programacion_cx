@@ -8,6 +8,7 @@ import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2'
 // runners de GitHub (Azure) sí tienen acceso. Ver supabase/migrations/0017.
 //
 // Body: { tipo: 'masiva', desde, hasta } | { tipo: 'paciente', valor } | { tipo: 'detalle', valor, documento }
+//     | { tipo: 'componente', componente: 'boleta', solicitud } — el # de ingreso se toma de la solicitud
 // Respuesta: { ok: true, trabajoId } — la app sigue el avance por Realtime
 // sobre gomedisys_trabajos.
 //
@@ -32,6 +33,10 @@ const MODULO_POR_TIPO: Record<string, string> = {
   masiva: 'reportar_masivo',
   paciente: 'reportar',
   detalle: 'solicitudes_reportadas',
+}
+// Componentes de GoMedisys: módulos desde los que se pueden traer (basta uno)
+const MODULOS_POR_COMPONENTE: Record<string, string[]> = {
+  boleta: ['solicitudes', 'mos'],
 }
 
 async function tokenGitHub(admin: SupabaseClient) {
@@ -72,16 +77,33 @@ Deno.serve(async (req) => {
 
   const body = await req.json().catch(() => ({})) as Record<string, unknown>
   const tipo = String(body.tipo ?? '')
-  const modulo = MODULO_POR_TIPO[tipo]
-  if (!modulo) return json(400, { error: 'Tipo de consulta inválido' })
+  const componente = tipo === 'componente' ? String(body.componente ?? '') : ''
+  const modulos = tipo === 'componente' ? MODULOS_POR_COMPONENTE[componente] : MODULO_POR_TIPO[tipo] ? [MODULO_POR_TIPO[tipo]] : null
+  if (!modulos) return json(400, { error: tipo === 'componente' ? 'Componente sin script de consulta' : 'Tipo de consulta inválido' })
 
   if (perfil.rol !== 'administrador') {
-    const { data: permiso } = await admin.from('rol_permisos').select('permitido').eq('rol', perfil.rol).eq('modulo', modulo).maybeSingle()
-    if (permiso?.permitido !== true) return json(403, { error: 'Sin permiso para esta consulta' })
+    const { data: permisos } = await admin.from('rol_permisos').select('permitido').eq('rol', perfil.rol).in('modulo', modulos)
+    if (!permisos?.some((p) => p.permitido === true)) return json(403, { error: 'Sin permiso para esta consulta' })
   }
 
   let parametros: Record<string, string>
-  try { parametros = validarParametros(tipo, body) } catch (e) { return json(400, { error: (e as Error).message }) }
+  if (tipo === 'componente') {
+    // Componente de una solicitud: se consulta por el # de ingreso del paciente
+    // y solo una vez (luego queda inhabilitado para no cargar GoMedisys)
+    const solicitud = Number(body.solicitud)
+    if (!Number.isInteger(solicitud) || solicitud <= 0) return json(400, { error: 'Solicitud inválida' })
+    const { data: cfg } = await admin.from('componentes_gomedisys').select('nombre, script_disponible').eq('codigo', componente).maybeSingle()
+    if (!cfg?.script_disponible) return json(200, { ok: false, error: 'La consulta de este componente aún no está disponible.' })
+    const { data: sol } = await admin.from('solicitudes_cirugia').select('id, numero_ingreso').eq('id', solicitud).maybeSingle()
+    if (!sol) return json(200, { ok: false, error: 'Solicitud no encontrada' })
+    const ingreso = String(sol.numero_ingreso ?? '').trim()
+    if (!/^[\w-]{1,30}$/.test(ingreso)) return json(200, { ok: false, error: 'La solicitud no tiene un # de ingreso válido para consultar GoMedisys.' })
+    const { data: nota } = await admin.from('notas_gomedisys').select('consultado_en').eq('solicitud_id', solicitud).eq('componente', componente).maybeSingle()
+    if (nota) return json(200, { ok: false, codigo: 'ya_consultado', error: `${cfg.nombre} ya fue consultada en GoMedisys; la consulta quedó inhabilitada.`, consultado_en: nota.consultado_en })
+    parametros = { componente, solicitud: String(solicitud), ingreso }
+  } else {
+    try { parametros = validarParametros(tipo, body) } catch (e) { return json(400, { error: (e as Error).message }) }
+  }
 
   // Doble clic / reintento: si ya hay un trabajo igual de este usuario en curso, se reutiliza
   const hace3min = new Date(Date.now() - 3 * 60000).toISOString()

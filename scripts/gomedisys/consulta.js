@@ -13,6 +13,8 @@
 //   paciente { valor }          sql/paciente.sql (autocompletado del reporte individual; activos y, si no hay,
 //                               cualquier estado) + programaciones del paciente con la v6
 //   detalle  { valor, documento } paciente.sql + programaciones del paciente (consulta de una solicitud reportada)
+//   componente { componente, solicitud, ingreso }  componente de GoMedisys de un ingreso. Hoy solo 'boleta'
+//                               (sql/boleta_quirurgica.sql); el trigger de la migración 0043 lo guarda en notas_gomedisys
 
 import sql from 'mssql'
 import { createClient } from '@supabase/supabase-js'
@@ -55,6 +57,49 @@ function limpiar(filas) {
   return filas.map((f) => Object.fromEntries(Object.entries(f).map(([k, v]) => [k, v instanceof Date ? v.toISOString().slice(0, 19) : v])))
 }
 
+const txt = (v) => (v === null || v === undefined || String(v).trim() === '' ? null : String(v).trim())
+
+/**
+ * Filas de sql/boleta_quirurgica.sql (una por procedimiento, la boleta más
+ * reciente primero) → la boleta vigente del ingreso: la más reciente no
+ * suspendida (o la más reciente si todas están suspendidas).
+ */
+function armarBoleta(filas) {
+  if (!filas.length) return null
+  const base = filas.find((f) => f.Suspendido !== 'Si') ?? filas[0]
+  const deLaBoleta = filas.filter((f) => f.idSurgeryRequest === base.idSurgeryRequest)
+  const procedimientos = [...new Set(deLaBoleta
+    .map((f) => [txt(f.CodigoProducto), txt(f.Procedimiento)].filter(Boolean).join(' - '))
+    .filter(Boolean))]
+  const boletas = new Set(filas.map((f) => f.idSurgeryRequest)).size
+  const datos = {
+    'Prioridad': txt(base.Prioridad),
+    'Destino probable': txt(base.Destino),
+    'Duración estimada (min)': base.DuracionMinutosCirugia ?? null,
+    'Fecha de solicitud': txt(base.FechaSolicitudBoleta)?.replace('T', ' ').slice(0, 16) ?? null,
+    'Identificación del profesional': txt(base.IdentificacionProfesional),
+    'Procedimientos': procedimientos.join('\n') || null,
+    'Observaciones': txt(base.Observaciones),
+    'Servicio': txt(base.Servicio),
+    'Ubicación': [txt(base.Ubicacion), txt(base.Cama) && `Cama ${txt(base.Cama)}`].filter(Boolean).join(' · ') || null,
+    'Contrato': txt(base.Contrato),
+    'Plan': txt(base.Plan),
+    'Suspendida': base.Suspendido === 'Si' ? 'Sí' : 'No',
+    'Fecha de suspensión': base.Suspendido === 'Si' ? txt(base.FechaSuspension)?.replace('T', ' ').slice(0, 16) ?? null : null,
+    'Usuario que suspende': base.Suspendido === 'Si' ? txt(base.UsuarioSuspende) : null,
+    'Boletas en el ingreso': boletas > 1 ? boletas : null,
+    'Id boleta GoMedisys': base.idSurgeryRequest,
+  }
+  return {
+    texto: [txt(base.DescripcionBoleta), txt(base.AnotacionesBoleta)].filter(Boolean).join('\n\n') || null,
+    profesional: txt(base.ProfesionalQuesolicita),
+    fecha_registro: txt(base.FechaSolicitudBoleta),
+    duracion: base.DuracionMinutosCirugia ?? null,
+    destino: txt(base.Destino),
+    datos: Object.fromEntries(Object.entries(datos).filter(([, v]) => v !== null && v !== '')),
+  }
+}
+
 async function main() {
   const { data: tomados, error } = await sb.rpc('gm_runner_tomar', { p_clave: CLAVE, p_id: TRABAJO_ID })
   if (error) throw new Error(`No se pudo tomar el trabajo: ${error.message}`)
@@ -62,9 +107,10 @@ async function main() {
   if (!trabajo) { console.log(`Trabajo ${TRABAJO_ID} no está pendiente (ya lo tomó otro runner o no existe).`); return }
   console.log(`Trabajo ${TRABAJO_ID} · tipo ${trabajo.tipo}`)
 
-  const [sqlPaciente, sqlMasiva] = await Promise.all([
+  const [sqlPaciente, sqlMasiva, sqlBoleta] = await Promise.all([
     readFile(path.join(raiz, 'sql', 'paciente.sql'), 'utf8'),
     readFile(path.join(raiz, 'sql', 'reporte_cirugias_optimizado_6.sql'), 'utf8'),
+    readFile(path.join(raiz, 'sql', 'boleta_quirurgica.sql'), 'utf8'),
   ])
 
   let progreso = [{ etiqueta: 'Conexión', estado: 'consultando' }]
@@ -163,6 +209,18 @@ async function main() {
       progreso[1] = { etiqueta: 'Programación', estado: 'listo', filas: programaciones.length }
       console.log(`Detalle: ${pacientes.length} ingresos, ${programaciones.length} programaciones en ${Date.now() - t0} ms`)
       await actualizar(progreso, { estado: 'listo', resultado: { pacientes, programaciones } })
+    } else if (trabajo.tipo === 'componente') {
+      const { componente, ingreso } = trabajo.parametros
+      if (componente !== 'boleta') throw new Error(`El componente ${componente} aún no tiene script de consulta`)
+      if (!/^[\w-]{1,30}$/.test(String(ingreso ?? ''))) throw new Error('# de ingreso inválido')
+      progreso = [{ etiqueta: 'Boleta Qx', estado: 'consultando' }]
+      await actualizar(progreso)
+      const t = Date.now()
+      const filas = limpiar((await pool.request().input('ingreso', sql.VarChar(30), String(ingreso)).query(sqlBoleta)).recordset)
+      const boleta = armarBoleta(filas)
+      progreso[0] = { etiqueta: 'Boleta Qx', estado: 'listo', filas: filas.length, ms: Date.now() - t }
+      console.log(`Boleta: ${filas.length} filas · ${boleta ? 'encontrada' : 'sin boleta'} en ${Date.now() - t0} ms`)
+      await actualizar(progreso, { estado: 'listo', resultado: { boleta, filas: filas.length } })
     } else {
       throw new Error(`Tipo de trabajo desconocido: ${trabajo.tipo}`)
     }

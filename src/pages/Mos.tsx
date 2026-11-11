@@ -156,6 +156,8 @@ export default function Mos() {
   // y las notificaciones del material siguen en la app (migración 0039)
   const idsFilas = useMemo(() => filas.map((f) => f.id), [filas])
   const gmNota = useComponentesGM('nota_mos', idsFilas)
+  // Boleta quirúrgica: botón para traerla de GoMedisys por # de ingreso (migración 0043)
+  const gmBoleta = useComponentesGM('boleta', idsFilas, () => { cargar() })
 
   const hayFiltros = filtroBoleta !== 'con' || !!filtroEstadoMos || !!filtroEtapa || !!busqueda
 
@@ -249,6 +251,9 @@ export default function Mos() {
                       <div className="text-xs text-slate-400">{s.especialidades?.nombre} · {s.eps_gomedisys || s.eps?.nombre || 'Sin EPS'}</div>
                     </td>
                     <td className="px-4 py-2.5">
+                      <div onClick={(e) => e.stopPropagation()} className="mb-1">
+                        <CeldaComponente s={s} codigo="boleta" gm={gmBoleta} compacto />
+                      </div>
                       {tieneBoleta(s)
                         ? <div className="line-clamp-2 text-xs text-amber-800">{s.boleta_quirurgica}</div>
                         : <span className="text-xs text-slate-400">Sin boleta</span>}
