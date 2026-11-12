@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
@@ -8,6 +9,7 @@ import {
 } from '../lib/gomedisys'
 import { SUBESPECIALIDADES_ORTOPEDIA, ESTADOS_LABEL, type Estado } from '../lib/constantes'
 import { UploadCloud, CheckCircle2, Search, UserRound, AlertTriangle, X, CalendarClock } from 'lucide-react'
+import { procedimientosCups } from '../components/ProcedimientosCups'
 
 type Especialidad = { id: number; nombre: string }
 
@@ -357,7 +359,7 @@ export default function ReportarCirugia() {
                   <Dato etiqueta="Quirófano" valor={programacion.Quirofano} />
                   <Dato etiqueta="Estado en GoMedisys" valor={programacion.Estado} />
                   <Dato etiqueta="Tipo de orden" valor={programacion.TipoOrden} />
-                  <Dato etiqueta="Procedimientos programados" valor={programacion.ProcedimientosProgramados} ancho />
+                  <Dato etiqueta="Procedimientos programados" valor={procedimientosCups(programacion.ProcedimientosProgramados)} ancho />
                   <Dato etiqueta="Diagnóstico preoperatorio" valor={programacion.DiagnosticoPreoperatorio} ancho />
                   <Dato etiqueta="Especialista que ordena" valor={programacion.EspecialistaOrdena} />
                   <Dato etiqueta="Fecha de ordenamiento" valor={programacion.FechaOrdenamiento} />
@@ -468,7 +470,7 @@ export default function ReportarCirugia() {
   )
 }
 
-function Dato({ etiqueta, valor, ancho }: { etiqueta: string; valor: string | number | null | undefined; ancho?: boolean }) {
+function Dato({ etiqueta, valor, ancho }: { etiqueta: string; valor: ReactNode; ancho?: boolean }) {
   return (
     <div className={ancho ? 'sm:col-span-2' : undefined}>
       <span className="text-slate-500">{etiqueta}:</span>{' '}

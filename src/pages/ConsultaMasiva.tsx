@@ -7,6 +7,7 @@ import { PanelLateral, Grupo, Dato } from '../components/PanelLateral'
 import ProgresoConsulta, { type Tramo } from '../components/ProgresoConsulta'
 import { consultarGoMedisys, emparejarCatalogo as emparejar, normalizar, camposDeProgramacion, ErrorConsultaGM, type ProgramacionGM, type EstadoTrabajo } from '../lib/gomedisys'
 import { ESTADOS_LABEL, type Estado } from '../lib/constantes'
+import { procedimientosCups } from '../components/ProcedimientosCups'
 import {
   DatabaseZap, Search, CheckCircle2, Lock, Users, AlertTriangle, ListChecks, ArrowRight, X, Ban, RotateCw,
   CalendarDays, Eraser, FileSpreadsheet, UserRound, Stethoscope, ClipboardList, ShieldCheck, Hourglass,
@@ -1212,7 +1213,7 @@ function PanelDetalle({ f, s, seleccionada, otrosSeleccionando, onAlternar, onCe
             <Dato etiqueta="Fecha de ordenamiento" valor={f.FechaOrdenamiento} />
             <Dato etiqueta="Fecha / hora programada" valor={`${f.FechaProgramada ?? '—'} ${f.HoraProgramada ?? ''}`} />
             <Dato etiqueta="Quirófano" valor={f.Quirofano} />
-            <Dato etiqueta="Procedimientos programados" valor={f.ProcedimientosProgramados} ancho />
+            <Dato etiqueta="Procedimientos programados" valor={procedimientosCups(f.ProcedimientosProgramados)} ancho />
             <Dato etiqueta="Diagnóstico preoperatorio" valor={f.DiagnosticoPreoperatorio} ancho />
             <Dato etiqueta="Especialista que ordena" valor={f.EspecialistaOrdena} />
             <Dato etiqueta="Especialista que opera" valor={f.EspecialistaOpera} />

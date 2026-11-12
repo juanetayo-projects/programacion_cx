@@ -1118,7 +1118,7 @@ function PanelProgramar({ seleccion, medico, esReprogramacion, quirofanos, error
     >
       <Grupo color="orden" icono={Stethoscope} titulo="Cirugía a programar">
         <Dato etiqueta="Paciente" valor={`${seleccion.nombre_paciente ?? '—'} · ${seleccion.documento_paciente}`} ancho />
-        <Dato etiqueta="Procedimiento" valor={seleccion.procedimiento} ancho />
+        <Dato etiqueta="Procedimiento" valor={procedimientosCups(seleccion.procedimiento)} ancho />
         <Dato etiqueta="Especialidad" valor={seleccion.especialidades?.nombre} />
         <Dato etiqueta="Médico" valor={seleccion.especialista_ordena ?? medico} />
         {seleccion.fecha_programada_gomedisys && (
@@ -1355,7 +1355,7 @@ function PanelNotificar({ seleccion, recomendaciones, error, guardando, onClose,
     >
       <Grupo color="orden" icono={Stethoscope} titulo="Cirugía">
         <Dato etiqueta="Paciente" valor={`${seleccion.nombre_paciente ?? '—'} · ${seleccion.documento_paciente}`} ancho />
-        <Dato etiqueta="Procedimiento" valor={seleccion.procedimiento} ancho />
+        <Dato etiqueta="Procedimiento" valor={procedimientosCups(seleccion.procedimiento)} ancho />
         <Dato etiqueta="Programación" valor={seleccion.fecha_programada ? `${seleccion.fecha_programada} ${seleccion.hora_programada?.slice(0, 5) ?? ''} · ${seleccion.quirofanos?.nombre ?? ''}` : null} ancho />
       </Grupo>
 

@@ -14,6 +14,7 @@ import {
   BellRing, MessageCircle, HelpCircle, ClipboardX,
 } from 'lucide-react'
 import { hoyBogota } from '../lib/fechas'
+import { procedimientosCups } from '../components/ProcedimientosCups'
 
 // Gestión postquirúrgica: seguimiento del paciente (antes y después de la
 // cirugía) por Programación de cirugía y Gestión clínica. Notas con fecha,
@@ -330,7 +331,7 @@ export default function Prequirurgico() {
               <Dato etiqueta="EPS" valor={seleccion.eps_gomedisys || seleccion.eps?.nombre} />
             </Grupo>
             <Grupo color="orden" icono={Stethoscope} titulo="Cirugía">
-              <Dato etiqueta="Procedimiento" valor={seleccion.procedimiento_realizado || seleccion.procedimiento} ancho />
+              <Dato etiqueta="Procedimiento" valor={procedimientosCups(seleccion.procedimiento_realizado || seleccion.procedimiento)} ancho />
               <Dato etiqueta="Programación" valor={seleccion.fecha_programada ? `${seleccion.fecha_programada} ${seleccion.hora_programada?.slice(0, 5) ?? ''} · ${seleccion.quirofanos?.nombre ?? ''}` : null} ancho />
               <Dato etiqueta="Realizada (inicio → fin)" valor={seleccion.cirugia_inicio ? `${fechaHora(seleccion.cirugia_inicio)} → ${fechaHora(seleccion.cirugia_fin)}` : null} ancho />
               <Dato etiqueta="Cirujano" valor={seleccion.cirujano_realizo || seleccion.especialista_opera || seleccion.especialista_ordena || seleccion.nombre_medico_reporta} />

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
@@ -5,6 +6,7 @@ import { PageHeader, Boton, Modal, FilterBar, EstadoVacio, Spinner } from '../co
 import { ESTADOS_COLOR, ESTADOS_COLOR_HEX } from '../lib/constantes'
 import { Eye, Undo2, X, FileSpreadsheet, ClipboardCheck, AlertTriangle } from 'lucide-react'
 import { ModalCierreCirugia, faltantesCierre, DESTINOS, type CamposCierre } from '../components/CierreCirugia'
+import { procedimientosCups } from '../components/ProcedimientosCups'
 
 type Realizada = {
   id: number
@@ -383,7 +385,7 @@ export default function CirugiasRealizadas() {
             <div className="rounded-xl border border-violet-300/50 bg-violet-50 p-3">
               <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-violet-700/80">Orden Cx</div>
               <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-sm">
-                <Campo label="Procedimiento" valor={seleccion.procedimiento} full />
+                <Campo label="Procedimiento" valor={procedimientosCups(seleccion.procedimiento)} full />
                 <Campo label="Especialidad" valor={seleccion.especialidades?.nombre} />
                 <Campo label="Tiempo estimado" valor={seleccion.tiempo_estimado_minutos ? `${seleccion.tiempo_estimado_minutos} min` : null} />
                 <Campo label="Reportado por" valor={medicoDe(seleccion)} full />
@@ -461,7 +463,7 @@ function MiniCard({ label, valor, className, activo, onClick }: {
   )
 }
 
-function Campo({ label, valor, full }: { label: string; valor: string | number | null | undefined; full?: boolean }) {
+function Campo({ label, valor, full }: { label: string; valor: ReactNode; full?: boolean }) {
   return (
     <div className={full ? 'col-span-full' : ''}>
       <div className="text-[11px] font-bold uppercase tracking-wide text-[#0D2D6B]">{label}</div>
