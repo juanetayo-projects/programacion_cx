@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useId, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { PageHeader, Boton, FilterBar, EstadoVacio, Spinner } from '../components/ui'
 import { CheckCircle2, XCircle, X, ScrollText } from 'lucide-react'
@@ -13,6 +13,8 @@ type LogApi = {
 }
 
 export default function Logs() {
+  // Ids únicos para unir cada etiqueta con su campo (lectores de pantalla y clic en la etiqueta)
+  const idCampo = useId()
   const [filas, setFilas] = useState<LogApi[]>([])
   const [cargando, setCargando] = useState(true)
   const [filtroResultado, setFiltroResultado] = useState('')
@@ -104,24 +106,24 @@ export default function Logs() {
 
       <FilterBar>
         <div>
-          <label className="mb-0.5 block text-xs font-medium text-slate-500">Resultado</label>
-          <select value={filtroResultado} onChange={(e) => setFiltroResultado(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
+          <label htmlFor={`${idCampo}-resultado`} className="mb-0.5 block text-xs font-medium text-slate-500">Resultado</label>
+          <select id={`${idCampo}-resultado`} value={filtroResultado} onChange={(e) => setFiltroResultado(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
             <option value="">Todos</option>
             <option value="exitoso">Exitosas</option>
             <option value="fallido">Fallidas</option>
           </select>
         </div>
         <div>
-          <label className="mb-0.5 block text-xs font-medium text-slate-500">Desde</label>
-          <input type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+          <label htmlFor={`${idCampo}-desde`} className="mb-0.5 block text-xs font-medium text-slate-500">Desde</label>
+          <input id={`${idCampo}-desde`} type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
         </div>
         <div>
-          <label className="mb-0.5 block text-xs font-medium text-slate-500">Hasta</label>
-          <input type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+          <label htmlFor={`${idCampo}-hasta`} className="mb-0.5 block text-xs font-medium text-slate-500">Hasta</label>
+          <input id={`${idCampo}-hasta`} type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
         </div>
         <div className="flex-1">
-          <label className="mb-0.5 block text-xs font-medium text-slate-500">Buscar</label>
-          <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Documento, nombre, # de ingreso o ID de solicitud…" className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+          <label htmlFor={`${idCampo}-buscar`} className="mb-0.5 block text-xs font-medium text-slate-500">Buscar</label>
+          <input id={`${idCampo}-buscar`} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Documento, nombre, # de ingreso o ID de solicitud…" className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
         </div>
         <Boton variante="fantasma" disabled={!hayFiltrosActivos} onClick={limpiarFiltros} className="flex items-center gap-1.5">
           <X size={14} /> Limpiar filtros

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useId, useEffect, useMemo, useState } from 'react'
 import { SelectorAdjuntos } from './Adjuntos'
 import { useAdjuntos } from '../hooks/useAdjuntos'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts'
@@ -142,6 +142,8 @@ function FormNota({ solicitudId, ambito, itemId, tipos, conCita, fechaCirugia, f
   solicitudId: number; ambito: Ambito; itemId: number | null; tipos: TipoSeguimiento[]; conCita: boolean
   fechaCirugia: string | null; fechaFinCirugia: string | null; faltantesCierre: string[]; onCancelar: () => void; onGuardada: () => void
 }) {
+  // Ids únicos para unir cada etiqueta con su campo (lectores de pantalla y clic en la etiqueta)
+  const idCampo = useId()
   const posquirurgicoBloqueado = faltantesCierre.length > 0
   // Las citas posquirúrgicas se calculan desde el fin real de la cirugía
   const baseDe = (t: TipoSeguimiento | null) => (t?.fase === 'posquirurgico' ? fechaFinCirugia : fechaCirugia)
@@ -198,8 +200,8 @@ function FormNota({ solicitudId, ambito, itemId, tipos, conCita, fechaCirugia, f
       <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-[#0D2D6B]"><StickyNote size={14} /> Nueva nota</div>
       {conCita && (
         <div>
-          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Tipo de seguimiento *</label>
-          <select value={tipoId} onChange={(e) => elegirTipo(e.target.value)} className={`${CLASE_CAMPO} w-full`}>
+          <label htmlFor={`${idCampo}-tipo-seguimiento`} className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Tipo de seguimiento *</label>
+          <select id={`${idCampo}-tipo-seguimiento`} value={tipoId} onChange={(e) => elegirTipo(e.target.value)} className={`${CLASE_CAMPO} w-full`}>
             <option value="">Seleccione…</option>
             {fases.map((f) => (
               <optgroup key={f} label={f === 'posquirurgico' && posquirurgicoBloqueado ? `${FASE[f].label} — bloqueado: falta el cierre de la cirugía` : FASE[f].label}>
@@ -219,8 +221,8 @@ function FormNota({ solicitudId, ambito, itemId, tipos, conCita, fechaCirugia, f
         </div>
       )}
       <div>
-        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Descripción / comentarios *</label>
-        <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} rows={3} className={`${CLASE_CAMPO} w-full`}
+        <label htmlFor={`${idCampo}-descripcion-comentarios`} className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Descripción / comentarios *</label>
+        <textarea id={`${idCampo}-descripcion-comentarios`} value={descripcion} onChange={(e) => setDescripcion(e.target.value)} rows={3} className={`${CLASE_CAMPO} w-full`}
           placeholder={conCita ? 'Indicaciones, resultado de la llamada, hallazgos, compromisos…' : 'Seguimiento, acuerdos de facturación, novedades…'} />
       </div>
       <div className="flex flex-wrap items-end gap-3">
@@ -230,8 +232,8 @@ function FormNota({ solicitudId, ambito, itemId, tipos, conCita, fechaCirugia, f
         </label>
         {conFecha && (
           <div>
-            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Fecha y hora *</label>
-            <input type="datetime-local" value={fechaCita} onChange={(e) => setFechaCita(e.target.value)} className={CLASE_CAMPO} />
+            <label htmlFor={`${idCampo}-fecha-hora`} className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Fecha y hora *</label>
+            <input id={`${idCampo}-fecha-hora`} type="datetime-local" value={fechaCita} onChange={(e) => setFechaCita(e.target.value)} className={CLASE_CAMPO} />
           </div>
         )}
         {conFecha && tipo?.dias_sugeridos != null && baseDe(tipo) && (
@@ -241,7 +243,7 @@ function FormNota({ solicitudId, ambito, itemId, tipos, conCita, fechaCirugia, f
         )}
       </div>
       <div>
-        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Adjuntos</label>
+        <p className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Adjuntos</p>
         <SelectorAdjuntos adj={adj} accept=".pdf,image/*,.doc,.docx,.xls,.xlsx,.txt" deshabilitado={guardando}
           ayuda={`PDF, imágenes, Word o Excel · máximo ${MAX_ADJUNTOS} archivos de 10 MB c/u.`} />
       </div>

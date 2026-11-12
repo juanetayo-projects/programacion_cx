@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useId, useEffect, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { PageHeader, FilterBar, MetricCard, Boton } from '../components/ui'
@@ -25,6 +25,8 @@ const OPCIONES_ESTADO = [
 ] as const
 
 export default function Calor() {
+  // Ids únicos para unir cada etiqueta con su campo (lectores de pantalla y clic en la etiqueta)
+  const idCampo = useId()
   const hace90 = sumarDiasISO(hoyBogota(), -90)
   const en90 = sumarDiasISO(hoyBogota(), 90)
   const [desde, setDesde] = useState(hace90)
@@ -77,22 +79,22 @@ export default function Calor() {
 
       <FilterBar>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500">Desde</label>
-          <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+          <label htmlFor={`${idCampo}-desde`} className="mb-1 block text-xs font-medium text-slate-500">Desde</label>
+          <input id={`${idCampo}-desde`} type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500">Hasta</label>
-          <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+          <label htmlFor={`${idCampo}-hasta`} className="mb-1 block text-xs font-medium text-slate-500">Hasta</label>
+          <input id={`${idCampo}-hasta`} type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500">Estado</label>
-          <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
+          <label htmlFor={`${idCampo}-estado`} className="mb-1 block text-xs font-medium text-slate-500">Estado</label>
+          <select id={`${idCampo}-estado`} value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
             {OPCIONES_ESTADO.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500">Quirófano</label>
-          <select value={filtroQuirofano} onChange={(e) => setFiltroQuirofano(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
+          <label htmlFor={`${idCampo}-quirofano`} className="mb-1 block text-xs font-medium text-slate-500">Quirófano</label>
+          <select id={`${idCampo}-quirofano`} value={filtroQuirofano} onChange={(e) => setFiltroQuirofano(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
             <option value="">Todos</option>
             {quirofanos.map((q) => <option key={q.id} value={q.id}>{q.nombre}</option>)}
           </select>
@@ -112,6 +114,7 @@ export default function Calor() {
         <HeatmapDiaHora
           registros={registros}
           getFecha={(r) => `${r.fecha_programada}T${r.hora_programada}`}
+          getId={(r) => r.id}
           dark={false}
           titulo="Ocupación por día de la semana y hora"
           columnas={[

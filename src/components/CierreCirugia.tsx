@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { Modal, Boton, CLASE_CAMPO } from './ui'
 import { Stethoscope, AlertTriangle, Save } from 'lucide-react'
-import { aFecha, aInputBogota } from '../lib/fechas'
-import { DESTINOS, faltantesCierre, type CamposCierre } from '../lib/cierreCirugia'
+import { aFecha } from '../lib/fechas'
+import { DESTINOS, faltantesCierre, valoresInicialesCierre, duracionMinutos, erroresCierre, type CamposCierre } from '../lib/cierreCirugia'
 
 // Cierre de la cirugía (Programación de cirugía): fecha y hora real de inicio
 // y fin, cirujano, procedimiento realizado y destino posoperatorio. Sin este
@@ -34,36 +34,24 @@ export function AlertaCierre({ s, contexto }: { s: Partial<CamposCierre>; contex
   )
 }
 
-/** Valor para datetime-local en hora de Bogotá (ver lib/fechas.ts) */
-const aLocal = (iso: string | null) => aInputBogota(iso)
-
 /** Modal para registrar (o completar) la cirugía realizada */
 export function ModalCierreCirugia({ s, onCerrar, onGuardado }: { s: CamposCierre; onCerrar: () => void; onGuardado: () => void }) {
+  // Ids únicos para unir cada etiqueta con su campo (lectores de pantalla y clic en la etiqueta)
+  const idCampo = useId()
   const { session } = useAuth()
-  const inicioSugerido = s.cirugia_inicio ? aLocal(s.cirugia_inicio)
-    : s.fecha_programada ? `${s.fecha_programada}T${(s.hora_programada ?? '07:00').slice(0, 5)}` : ''
-  const finSugerido = s.cirugia_fin ? aLocal(s.cirugia_fin)
-    : inicioSugerido && s.tiempo_estimado_minutos ? aLocal(new Date(aFecha(inicioSugerido).getTime() + s.tiempo_estimado_minutos * 60000).toISOString()) : ''
-
-  const [inicio, setInicio] = useState(inicioSugerido)
-  const [fin, setFin] = useState(finSugerido)
-  const [cirujano, setCirujano] = useState(s.cirujano_realizo ?? s.especialista_opera ?? s.especialista_ordena ?? '')
-  const [procedimiento, setProcedimiento] = useState(s.procedimiento_realizado ?? s.procedimiento ?? '')
-  const [destino, setDestino] = useState(s.destino_postoperatorio ?? '')
-  const [observaciones, setObservaciones] = useState(s.cierre_observaciones ?? '')
+  // Lo ya registrado o, si no hay, lo programado (se calcula solo al abrir)
+  const [ini] = useState(() => valoresInicialesCierre(s))
+  const [inicio, setInicio] = useState(ini.inicio)
+  const [fin, setFin] = useState(ini.fin)
+  const [cirujano, setCirujano] = useState(ini.cirujano)
+  const [procedimiento, setProcedimiento] = useState(ini.procedimiento)
+  const [destino, setDestino] = useState(ini.destino)
+  const [observaciones, setObservaciones] = useState(ini.observaciones)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
 
-  const duracion = inicio && fin ? Math.round((aFecha(fin).getTime() - aFecha(inicio).getTime()) / 60000) : null
-  const errores = [
-    !inicio && 'fecha y hora de inicio',
-    !fin && 'fecha y hora final',
-    duracion !== null && duracion <= 0 && 'la hora final debe ser posterior al inicio',
-    fin && aFecha(fin).getTime() > Date.now() + 5 * 60000 && 'la hora final no puede ser futura',
-    !cirujano.trim() && 'cirujano',
-    !procedimiento.trim() && 'procedimiento realizado',
-    !destino && 'destino posoperatorio',
-  ].filter(Boolean) as string[]
+  const duracion = duracionMinutos(inicio, fin)
+  const errores = erroresCierre({ inicio, fin, cirujano, procedimiento, destino })
 
   async function guardar() {
     if (errores.length) { setError(`Revise: ${errores.join(', ')}.`); return }
@@ -104,32 +92,32 @@ export function ModalCierreCirugia({ s, onCerrar, onGuardado }: { s: CamposCierr
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Inicio de la cirugía *</label>
-            <input type="datetime-local" value={inicio} onChange={(e) => setInicio(e.target.value)} className={`${CLASE_CAMPO} w-full`} />
+            <label htmlFor={`${idCampo}-inicio-cirugia`} className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Inicio de la cirugía *</label>
+            <input id={`${idCampo}-inicio-cirugia`} type="datetime-local" value={inicio} onChange={(e) => setInicio(e.target.value)} className={`${CLASE_CAMPO} w-full`} />
           </div>
           <div>
-            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Fin de la cirugía (fecha final) *</label>
-            <input type="datetime-local" value={fin} onChange={(e) => setFin(e.target.value)} className={`${CLASE_CAMPO} w-full`} />
+            <label htmlFor={`${idCampo}-fin-cirugia-fecha`} className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Fin de la cirugía (fecha final) *</label>
+            <input id={`${idCampo}-fin-cirugia-fecha`} type="datetime-local" value={fin} onChange={(e) => setFin(e.target.value)} className={`${CLASE_CAMPO} w-full`} />
             {duracion !== null && duracion > 0 && <p className="mt-0.5 text-[11px] text-slate-500">Duración: {Math.floor(duracion / 60)} h {duracion % 60} min</p>}
           </div>
           <div>
-            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Cirujano que realizó *</label>
-            <input value={cirujano} onChange={(e) => setCirujano(e.target.value)} className={`${CLASE_CAMPO} w-full`} />
+            <label htmlFor={`${idCampo}-cirujano-realizo`} className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Cirujano que realizó *</label>
+            <input id={`${idCampo}-cirujano-realizo`} value={cirujano} onChange={(e) => setCirujano(e.target.value)} className={`${CLASE_CAMPO} w-full`} />
           </div>
           <div>
-            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Destino posoperatorio *</label>
-            <select value={destino} onChange={(e) => setDestino(e.target.value)} className={`${CLASE_CAMPO} w-full`}>
+            <label htmlFor={`${idCampo}-destino-posoperatorio`} className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Destino posoperatorio *</label>
+            <select id={`${idCampo}-destino-posoperatorio`} value={destino} onChange={(e) => setDestino(e.target.value)} className={`${CLASE_CAMPO} w-full`}>
               <option value="">Seleccione…</option>
               {Object.entries(DESTINOS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </div>
           <div className="sm:col-span-2">
-            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Procedimiento realizado *</label>
-            <textarea value={procedimiento} onChange={(e) => setProcedimiento(e.target.value)} rows={2} className={`${CLASE_CAMPO} w-full`} />
+            <label htmlFor={`${idCampo}-procedimiento-realizado`} className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Procedimiento realizado *</label>
+            <textarea id={`${idCampo}-procedimiento-realizado`} value={procedimiento} onChange={(e) => setProcedimiento(e.target.value)} rows={2} className={`${CLASE_CAMPO} w-full`} />
           </div>
           <div className="sm:col-span-2">
-            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Observaciones / novedades del procedimiento</label>
-            <textarea value={observaciones} onChange={(e) => setObservaciones(e.target.value)} rows={2} className={`${CLASE_CAMPO} w-full`} />
+            <label htmlFor={`${idCampo}-observaciones-novedades-procedimiento`} className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Observaciones / novedades del procedimiento</label>
+            <textarea id={`${idCampo}-observaciones-novedades-procedimiento`} value={observaciones} onChange={(e) => setObservaciones(e.target.value)} rows={2} className={`${CLASE_CAMPO} w-full`} />
           </div>
         </div>
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}

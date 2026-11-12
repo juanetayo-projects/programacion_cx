@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { Modal, Boton, Badge, CLASE_CAMPO } from './ui'
 import { textoRecordatorioCita } from '../lib/mensajesSeguimiento'
@@ -29,6 +29,8 @@ export function ModalRecordatorio({ cita, paciente, onCerrar, onCambio }: {
   onCerrar: () => void
   onCambio: () => void
 }) {
+  // Ids únicos para unir cada etiqueta con su campo (lectores de pantalla y clic en la etiqueta)
+  const idCampo = useId()
   const [texto, setTexto] = useState(() => textoRecordatorioCita({
     paciente: paciente.nombre, tipo: cita.tipo_nombre, fechaCita: cita.fecha_cita!, procedimiento: paciente.procedimiento,
   }))
@@ -81,8 +83,8 @@ export function ModalRecordatorio({ cita, paciente, onCerrar, onCambio }: {
 
         <div className="flex flex-wrap items-end gap-2">
           <div>
-            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Celular del paciente</label>
-            <input value={telefono} onChange={(e) => setTelefono(e.target.value)} placeholder="3001234567" className={CLASE_CAMPO} />
+            <label htmlFor={`${idCampo}-celular-paciente`} className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Celular del paciente</label>
+            <input id={`${idCampo}-celular-paciente`} value={telefono} onChange={(e) => setTelefono(e.target.value)} placeholder="3001234567" className={CLASE_CAMPO} />
           </div>
           <Boton variante="secundario" onClick={copiar} className="flex items-center gap-1.5"><Copy size={14} /> {copiado ? '¡Copiado!' : 'Copiar mensaje'}</Boton>
           {tel && (

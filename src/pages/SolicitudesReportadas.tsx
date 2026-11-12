@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useId, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { PageHeader, Boton, Modal, Badge, FilterBar, EstadoVacio, Spinner } from '../components/ui'
@@ -30,6 +30,8 @@ const ICONO_ESTADO = {
 }
 
 export default function SolicitudesReportadas() {
+  // Ids únicos para unir cada etiqueta con su campo (lectores de pantalla y clic en la etiqueta)
+  const idCampo = useId()
   const { session } = useAuth()
   const [filas, setFilas] = useState<SolicitudReportada[]>([])
   const [cargando, setCargando] = useState(true)
@@ -165,35 +167,35 @@ Valida directamente en la aplicación de GoMedisys.`)
 
       <FilterBar>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500">Estado</label>
-          <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
+          <label htmlFor={`${idCampo}-estado`} className="mb-1 block text-xs font-medium text-slate-500">Estado</label>
+          <select id={`${idCampo}-estado`} value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
             <option value="">Todos</option>
             <option value="reportado">{ESTADOS_LABEL.reportado}</option>
             <option value="fallido">{ESTADOS_LABEL.fallido}</option>
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500">Especialidad</label>
-          <select value={filtroEspecialidad} onChange={(e) => setFiltroEspecialidad(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
+          <label htmlFor={`${idCampo}-especialidad`} className="mb-1 block text-xs font-medium text-slate-500">Especialidad</label>
+          <select id={`${idCampo}-especialidad`} value={filtroEspecialidad} onChange={(e) => setFiltroEspecialidad(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
             <option value="">Todas</option>
             {especialidades.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500">Médico</label>
-          <input value={filtroMedico} onChange={(e) => setFiltroMedico(e.target.value)} placeholder="Nombre del médico…" className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+          <label htmlFor={`${idCampo}-medico`} className="mb-1 block text-xs font-medium text-slate-500">Médico</label>
+          <input id={`${idCampo}-medico`} value={filtroMedico} onChange={(e) => setFiltroMedico(e.target.value)} placeholder="Nombre del médico…" className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500">Reportado desde</label>
-          <input type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+          <label htmlFor={`${idCampo}-reportado-desde`} className="mb-1 block text-xs font-medium text-slate-500">Reportado desde</label>
+          <input id={`${idCampo}-reportado-desde`} type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500">Reportado hasta</label>
-          <input type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+          <label htmlFor={`${idCampo}-reportado-hasta`} className="mb-1 block text-xs font-medium text-slate-500">Reportado hasta</label>
+          <input id={`${idCampo}-reportado-hasta`} type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
         </div>
         <div className="flex-1">
-          <label className="mb-1 block text-xs font-medium text-slate-500">Buscar</label>
-          <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Documento, nombre o # de ingreso…" className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+          <label htmlFor={`${idCampo}-buscar`} className="mb-1 block text-xs font-medium text-slate-500">Buscar</label>
+          <input id={`${idCampo}-buscar`} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Documento, nombre o # de ingreso…" className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
         </div>
         <Boton variante="fantasma" disabled={!hayFiltrosActivos} onClick={limpiarFiltros} className="flex items-center gap-1.5">
           <X size={14} /> Limpiar filtros
@@ -330,12 +332,14 @@ function Campo({ label, valor }: { label: string; valor: string | number | null 
 function ModalCancelarContenido({ error, guardando, onClose, onGuardar }: {
   error: string; guardando: boolean; onClose: () => void; onGuardar: (motivo: string) => void
 }) {
+  // Ids únicos para unir cada etiqueta con su campo (lectores de pantalla y clic en la etiqueta)
+  const idCampo = useId()
   const [motivo, setMotivo] = useState('')
   return (
     <div className="space-y-3">
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-600">Justificación</label>
-        <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={3} required className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+        <label htmlFor={`${idCampo}-justificacion`} className="mb-1 block text-sm font-medium text-slate-600">Justificación</label>
+        <textarea id={`${idCampo}-justificacion`} value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={3} required className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
       </div>
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
       <div className="flex justify-end gap-2 pt-2">

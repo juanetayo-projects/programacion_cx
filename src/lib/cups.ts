@@ -9,10 +9,13 @@ export function lineasProcedimientos(texto: string | null | undefined): { codigo
   const vistos = new Set<string>()
   const r: { codigo: string | null; nombre: string }[] = []
   for (const linea of (texto ?? '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean)) {
-    if (vistos.has(linea)) continue
-    vistos.add(linea)
     const m = LINEA_CUPS.exec(linea)
-    r.push(m ? { codigo: m[1], nombre: m[2].trim() } : { codigo: null, nombre: linea })
+    const item = m ? { codigo: m[1], nombre: m[2].trim() } : { codigo: null, nombre: linea }
+    // La pareja código + nombre es única: sirve de clave estable en las listas
+    const clave = `${item.codigo ?? ''}|${item.nombre}`
+    if (vistos.has(clave)) continue
+    vistos.add(clave)
+    r.push(item)
   }
   return r
 }

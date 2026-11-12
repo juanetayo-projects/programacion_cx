@@ -8,8 +8,8 @@ export function ProcedimientosCups({ texto }: { texto: string | null | undefined
   if (!lineas.length) return null
   return (
     <ol className="mt-1 space-y-1.5 whitespace-normal">
-      {lineas.map((l, i) => (
-        <li key={i} className="flex items-start gap-2 rounded-lg border border-slate-200 bg-white/80 px-2 py-1.5">
+      {lineas.map((l) => (
+        <li key={`${l.codigo ?? ''}|${l.nombre}`} className="flex items-start gap-2 rounded-lg border border-slate-200 bg-white/80 px-2 py-1.5">
           {l.codigo
             ? (
               <span

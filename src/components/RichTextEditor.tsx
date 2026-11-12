@@ -6,11 +6,13 @@ interface Props {
   onChange: (html: string) => void
   placeholder?: string
   minHeight?: string
+  /** id del texto visible que nombra el editor (para lectores de pantalla) */
+  etiquetaId?: string
 }
 
 // Editor liviano basado en contentEditable + document.execCommand — evita sumar
 // una librería pesada solo para negrita/cursiva/listas en un campo de correo interno.
-export default function RichTextEditor({ value, onChange, placeholder, minHeight = '140px' }: Props) {
+export default function RichTextEditor({ value, onChange, placeholder, minHeight = '140px', etiquetaId }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const ultimoValor = useRef<string | null>(null)
 
@@ -47,6 +49,9 @@ export default function RichTextEditor({ value, onChange, placeholder, minHeight
       <div
         ref={ref}
         contentEditable
+        role="textbox"
+        aria-multiline="true"
+        aria-labelledby={etiquetaId}
         onInput={manejarInput}
         data-placeholder={placeholder}
         style={{ minHeight }}

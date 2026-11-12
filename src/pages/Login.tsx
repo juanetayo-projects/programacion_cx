@@ -1,9 +1,11 @@
-import { useState, type FormEvent } from 'react'
+import { useId, useState, type FormEvent } from 'react'
 import { AVISO_LOGIN } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import { Boton, Modal } from '../components/ui'
 
 export default function Login() {
+  // Ids únicos para unir cada etiqueta con su campo (lectores de pantalla y clic en la etiqueta)
+  const idCampo = useId()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   // Aviso cuando la sesión anterior expiró y se cerró sola (lib/auth.tsx)
@@ -83,8 +85,8 @@ export default function Login() {
         <form onSubmit={modoRegistro ? registrar : entrar} className="space-y-4 px-8 py-8">
           {modoRegistro && (
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-600">Nombre completo</label>
-              <input
+              <label htmlFor={`${idCampo}-nombre-completo`} className="mb-1 block text-sm font-medium text-slate-600">Nombre completo</label>
+              <input id={`${idCampo}-nombre-completo`}
                 required
                 value={nombre}
                 onChange={(e) => setNombre(e.target.value)}
@@ -94,8 +96,8 @@ export default function Login() {
             </div>
           )}
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Correo electrónico</label>
-            <input
+            <label htmlFor={`${idCampo}-correo-electronico`} className="mb-1 block text-sm font-medium text-slate-600">Correo electrónico</label>
+            <input id={`${idCampo}-correo-electronico`}
               required
               type="email"
               autoComplete="username"
@@ -106,8 +108,8 @@ export default function Login() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Contraseña</label>
-            <input
+            <label htmlFor={`${idCampo}-contrasena`} className="mb-1 block text-sm font-medium text-slate-600">Contraseña</label>
+            <input id={`${idCampo}-contrasena`}
               required
               type="password"
               autoComplete={modoRegistro ? 'new-password' : 'current-password'}

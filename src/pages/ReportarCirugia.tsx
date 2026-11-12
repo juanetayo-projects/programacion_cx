@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useId, useEffect, useRef, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { TituloEnHeader, Boton, Modal, Spinner } from '../components/ui'
@@ -19,6 +19,8 @@ type SolicitudActiva = { id: number; estado: string; fecha_reporte: string }
 const ESTADOS_CERRADOS = ['cancelado', 'realizado']
 
 export default function ReportarCirugia() {
+  // Ids únicos para unir cada etiqueta con su campo (lectores de pantalla y clic en la etiqueta)
+  const idCampo = useId()
   const { perfil, session } = useAuth()
   const [especialidades, setEspecialidades] = useState<Especialidad[]>([])
   const [numeroIngreso, setNumeroIngreso] = useState('')
@@ -228,9 +230,9 @@ export default function ReportarCirugia() {
       <form onSubmit={enviar} className="neu-card space-y-4 p-6">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600"># de ingreso (GoMedisys)</label>
+            <label htmlFor={`${idCampo}-ingreso-gomedisys`} className="mb-1 block text-sm font-medium text-slate-600"># de ingreso (GoMedisys)</label>
             <div className="relative">
-              <input
+              <input id={`${idCampo}-ingreso-gomedisys`}
                 required
                 value={numeroIngreso}
                 onChange={(e) => { setNumeroIngreso(e.target.value); if (paciente) setPaciente(null) }}
@@ -249,8 +251,8 @@ export default function ReportarCirugia() {
             </div>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Documento del paciente</label>
-            <input
+            <label htmlFor={`${idCampo}-documento-paciente`} className="mb-1 block text-sm font-medium text-slate-600">Documento del paciente</label>
+            <input id={`${idCampo}-documento-paciente`}
               required
               value={documento}
               onChange={(e) => { setDocumento(e.target.value); if (paciente) setPaciente(null) }}
@@ -398,8 +400,8 @@ export default function ReportarCirugia() {
 
         {esProgramador && (
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Nombre del médico que reporta</label>
-            <input
+            <label htmlFor={`${idCampo}-nombre-medico-reporta`} className="mb-1 block text-sm font-medium text-slate-600">Nombre del médico que reporta</label>
+            <input id={`${idCampo}-nombre-medico-reporta`}
               required
               value={nombreMedico}
               onChange={(e) => setNombreMedico(e.target.value)}
@@ -410,8 +412,8 @@ export default function ReportarCirugia() {
         )}
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">Especialidad de la cirugía</label>
-          <select
+          <label htmlFor={`${idCampo}-especialidad-cirugia`} className="mb-1 block text-sm font-medium text-slate-600">Especialidad de la cirugía</label>
+          <select id={`${idCampo}-especialidad-cirugia`}
             required
             value={especialidadId}
             onChange={(e) => setEspecialidadId(e.target.value)}
@@ -426,8 +428,8 @@ export default function ReportarCirugia() {
 
         {esOrtopedia && (
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Subespecialidad</label>
-            <select
+            <label htmlFor={`${idCampo}-subespecialidad`} className="mb-1 block text-sm font-medium text-slate-600">Subespecialidad</label>
+            <select id={`${idCampo}-subespecialidad`}
               value={subespecialidad}
               onChange={(e) => setSubespecialidad(e.target.value)}
               className={claseInput}
@@ -441,7 +443,7 @@ export default function ReportarCirugia() {
         )}
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">Soporte (PDF o foto)</label>
+          <p className="mb-1 block text-sm font-medium text-slate-600">Soporte (PDF o foto)</p>
           <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-slate-300 px-4 py-3 text-sm text-slate-500 hover:border-[#0D2D6B]">
             <UploadCloud size={18} />
             {archivo ? archivo.name : 'Seleccionar archivo…'}

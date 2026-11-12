@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { Boton, Modal, EstadoVacio } from './ui'
 import { Pencil, Trash2, Plus, Search } from 'lucide-react'
@@ -28,6 +28,8 @@ export function CrudTable({
   columnas: Columna[]
   titulo: string
 }) {
+  // Ids únicos para unir cada etiqueta del formulario con su campo
+  const idCampo = useId()
   const [filas, setFilas] = useState<Record<string, unknown>[]>([])
   const [cargando, setCargando] = useState(true)
   const [busqueda, setBusqueda] = useState('')
@@ -186,9 +188,10 @@ export function CrudTable({
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {columnas.map((c) => (
             <div key={c.key} className={c.tipo === 'textarea' ? 'sm:col-span-2' : ''}>
-              <label className="mb-1 block text-sm font-medium text-slate-600">{c.label}</label>
+              <label htmlFor={`${idCampo}-${c.key}`} className="mb-1 block text-sm font-medium text-slate-600">{c.label}</label>
               {c.tipo === 'boolean' ? (
                 <select
+                  id={`${idCampo}-${c.key}`}
                   value={form[c.key] ? 'true' : 'false'}
                   onChange={(e) => setForm({ ...form, [c.key]: e.target.value === 'true' })}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -198,6 +201,7 @@ export function CrudTable({
                 </select>
               ) : c.tipo === 'select' && c.optionsTable ? (
                 <select
+                  id={`${idCampo}-${c.key}`}
                   value={String(form[c.key] ?? '')}
                   onChange={(e) => setForm({ ...form, [c.key]: e.target.value ? Number(e.target.value) : null })}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -209,6 +213,7 @@ export function CrudTable({
                 </select>
               ) : c.tipo === 'select' ? (
                 <select
+                  id={`${idCampo}-${c.key}`}
                   value={String(form[c.key] ?? '')}
                   onChange={(e) => setForm({ ...form, [c.key]: e.target.value })}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -220,6 +225,7 @@ export function CrudTable({
                 </select>
               ) : c.tipo === 'textarea' ? (
                 <textarea
+                  id={`${idCampo}-${c.key}`}
                   value={String(form[c.key] ?? '')}
                   onChange={(e) => setForm({ ...form, [c.key]: e.target.value })}
                   rows={3}
@@ -227,6 +233,7 @@ export function CrudTable({
                 />
               ) : (
                 <input
+                  id={`${idCampo}-${c.key}`}
                   type={c.tipo === 'number' ? 'number' : 'text'}
                   value={String(form[c.key] ?? '')}
                   onChange={(e) => setForm({ ...form, [c.key]: e.target.value })}

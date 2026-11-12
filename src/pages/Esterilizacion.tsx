@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useId, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { TituloEnHeader, CampoLinea, CLASE_CAMPO, Boton, Badge, EstadoVacio, Spinner } from '../components/ui'
@@ -214,6 +214,8 @@ export default function Esterilizacion() {
 function PanelRecibo({ s, onCerrar, onRegistrado }: {
   s: Solicitud; onCerrar: () => void; onRegistrado: (recepcionId: number, resultado: string | null) => void
 }) {
+  // Ids únicos para unir cada etiqueta con su campo (lectores de pantalla y clic en la etiqueta)
+  const idCampo = useId()
   const { perfil } = useAuth()
   const [items, setItems] = useState<RegistroItem[] | null>(null)
   const [proveedorId, setProveedorId] = useState<number | null>(null)
@@ -338,8 +340,8 @@ function PanelRecibo({ s, onCerrar, onRegistrado }: {
 
       <Grupo color="paciente" icono={Truck} titulo="Remisión del proveedor *">
         <div className="col-span-2">
-          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Proveedor que entrega</label>
-          <select value={proveedorId ?? ''} onChange={(e) => setProveedorId(Number(e.target.value) || null)} className={`${CLASE_CAMPO} w-full`}>
+          <label htmlFor={`${idCampo}-proveedor-entrega`} className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Proveedor que entrega</label>
+          <select id={`${idCampo}-proveedor-entrega`} value={proveedorId ?? ''} onChange={(e) => setProveedorId(Number(e.target.value) || null)} className={`${CLASE_CAMPO} w-full`}>
             {proveedores.map(([id, nombre]) => {
               const pend = lista.filter((i) => i.proveedor_id === id).reduce((t, i) => t + pendienteDe(i), 0)
               return <option key={id} value={id}>{nombre} · {pend > 0 ? `${pend} unid. pendientes` : 'completo'}</option>
@@ -347,16 +349,16 @@ function PanelRecibo({ s, onCerrar, onRegistrado }: {
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">N.º de remisión *</label>
-          <input value={numeroRemision} onChange={(e) => setNumeroRemision(e.target.value)} className={`${CLASE_CAMPO} w-full`} placeholder="Ej.: REM-004512" />
+          <label htmlFor={`${idCampo}-remision`} className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">N.º de remisión *</label>
+          <input id={`${idCampo}-remision`} value={numeroRemision} onChange={(e) => setNumeroRemision(e.target.value)} className={`${CLASE_CAMPO} w-full`} placeholder="Ej.: REM-004512" />
         </div>
         <div>
-          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Fecha de la remisión *</label>
-          <input type="date" max={hoyISO()} value={fechaRemision} onChange={(e) => setFechaRemision(e.target.value)} className={`${CLASE_CAMPO} w-full`} />
+          <label htmlFor={`${idCampo}-fecha-remision`} className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Fecha de la remisión *</label>
+          <input id={`${idCampo}-fecha-remision`} type="date" max={hoyISO()} value={fechaRemision} onChange={(e) => setFechaRemision(e.target.value)} className={`${CLASE_CAMPO} w-full`} />
         </div>
         <div className="col-span-2">
-          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Entregado por (persona del proveedor)</label>
-          <input value={entregadoPor} onChange={(e) => setEntregadoPor(e.target.value)} className={`${CLASE_CAMPO} w-full`} placeholder="Nombre de quien entrega" />
+          <label htmlFor={`${idCampo}-entregado-persona-proveedor`} className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Entregado por (persona del proveedor)</label>
+          <input id={`${idCampo}-entregado-persona-proveedor`} value={entregadoPor} onChange={(e) => setEntregadoPor(e.target.value)} className={`${CLASE_CAMPO} w-full`} placeholder="Nombre de quien entrega" />
         </div>
       </Grupo>
 

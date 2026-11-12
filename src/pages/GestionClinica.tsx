@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useId, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { TituloEnHeader, CampoLinea, CLASE_CAMPO, Boton, Badge, EstadoVacio, Spinner, Modal } from '../components/ui'
@@ -236,8 +236,8 @@ export default function GestionClinica() {
           <table className="tabla-cac w-full text-xs">
             <thead className="text-left text-[10px] font-semibold uppercase text-white">
               <tr>
-                {COLUMNAS.map((t, i) => (
-                  <th key={i} className={`sticky top-0 z-10 whitespace-nowrap bg-[#0D2D6B] px-2.5 py-2.5 ${t === 'Días' ? 'text-center' : ''}`}
+                {COLUMNAS.map((t) => (
+                  <th key={t || 'acciones'} className={`sticky top-0 z-10 whitespace-nowrap bg-[#0D2D6B] px-2.5 py-2.5 ${t === 'Días' ? 'text-center' : ''}`}
                     title={t === 'Días' ? 'Fecha reporte − fecha de ordenamiento' : undefined}>{t}</th>
                 ))}
               </tr>
@@ -449,6 +449,8 @@ function PanelClinico({ s, items, puedeEscribir, gm, onCerrar, onCambio }: {
 function ModalItem({ s, item, puedeEscribir, onCerrar, onGuardado }: {
   s: Solicitud; item: ItemClinico; puedeEscribir: boolean; onCerrar: () => void; onGuardado: () => void
 }) {
+  // Ids únicos para unir cada etiqueta con su campo (lectores de pantalla y clic en la etiqueta)
+  const idCampo = useId()
   const [cobro, setCobro] = useState(item.cobro_responsable ?? '')
   const [guardado, setGuardado] = useState({ valor: item.cobro_responsable, en: item.cobro_registrado_en, por: item.cobro_registrado_por_nombre })
   const [guardando, setGuardando] = useState(false)
@@ -476,8 +478,8 @@ function ModalItem({ s, item, puedeEscribir, onCerrar, onGuardado }: {
 
         <section className="rounded-xl border border-amber-200 bg-amber-50 p-3">
           <h3 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-amber-900"><Receipt size={14} /> Cargo del cobro (facturación)</h3>
-          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">¿Quién asume el cobro?</label>
-          <input value={cobro} onChange={(e) => setCobro(e.target.value)} disabled={!puedeEscribir}
+          <label htmlFor={`${idCampo}-quien-asume-cobro`} className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">¿Quién asume el cobro?</label>
+          <input id={`${idCampo}-quien-asume-cobro`} value={cobro} onChange={(e) => setCobro(e.target.value)} disabled={!puedeEscribir}
             placeholder="Ej.: SURA EPS, paciente, póliza SOAT, ARL…" className={`${CLASE_CAMPO} w-full`} />
           {guardado.en && (
             <p className="mt-1 text-[11px] text-slate-500">Registrado el {fechaHora(guardado.en)} por {guardado.por ?? '—'}. Cada cambio queda en el historial.</p>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useId, useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { TituloEnHeader, CampoLinea, CLASE_CAMPO, Boton, Modal, Badge, EstadoVacio, Spinner } from '../components/ui'
@@ -144,6 +144,8 @@ const ESTADOS_PROGRAMADOS: Estado[] = ['programado', 'notificado', 'aplazado', '
 const hoyISO = hoyBogota()
 
 export default function Solicitudes() {
+  // Ids únicos para unir cada etiqueta con su campo (lectores de pantalla y clic en la etiqueta)
+  const idCampo = useId()
   const { session, perfil } = useAuth()
   const catGC = useCatalogosGC()
   const [filas, setFilas] = useState<Solicitud[]>([])
@@ -559,19 +561,19 @@ export default function Solicitudes() {
           {masFiltros && (
             <div className="absolute right-3 top-full z-30 mt-1 grid w-[min(520px,calc(100vw-2rem))] grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
               <div className="col-span-2">
-                <label className="mb-1 block text-xs font-medium text-slate-500">Médico</label>
-                <input value={filtroMedico} onChange={(e) => setFiltroMedico(e.target.value)} placeholder="Nombre del médico…" className={`${CLASE_CAMPO} w-full`} />
+                <label htmlFor={`${idCampo}-medico`} className="mb-1 block text-xs font-medium text-slate-500">Médico</label>
+                <input id={`${idCampo}-medico`} value={filtroMedico} onChange={(e) => setFiltroMedico(e.target.value)} placeholder="Nombre del médico…" className={`${CLASE_CAMPO} w-full`} />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">Quirófano</label>
-                <select value={filtroQuirofano} onChange={(e) => setFiltroQuirofano(e.target.value)} className={`${CLASE_CAMPO} w-full`}>
+                <label htmlFor={`${idCampo}-quirofano`} className="mb-1 block text-xs font-medium text-slate-500">Quirófano</label>
+                <select id={`${idCampo}-quirofano`} value={filtroQuirofano} onChange={(e) => setFiltroQuirofano(e.target.value)} className={`${CLASE_CAMPO} w-full`}>
                   <option value="">Todos</option>
                   {quirofanos.map((q) => <option key={q.id} value={q.id}>{q.nombre}</option>)}
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-500">Hora programada</label>
-                <input type="time" value={filtroHora} onChange={(e) => setFiltroHora(e.target.value)} className={`${CLASE_CAMPO} w-full`} />
+                <label htmlFor={`${idCampo}-hora-programada`} className="mb-1 block text-xs font-medium text-slate-500">Hora programada</label>
+                <input id={`${idCampo}-hora-programada`} type="time" value={filtroHora} onChange={(e) => setFiltroHora(e.target.value)} className={`${CLASE_CAMPO} w-full`} />
               </div>
               <div className="col-span-2 flex justify-end">
                 <Boton variante="secundario" onClick={() => setMasFiltros(false)} className="!py-1.5">Listo</Boton>
@@ -1054,6 +1056,8 @@ function PanelProgramar({ seleccion, medico, esReprogramacion, quirofanos, error
   error: string; guardando: boolean; onClose: () => void
   onGuardar: (quirofanoId: number, fecha: string, hora: string, esReprogramacion: boolean, duracion: number) => void
 }) {
+  // Ids únicos para unir cada etiqueta con su campo (lectores de pantalla y clic en la etiqueta)
+  const idCampo = useId()
   const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
   const [quirofano, setQuirofano] = useState(seleccion.quirofano_id ? String(seleccion.quirofano_id) : '')
   const [fecha, setFecha] = useState(seleccion.fecha_programada ?? hoy)
@@ -1137,23 +1141,23 @@ function PanelProgramar({ seleccion, medico, esReprogramacion, quirofanos, error
 
       <Grupo color="gestion" icono={CalendarClock} titulo="Fecha, quirófano y hora">
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600">Fecha</label>
-          <input type="date" min={hoy} value={fecha} onChange={(e) => setFecha(e.target.value)} className={campo} />
+          <label htmlFor={`${idCampo}-fecha`} className="mb-1 block text-xs font-medium text-slate-600">Fecha</label>
+          <input id={`${idCampo}-fecha`} type="date" min={hoy} value={fecha} onChange={(e) => setFecha(e.target.value)} className={campo} />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600">Quirófano</label>
-          <select value={quirofano} onChange={(e) => setQuirofano(e.target.value)} className={campo}>
+          <label htmlFor={`${idCampo}-quirofano`} className="mb-1 block text-xs font-medium text-slate-600">Quirófano</label>
+          <select id={`${idCampo}-quirofano`} value={quirofano} onChange={(e) => setQuirofano(e.target.value)} className={campo}>
             <option value="">Seleccionar…</option>
             {quirofanos.map((q) => <option key={q.id} value={q.id}>{q.nombre}</option>)}
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600">Hora de inicio</label>
-          <input type="time" step={PASO_MIN * 60} value={hora} onChange={(e) => setHora(e.target.value)} className={campo} />
+          <label htmlFor={`${idCampo}-hora-inicio`} className="mb-1 block text-xs font-medium text-slate-600">Hora de inicio</label>
+          <input id={`${idCampo}-hora-inicio`} type="time" step={PASO_MIN * 60} value={hora} onChange={(e) => setHora(e.target.value)} className={campo} />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600">Duración estimada (min)</label>
-          <input type="number" min={15} step={15} value={duracion} onChange={(e) => setDuracion(Number(e.target.value))} className={campo} />
+          <label htmlFor={`${idCampo}-duracion-estimada-min`} className="mb-1 block text-xs font-medium text-slate-600">Duración estimada (min)</label>
+          <input id={`${idCampo}-duracion-estimada-min`} type="number" min={15} step={15} value={duracion} onChange={(e) => setDuracion(Number(e.target.value))} className={campo} />
         </div>
         {inicio != null && fin != null && (
           <div className={`col-span-2 flex items-start gap-2 rounded-lg px-3 py-2 text-sm ${choques.length ? 'bg-red-50 text-red-700' : quirofano ? 'bg-emerald-100/70 text-emerald-800' : 'bg-white/70 text-slate-600'}`}>
@@ -1279,6 +1283,8 @@ function PanelNotificar({ seleccion, recomendaciones, error, guardando, onClose,
   error: string; guardando: boolean; onClose: () => void
   onGuardar: (canales: string[], notas: string, telefono: string, email: string, estadoDestino: EstadoNotificable, contenido: ContenidoNotificacion) => void
 }) {
+  // Ids únicos para unir cada etiqueta con su campo (lectores de pantalla y clic en la etiqueta)
+  const idCampo = useId()
   const [canales, setCanales] = useState<string[]>(['email'])
   const [contenido, setContenido] = useState(() => seleccion.notas_notificacion || recomendaciones
     .filter((r) => r.especialidad_id === seleccion.especialidad_id)
@@ -1393,12 +1399,12 @@ function PanelNotificar({ seleccion, recomendaciones, error, guardando, onClose,
 
       <Grupo color="paciente" icono={UserRound} titulo="Contacto y canales">
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600">Teléfono (WhatsApp / SMS)</label>
-          <input value={telefono} onChange={(e) => setTelefono(e.target.value)} className={campo} placeholder="3001234567" />
+          <label htmlFor={`${idCampo}-telefono-whatsapp-sms`} className="mb-1 block text-xs font-medium text-slate-600">Teléfono (WhatsApp / SMS)</label>
+          <input id={`${idCampo}-telefono-whatsapp-sms`} value={telefono} onChange={(e) => setTelefono(e.target.value)} className={campo} placeholder="3001234567" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-600">Correo</label>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={campo} placeholder="paciente@correo.com" />
+          <label htmlFor={`${idCampo}-correo`} className="mb-1 block text-xs font-medium text-slate-600">Correo</label>
+          <input id={`${idCampo}-correo`} type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={campo} placeholder="paciente@correo.com" />
         </div>
         <div className="col-span-2 flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-slate-600">Medio de notificación:</span>
@@ -1432,21 +1438,21 @@ function PanelNotificar({ seleccion, recomendaciones, error, guardando, onClose,
           {/* El asunto solo aplica al correo: SMS y WhatsApp no lo usan */}
           {canales.includes('email') && (
             <div className="col-span-2">
-              <label className="mb-1 block text-xs font-medium text-slate-600">Asunto del correo</label>
-              <input value={asunto ?? asuntoCorreo(estadoDestino)} onChange={(e) => setAsunto(e.target.value)} className={campo} maxLength={150} />
+              <label htmlFor={`${idCampo}-asunto-correo`} className="mb-1 block text-xs font-medium text-slate-600">Asunto del correo</label>
+              <input id={`${idCampo}-asunto-correo`} value={asunto ?? asuntoCorreo(estadoDestino)} onChange={(e) => setAsunto(e.target.value)} className={campo} maxLength={150} />
             </div>
           )}
           <div className="col-span-2">
-            <label className="mb-1 block text-xs font-medium text-slate-600">Mensaje principal</label>
-            <textarea value={mensaje ?? mensajePorDefecto(estadoDestino)} onChange={(e) => setMensaje(e.target.value)} rows={3} className={campo} maxLength={1500} />
+            <label htmlFor={`${idCampo}-mensaje-principal`} className="mb-1 block text-xs font-medium text-slate-600">Mensaje principal</label>
+            <textarea id={`${idCampo}-mensaje-principal`} value={mensaje ?? mensajePorDefecto(estadoDestino)} onChange={(e) => setMensaje(e.target.value)} rows={3} className={campo} maxLength={1500} />
           </div>
           <div className="col-span-2">
-            <label className="mb-1 block text-xs font-medium text-slate-600">Lugar</label>
-            <input value={lugar} onChange={(e) => setLugar(e.target.value)} className={campo} maxLength={200} placeholder="Sede, piso, área de admisión…" />
+            <label htmlFor={`${idCampo}-lugar`} className="mb-1 block text-xs font-medium text-slate-600">Lugar</label>
+            <input id={`${idCampo}-lugar`} value={lugar} onChange={(e) => setLugar(e.target.value)} className={campo} maxLength={200} placeholder="Sede, piso, área de admisión…" />
           </div>
           <div className="col-span-2">
-            <label className="mb-1 block text-xs font-medium text-slate-600">Información adicional <span className="font-normal text-slate-400">(va en el correo y en WhatsApp: indicaciones de llegada, documentos, preparación, cambios de último momento…)</span></label>
-            <RichTextEditor value={adicional} onChange={setAdicional} placeholder="Escriba aquí la información que surja durante el proceso…" minHeight="70px" />
+            <p id={`${idCampo}-adicional`} className="mb-1 block text-xs font-medium text-slate-600">Información adicional <span className="font-normal text-slate-400">(va en el correo y en WhatsApp: indicaciones de llegada, documentos, preparación, cambios de último momento…)</span></p>
+            <RichTextEditor etiquetaId={`${idCampo}-adicional`} value={adicional} onChange={setAdicional} placeholder="Escriba aquí la información que surja durante el proceso…" minHeight="70px" />
           </div>
           <p className="col-span-2 text-[11px] text-slate-500">Los textos de WhatsApp y SMS también se pueden editar directamente en la vista previa.</p>
         </Grupo>
@@ -1640,13 +1646,15 @@ function ModalEnvioManual({ datos, canales, telefono, textos, onClose }: { datos
 function ModalCancelar({ open, error, guardando, onClose, onGuardar }: {
   open: boolean; error: string; guardando: boolean; onClose: () => void; onGuardar: (motivo: string) => void
 }) {
+  // Ids únicos para unir cada etiqueta con su campo (lectores de pantalla y clic en la etiqueta)
+  const idCampo = useId()
   const [motivo, setMotivo] = useState('')
   return (
     <Modal open={open} onClose={onClose} titulo="Cancelar cirugía">
       <div className="space-y-3">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-600">Justificación</label>
-          <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={3} required className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+          <label htmlFor={`${idCampo}-justificacion`} className="mb-1 block text-sm font-medium text-slate-600">Justificación</label>
+          <textarea id={`${idCampo}-justificacion`} value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={3} required className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
         </div>
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useId, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { PageHeader, Boton, FilterBar, Badge, Spinner, EstadoVacio } from '../components/ui'
 import { ESTADOS, ESTADOS_LABEL, ESTADOS_COLOR, type Estado } from '../lib/constantes'
@@ -19,6 +19,8 @@ type Fila = {
 }
 
 export default function Reportes() {
+  // Ids únicos para unir cada etiqueta con su campo (lectores de pantalla y clic en la etiqueta)
+  const idCampo = useId()
   const [filas, setFilas] = useState<Fila[]>([])
   const [cargando, setCargando] = useState(true)
   const [exportando, setExportando] = useState(false)
@@ -151,23 +153,23 @@ export default function Reportes() {
 
       <FilterBar>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500">Desde</label>
-          <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+          <label htmlFor={`${idCampo}-desde`} className="mb-1 block text-xs font-medium text-slate-500">Desde</label>
+          <input id={`${idCampo}-desde`} type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500">Hasta</label>
-          <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+          <label htmlFor={`${idCampo}-hasta`} className="mb-1 block text-xs font-medium text-slate-500">Hasta</label>
+          <input id={`${idCampo}-hasta`} type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500">Estado</label>
-          <select value={estado} onChange={(e) => setEstado(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
+          <label htmlFor={`${idCampo}-estado`} className="mb-1 block text-xs font-medium text-slate-500">Estado</label>
+          <select id={`${idCampo}-estado`} value={estado} onChange={(e) => setEstado(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
             <option value="">Todos</option>
             {ESTADOS.map((e) => <option key={e} value={e}>{ESTADOS_LABEL[e]}</option>)}
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500">Especialidad</label>
-          <select value={especialidadId} onChange={(e) => setEspecialidadId(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
+          <label htmlFor={`${idCampo}-especialidad`} className="mb-1 block text-xs font-medium text-slate-500">Especialidad</label>
+          <select id={`${idCampo}-especialidad`} value={especialidadId} onChange={(e) => setEspecialidadId(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
             <option value="">Todas</option>
             {especialidades.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
           </select>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useId, useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { PageHeader, Boton, Modal, EstadoVacio, Badge } from '../../components/ui'
 import { ROLES, ROLES_LABEL, ESPECIALIDADES, type Rol } from '../../lib/constantes'
@@ -27,6 +27,8 @@ function traducirError(msg: string): string {
 }
 
 export default function Usuarios() {
+  // Ids únicos para unir cada etiqueta con su campo (lectores de pantalla y clic en la etiqueta)
+  const idCampo = useId()
   const [perfiles, setPerfiles] = useState<Perfil[]>([])
   const [cargando, setCargando] = useState(true)
   const [modalCrear, setModalCrear] = useState(false)
@@ -199,33 +201,33 @@ export default function Usuarios() {
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-600">Nombre completo</label>
-              <input value={nombre} onChange={(e) => setNombre(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              <label htmlFor={`${idCampo}-nombre-completo-2`} className="mb-1 block text-sm font-medium text-slate-600">Nombre completo</label>
+              <input id={`${idCampo}-nombre-completo-2`} value={nombre} onChange={(e) => setNombre(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-600">Correo</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              <label htmlFor={`${idCampo}-correo`} className="mb-1 block text-sm font-medium text-slate-600">Correo</label>
+              <input id={`${idCampo}-correo`} type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-600">Contraseña inicial</label>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              <label htmlFor={`${idCampo}-contrasena-inicial`} className="mb-1 block text-sm font-medium text-slate-600">Contraseña inicial</label>
+              <input id={`${idCampo}-contrasena-inicial`} type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
               <PasswordStrengthMeter password={password} />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-600">Confirmar contraseña</label>
-              <input type="password" value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              <label htmlFor={`${idCampo}-confirmar-contrasena`} className="mb-1 block text-sm font-medium text-slate-600">Confirmar contraseña</label>
+              <input id={`${idCampo}-confirmar-contrasena`} type="password" value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
               <MensajeConfirmarPassword password={password} confirmar={passwordConfirm} />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-600">Rol</label>
-              <select value={rol} onChange={(e) => setRol(e.target.value as Rol)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+              <label htmlFor={`${idCampo}-rol-2`} className="mb-1 block text-sm font-medium text-slate-600">Rol</label>
+              <select id={`${idCampo}-rol-2`} value={rol} onChange={(e) => setRol(e.target.value as Rol)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
                 {ROLES.map((r) => <option key={r} value={r}>{ROLES_LABEL[r]}</option>)}
               </select>
             </div>
             {rol === 'medico' && (
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-600">Especialidad</label>
-                <select value={especialidad} onChange={(e) => setEspecialidad(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                <label htmlFor={`${idCampo}-especialidad-2`} className="mb-1 block text-sm font-medium text-slate-600">Especialidad</label>
+                <select id={`${idCampo}-especialidad-2`} value={especialidad} onChange={(e) => setEspecialidad(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
                   <option value="">Seleccionar…</option>
                   {ESPECIALIDADES.map((e) => <option key={e} value={e}>{e}</option>)}
                 </select>
@@ -247,23 +249,23 @@ export default function Usuarios() {
           <div className="space-y-3">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-600">Nombre completo</label>
-                <input value={editando.nombre} onChange={(e) => setEditando({ ...editando, nombre: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                <label htmlFor={`${idCampo}-nombre-completo`} className="mb-1 block text-sm font-medium text-slate-600">Nombre completo</label>
+                <input id={`${idCampo}-nombre-completo`} value={editando.nombre} onChange={(e) => setEditando({ ...editando, nombre: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-600">Correo (usuario de acceso)</label>
-                <input type="email" value={editando.email} onChange={(e) => setEditando({ ...editando, email: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+                <label htmlFor={`${idCampo}-correo-usuario-acceso`} className="mb-1 block text-sm font-medium text-slate-600">Correo (usuario de acceso)</label>
+                <input id={`${idCampo}-correo-usuario-acceso`} type="email" value={editando.email} onChange={(e) => setEditando({ ...editando, email: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-600">Rol</label>
-                <select value={editando.rol} onChange={(e) => setEditando({ ...editando, rol: e.target.value as Rol })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                <label htmlFor={`${idCampo}-rol`} className="mb-1 block text-sm font-medium text-slate-600">Rol</label>
+                <select id={`${idCampo}-rol`} value={editando.rol} onChange={(e) => setEditando({ ...editando, rol: e.target.value as Rol })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
                   {ROLES.map((r) => <option key={r} value={r}>{ROLES_LABEL[r]}</option>)}
                 </select>
               </div>
               {editando.rol === 'medico' && (
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-600">Especialidad</label>
-                  <select value={editando.especialidad} onChange={(e) => setEditando({ ...editando, especialidad: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                  <label htmlFor={`${idCampo}-especialidad`} className="mb-1 block text-sm font-medium text-slate-600">Especialidad</label>
+                  <select id={`${idCampo}-especialidad`} value={editando.especialidad} onChange={(e) => setEditando({ ...editando, especialidad: e.target.value })} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
                     <option value="">Seleccionar…</option>
                     {ESPECIALIDADES.map((e) => <option key={e} value={e}>{e}</option>)}
                   </select>
@@ -283,13 +285,13 @@ export default function Usuarios() {
       <Modal open={!!modalReset} onClose={() => setModalReset(null)} titulo={`Restablecer contraseña — ${modalReset?.nombre}`}>
         <div className="space-y-3">
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Nueva contraseña</label>
-            <input type="password" value={nuevaPassword} onChange={(e) => setNuevaPassword(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+            <label htmlFor={`${idCampo}-nueva-contrasena`} className="mb-1 block text-sm font-medium text-slate-600">Nueva contraseña</label>
+            <input id={`${idCampo}-nueva-contrasena`} type="password" value={nuevaPassword} onChange={(e) => setNuevaPassword(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
             <PasswordStrengthMeter password={nuevaPassword} />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">Confirmar nueva contraseña</label>
-            <input type="password" value={nuevaPasswordConfirm} onChange={(e) => setNuevaPasswordConfirm(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+            <label htmlFor={`${idCampo}-confirmar-nueva-contrasena`} className="mb-1 block text-sm font-medium text-slate-600">Confirmar nueva contraseña</label>
+            <input id={`${idCampo}-confirmar-nueva-contrasena`} type="password" value={nuevaPasswordConfirm} onChange={(e) => setNuevaPasswordConfirm(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
             <MensajeConfirmarPassword password={nuevaPassword} confirmar={nuevaPasswordConfirm} />
           </div>
           {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}

@@ -317,8 +317,10 @@ export default function Dashboard() {
       if (d.getFullYear() === y && d.getMonth() === m) (porDia[d.getDate()] ??= []).push(s)
     }
     const max = Math.max(1, ...Object.values(porDia).map((a) => a.length))
-    const celdas: ({ dia: number; lista: S[] } | null)[] = Array.from({ length: offset }, () => null)
-    for (let dia = 1; dia <= diasMes; dia++) celdas.push({ dia, lista: porDia[dia] ?? [] })
+    // Las celdas de relleno (antes del día 1) llevan su propia clave: "vacia-0", "vacia-1"…
+    const celdas: ({ clave: string; dia: number; lista: S[] } | { clave: string; dia: null })[] =
+      Array.from({ length: offset }, (_, k) => ({ clave: `vacia-${k}`, dia: null }))
+    for (let dia = 1; dia <= diasMes; dia++) celdas.push({ clave: `dia-${dia}`, dia, lista: porDia[dia] ?? [] })
     return { celdas, max, total: Object.values(porDia).reduce((t, a) => t + a.length, 0) }
   }, [F, mesCal])
   const ESCALA = ['#EAF0FA', '#B9CCE9', '#7FA0D6', '#3E6DAE', '#0D2D6B']
@@ -702,13 +704,13 @@ export default function Dashboard() {
           </div>
           <div className="grid grid-cols-7 gap-1 text-center text-[10px] text-slate-400">{['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d) => <div key={d}>{d}</div>)}</div>
           <div className="mt-1 grid grid-cols-7 gap-1">
-            {cal.celdas.map((c, i) => {
-              if (!c) return <div key={i} />
+            {cal.celdas.map((c) => {
+              if (c.dia === null) return <div key={c.clave} />
               const n = c.lista.length
               const nivel = n === 0 ? 0 : Math.min(4, Math.ceil((n / cal.max) * 4))
               const esHoy = `${mesCal.y}-${String(mesCal.m + 1).padStart(2, '0')}-${String(c.dia).padStart(2, '0')}` === hoyISO()
               return (
-                <div key={i} onClick={(e) => n && abrir(`${c.dia} · ${n} cirugía(s)`, c.lista)(e)}
+                <div key={c.clave} onClick={(e) => n && abrir(`${c.dia} · ${n} cirugía(s)`, c.lista)(e)}
                   className={`flex aspect-square flex-col items-center justify-center rounded text-[10px] font-medium ${n ? 'cursor-pointer hover:ring-2 hover:ring-[#0D2D6B]/40' : ''} ${esHoy ? 'ring-2 ring-amber-400' : ''}`}
                   style={{ background: ESCALA[nivel], color: nivel >= 3 ? 'white' : '#334155' }}>
                   {c.dia}{n > 0 && <span className="text-[8px] opacity-90">{n}</span>}

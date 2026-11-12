@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useId, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { Modal, Boton, Badge, Spinner, CLASE_CAMPO } from './ui'
@@ -100,11 +100,6 @@ export function PanelAutorizacion({ solicitudId, s, puedeEscribir, onCambio }: {
     return () => clearTimeout(t)
   }, [confirmacion])
 
-  const e = estadoAutorizacion(s)
-  const Icono = ICONO[e]
-  const dias = diasVigencia(s)
-  const espera = e === 'solicitada' ? diasDesdeSolicitud(s) : null
-  const correosDe = (id: number) => correos.filter((c) => c.autorizacion_id === id)
   // Ya hay código de autorización del asegurador vigente: no se registran más
   // gestiones ni se envían solicitudes (también lo valida registrar_autorizacion)
   const codigoVigente = !!s.autorizacion_numero && !!s.autorizacion_vigencia_hasta && s.autorizacion_vigencia_hasta >= hoyLocal()
@@ -114,21 +109,47 @@ export function PanelAutorizacion({ solicitudId, s, puedeEscribir, onCambio }: {
 
   return (
     <div className="space-y-2">
+      <EstadoAutorizacionActual s={s} puedeEscribir={puedeEscribir} codigoVigente={codigoVigente} motivoBloqueo={motivoBloqueo}
+        confirmacion={confirmacion} onRegistrar={() => setRegistrar(true)} />
+
+      <HistorialAutorizacion historial={historial} correos={correos} puedeEscribir={puedeEscribir} codigoVigente={codigoVigente}
+        motivoBloqueo={motivoBloqueo} onEnviar={setEnviarDe} onVerAdjunto={setAdjunto} onVerCorreo={setVerCorreo} />
+
+      {registrar && (
+        <ModalRegistrarAutorizacion solicitudId={solicitudId} s={s}
+          onCerrar={() => setRegistrar(false)}
+          onGuardado={(texto) => { setRegistrar(false); setConfirmacion(texto); setRecargar((r) => r + 1); onCambio() }} />
+      )}
+      {enviarDe && (
+        <ModalEnviarCorreoAutorizacion solicitudId={solicitudId} registro={enviarDe}
+          onCerrar={() => setEnviarDe(null)}
+          onEnviado={(texto) => { setEnviarDe(null); setConfirmacion(texto); setRecargar((r) => r + 1) }} />
+      )}
+      {verCorreo && <ModalCorreoEnviado correo={verCorreo} onCerrar={() => setVerCorreo(null)} />}
+      {adjunto && <ModalAdjunto adjunto={adjunto} onCerrar={() => setAdjunto(null)} />}
+    </div>
+  )
+}
+
+/** Estado vigente de la autorización, con sus avisos (vigencia, bloqueo, confirmación) */
+function EstadoAutorizacionActual({ s, puedeEscribir, codigoVigente, motivoBloqueo, confirmacion, onRegistrar }: {
+  s: Partial<CamposAutorizacion>; puedeEscribir: boolean; codigoVigente: boolean; motivoBloqueo: string; confirmacion: string
+  onRegistrar: () => void
+}) {
+  const e = estadoAutorizacion(s)
+  const Icono = ICONO[e]
+  const dias = diasVigencia(s)
+  const espera = e === 'solicitada' ? diasDesdeSolicitud(s) : null
+  return (
+    <>
       <div className={`flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2 ${ESTADOS_AUT[e].color}`}>
         <Icono size={22} />
         <div className="min-w-0 flex-1">
           <div className="text-sm font-bold">{ESTADOS_AUT[e].label}</div>
-          <div className="text-xs opacity-90">
-            {[
-              s.autorizacion_numero && <>N.º <b>{s.autorizacion_numero}</b></>,
-              s.autorizacion_fecha && <>autorizada el {fecha(s.autorizacion_fecha)}</>,
-              s.autorizacion_vigencia_hasta && <>vigente hasta <b>{fecha(s.autorizacion_vigencia_hasta)}</b>{dias !== null && <> ({dias >= 0 ? `${dias} día(s) restantes` : 'vencida'})</>}</>,
-              espera !== null && <>solicitada hace {espera} día(s)</>,
-            ].filter(Boolean).map((parte, i) => <span key={i}>{i > 0 && ' · '}{parte}</span>)}
-          </div>
+          <ResumenAutorizacion s={s} dias={dias} espera={espera} />
         </div>
         {puedeEscribir && (
-          <Boton onClick={() => setRegistrar(true)} disabled={codigoVigente} title={motivoBloqueo || 'Registrar una gestión de la autorización'}
+          <Boton onClick={onRegistrar} disabled={codigoVigente} title={motivoBloqueo || 'Registrar una gestión de la autorización'}
             className="flex items-center gap-1.5 !py-1.5 text-xs"><ShieldCheck size={14} /> Registrar gestión</Boton>
         )}
       </div>
@@ -143,83 +164,98 @@ export function PanelAutorizacion({ solicitudId, s, puedeEscribir, onCambio }: {
       {dias !== null && dias <= 7 && dias >= 0 && (
         <p className="rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">La autorización vence en {dias} día(s): verifique que la cirugía se realice antes o solicite la prórroga.</p>
       )}
+    </>
+  )
+}
 
-      <div>
-        <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500"><History size={12} /> Historial de la autorización</div>
-        {historial === null ? <Spinner /> : historial.length === 0 ? <p className="text-xs text-slate-400">Sin gestiones registradas.</p> : (
-          <ol className="space-y-1.5">
-            {historial.map((h) => (
-              <li key={h.id} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <Badge className={ESTADOS_AUT[h.estado].color}>{ESTADOS_AUT[h.estado].corto}</Badge>
-                  <span className="text-slate-500">{fechaHora(h.created_at)} · {h.registrado_por_nombre ?? '—'}</span>
-                  {puedeEscribir && ['solicitada', 'devuelta'].includes(h.estado) && (
-                    <button type="button" onClick={() => setEnviarDe(h)} disabled={codigoVigente} title={motivoBloqueo || undefined}
-                      className="ml-auto flex items-center gap-1 rounded-md border border-[#0D2D6B]/30 px-2 py-0.5 text-[11px] font-medium text-[#0D2D6B] transition enabled:hover:bg-[#0D2D6B]/5 disabled:cursor-not-allowed disabled:opacity-40">
-                      <Mail size={12} /> {correosDe(h.id).length ? 'Reenviar por correo' : 'Enviar por correo'}
-                    </button>
-                  )}
-                </div>
-                <div className="mt-0.5 text-slate-700">
-                  {[
-                    h.aseguradora && `Asegurador: ${h.aseguradora}`,
-                    h.numero_radicado && `Radicado: ${h.numero_radicado}`,
-                    h.fecha_solicitud && `Solicitada: ${fecha(h.fecha_solicitud)}`,
-                    h.canal && `Canal: ${h.canal}`,
-                    h.numero_autorizacion && `N.º autorización: ${h.numero_autorizacion}`,
-                    h.vigencia_hasta && `Vigencia: ${fecha(h.fecha_autorizacion)} → ${fecha(h.vigencia_hasta)}`,
-                    h.servicios_autorizados && `Servicios: ${h.servicios_autorizados}`,
-                  ].filter(Boolean).join(' · ')}
-                </div>
-                {h.observaciones && <div className="mt-0.5 whitespace-pre-line text-slate-600">{h.observaciones}</div>}
-                {h.adjuntos.length > 0 && (
-                  <div className="mt-1 flex flex-wrap items-center gap-1">
-                    <span className="text-[10px] font-semibold uppercase text-slate-400">Soportes ({h.adjuntos.length}):</span>
-                    {h.adjuntos.map((a) => (
-                      <button key={a.path} type="button" title="Clic para ver" onClick={() => setAdjunto(a)}
-                        className="inline-flex max-w-[220px] items-center gap-1 rounded border border-slate-300 bg-white px-1.5 py-0.5 hover:border-[#0D2D6B] hover:text-[#0D2D6B]">
-                        {a.tipo.startsWith('image/') ? <ImageIcon size={11} className="shrink-0 text-sky-600" /> : <FileText size={11} className="shrink-0 text-red-500" />}
-                        <span className="truncate">{a.nombre}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {correosDe(h.id).map((c) => (
-                  <div key={c.id} className="mt-1 flex flex-wrap items-center gap-1.5 rounded-md bg-sky-50 px-2 py-1 text-sky-900">
-                    <MailCheck size={13} className="shrink-0" />
-                    <span>Correo enviado a <b>{c.destinatarios.join(', ')}</b>{c.copia.length ? ` (CC ${c.copia.join(', ')})` : ''} · {fechaHora(c.enviado_en)} · {c.enviado_por_nombre ?? '—'}{c.adjuntos.length ? ` · ${c.adjuntos.length} adjunto(s)` : ''}</span>
-                    <button type="button" onClick={() => setVerCorreo(c)} className="ml-auto flex items-center gap-1 font-medium text-[#16468E] hover:underline"><Eye size={12} /> Ver correo</button>
-                  </div>
-                ))}
-              </li>
-            ))}
-          </ol>
-        )}
-      </div>
-
-      {registrar && (
-        <ModalRegistrarAutorizacion solicitudId={solicitudId} s={s}
-          onCerrar={() => setRegistrar(false)}
-          onGuardado={(texto) => { setRegistrar(false); setConfirmacion(texto); setRecargar((r) => r + 1); onCambio() }} />
-      )}
-      {enviarDe && (
-        <ModalEnviarCorreoAutorizacion solicitudId={solicitudId} registro={enviarDe}
-          onCerrar={() => setEnviarDe(null)}
-          onEnviado={(texto) => { setEnviarDe(null); setConfirmacion(texto); setRecargar((r) => r + 1) }} />
-      )}
-      {verCorreo && (
-        <Modal open onClose={() => setVerCorreo(null)} titulo="Correo enviado al asegurador" ancho="max-w-3xl">
-          <div className="mb-2 rounded-lg bg-slate-50 px-3 py-1.5 text-xs text-slate-600">
-            <div><b>Para:</b> {verCorreo.destinatarios.join(', ')}{verCorreo.copia.length ? ` · CC: ${verCorreo.copia.join(', ')}` : ''}</div>
-            <div><b>Asunto:</b> {verCorreo.asunto}</div>
-            <div><b>Enviado:</b> {fechaHora(verCorreo.enviado_en)} · {verCorreo.enviado_por_nombre ?? '—'}</div>
-            {verCorreo.adjuntos.length > 0 && <div><b>Adjuntos:</b> {verCorreo.adjuntos.map((a) => a.nombre).join(', ')}</div>}
-          </div>
-          <iframe title="Correo enviado" srcDoc={verCorreo.html} sandbox="" className="h-[60vh] w-full rounded-lg border border-slate-200" />
-        </Modal>
-      )}
-      {adjunto && <ModalAdjunto adjunto={adjunto} onCerrar={() => setAdjunto(null)} />}
+/** Línea de resumen: N.º, fecha, vigencia (días restantes) y tiempo en espera */
+function ResumenAutorizacion({ s, dias, espera }: { s: Partial<CamposAutorizacion>; dias: number | null; espera: number | null }) {
+  return (
+    <div className="text-xs opacity-90">
+      {([
+        ['numero', s.autorizacion_numero && <>N.º <b>{s.autorizacion_numero}</b></>],
+        ['fecha', s.autorizacion_fecha && <>autorizada el {fecha(s.autorizacion_fecha)}</>],
+        ['vigencia', s.autorizacion_vigencia_hasta && <>vigente hasta <b>{fecha(s.autorizacion_vigencia_hasta)}</b>{dias !== null && <> ({dias >= 0 ? `${dias} día(s) restantes` : 'vencida'})</>}</>],
+        ['espera', espera !== null && <>solicitada hace {espera} día(s)</>],
+      ] as const).filter(([, parte]) => parte).map(([clave, parte], n) => <span key={clave}>{n > 0 && ' · '}{parte}</span>)}
     </div>
+  )
+}
+
+/** Historial de gestiones de la autorización, con soportes y correos enviados */
+function HistorialAutorizacion({ historial, correos, puedeEscribir, codigoVigente, motivoBloqueo, onEnviar, onVerAdjunto, onVerCorreo }: {
+  historial: Registro[] | null; correos: CorreoEnviado[]; puedeEscribir: boolean; codigoVigente: boolean; motivoBloqueo: string
+  onEnviar: (r: Registro) => void; onVerAdjunto: (a: Adjunto) => void; onVerCorreo: (c: CorreoEnviado) => void
+}) {
+  const correosDe = (id: number) => correos.filter((c) => c.autorizacion_id === id)
+  return (
+    <div>
+      <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500"><History size={12} /> Historial de la autorización</div>
+      {historial === null ? <Spinner /> : historial.length === 0 ? <p className="text-xs text-slate-400">Sin gestiones registradas.</p> : (
+        <ol className="space-y-1.5">
+          {historial.map((h) => (
+            <li key={h.id} className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Badge className={ESTADOS_AUT[h.estado].color}>{ESTADOS_AUT[h.estado].corto}</Badge>
+                <span className="text-slate-500">{fechaHora(h.created_at)} · {h.registrado_por_nombre ?? '—'}</span>
+                {puedeEscribir && ['solicitada', 'devuelta'].includes(h.estado) && (
+                  <button type="button" onClick={() => onEnviar(h)} disabled={codigoVigente} title={motivoBloqueo || undefined}
+                    className="ml-auto flex items-center gap-1 rounded-md border border-[#0D2D6B]/30 px-2 py-0.5 text-[11px] font-medium text-[#0D2D6B] transition enabled:hover:bg-[#0D2D6B]/5 disabled:cursor-not-allowed disabled:opacity-40">
+                    <Mail size={12} /> {correosDe(h.id).length ? 'Reenviar por correo' : 'Enviar por correo'}
+                  </button>
+                )}
+              </div>
+              <div className="mt-0.5 text-slate-700">
+                {[
+                  h.aseguradora && `Asegurador: ${h.aseguradora}`,
+                  h.numero_radicado && `Radicado: ${h.numero_radicado}`,
+                  h.fecha_solicitud && `Solicitada: ${fecha(h.fecha_solicitud)}`,
+                  h.canal && `Canal: ${h.canal}`,
+                  h.numero_autorizacion && `N.º autorización: ${h.numero_autorizacion}`,
+                  h.vigencia_hasta && `Vigencia: ${fecha(h.fecha_autorizacion)} → ${fecha(h.vigencia_hasta)}`,
+                  h.servicios_autorizados && `Servicios: ${h.servicios_autorizados}`,
+                ].filter(Boolean).join(' · ')}
+              </div>
+              {h.observaciones && <div className="mt-0.5 whitespace-pre-line text-slate-600">{h.observaciones}</div>}
+              {h.adjuntos.length > 0 && (
+                <div className="mt-1 flex flex-wrap items-center gap-1">
+                  <span className="text-[10px] font-semibold uppercase text-slate-400">Soportes ({h.adjuntos.length}):</span>
+                  {h.adjuntos.map((a) => (
+                    <button key={a.path} type="button" title="Clic para ver" onClick={() => onVerAdjunto(a)}
+                      className="inline-flex max-w-[220px] items-center gap-1 rounded border border-slate-300 bg-white px-1.5 py-0.5 hover:border-[#0D2D6B] hover:text-[#0D2D6B]">
+                      {a.tipo.startsWith('image/') ? <ImageIcon size={11} className="shrink-0 text-sky-600" /> : <FileText size={11} className="shrink-0 text-red-500" />}
+                      <span className="truncate">{a.nombre}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {correosDe(h.id).map((c) => (
+                <div key={c.id} className="mt-1 flex flex-wrap items-center gap-1.5 rounded-md bg-sky-50 px-2 py-1 text-sky-900">
+                  <MailCheck size={13} className="shrink-0" />
+                  <span>Correo enviado a <b>{c.destinatarios.join(', ')}</b>{c.copia.length ? ` (CC ${c.copia.join(', ')})` : ''} · {fechaHora(c.enviado_en)} · {c.enviado_por_nombre ?? '—'}{c.adjuntos.length ? ` · ${c.adjuntos.length} adjunto(s)` : ''}</span>
+                  <button type="button" onClick={() => onVerCorreo(c)} className="ml-auto flex items-center gap-1 font-medium text-[#16468E] hover:underline"><Eye size={12} /> Ver correo</button>
+                </div>
+              ))}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  )
+}
+
+/** Copia exacta del correo enviado al asegurador */
+function ModalCorreoEnviado({ correo, onCerrar }: { correo: CorreoEnviado; onCerrar: () => void }) {
+  return (
+    <Modal open onClose={onCerrar} titulo="Correo enviado al asegurador" ancho="max-w-3xl">
+    <div className="mb-2 rounded-lg bg-slate-50 px-3 py-1.5 text-xs text-slate-600">
+      <div><b>Para:</b> {correo.destinatarios.join(', ')}{correo.copia.length ? ` · CC: ${correo.copia.join(', ')}` : ''}</div>
+      <div><b>Asunto:</b> {correo.asunto}</div>
+      <div><b>Enviado:</b> {fechaHora(correo.enviado_en)} · {correo.enviado_por_nombre ?? '—'}</div>
+      {correo.adjuntos.length > 0 && <div><b>Adjuntos:</b> {correo.adjuntos.map((a) => a.nombre).join(', ')}</div>}
+    </div>
+    <iframe title="Correo enviado" srcDoc={correo.html} sandbox="" className="h-[60vh] w-full rounded-lg border border-slate-200" />
+    </Modal>
   )
 }
 
@@ -281,6 +317,8 @@ function FormCorreoAutorizacion({ form, sol, aseguradores, registro, adjuntos, r
   registro: { aseguradora: string | null; numero_radicado: string | null; fecha_solicitud: string | null }
   adjuntos: string[]; remitente: string | null
 }) {
+  // Ids únicos para unir cada etiqueta con su campo (lectores de pantalla y clic en la etiqueta)
+  const idCampo = useId()
   const [vista, setVista] = useState(false)
   const campo = `${CLASE_CAMPO} w-full`
   const etiqueta = 'mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500'
@@ -303,9 +341,9 @@ function FormCorreoAutorizacion({ form, sol, aseguradores, registro, adjuntos, r
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <div className="sm:col-span-2">
-        <label className={etiqueta}>Para (correo del asegurador) *</label>
+        <label htmlFor={`${idCampo}-correo-asegurador`} className={etiqueta}>Para (correo del asegurador) *</label>
         <div className="flex gap-2">
-          <input value={form.para} onChange={(e) => form.setPara(e.target.value)} className={campo} placeholder="autorizaciones@eps.com.co" />
+          <input id={`${idCampo}-correo-asegurador`} value={form.para} onChange={(e) => form.setPara(e.target.value)} className={campo} placeholder="autorizaciones@eps.com.co" />
           {aseguradores.length > 0 && (
             <select value="" onChange={(e) => agregarAsegurador(e.target.value)} className={`${CLASE_CAMPO} max-w-[220px]`} title="Agregar el correo de un asegurador del catálogo">
               <option value="">+ Del catálogo…</option>
@@ -315,16 +353,16 @@ function FormCorreoAutorizacion({ form, sol, aseguradores, registro, adjuntos, r
         </div>
       </div>
       <div className="sm:col-span-2">
-        <label className={etiqueta}>Con copia (opcional)</label>
-        <input value={form.copia} onChange={(e) => form.setCopia(e.target.value)} className={campo} placeholder="Separe varios correos con coma" />
+        <label htmlFor={`${idCampo}-copia-opcional`} className={etiqueta}>Con copia (opcional)</label>
+        <input id={`${idCampo}-copia-opcional`} value={form.copia} onChange={(e) => form.setCopia(e.target.value)} className={campo} placeholder="Separe varios correos con coma" />
       </div>
       <div className="sm:col-span-2">
-        <label className={etiqueta}>Asunto</label>
-        <input value={form.asunto} onChange={(e) => form.setAsunto(e.target.value)} className={campo} maxLength={200} />
+        <label htmlFor={`${idCampo}-asunto`} className={etiqueta}>Asunto</label>
+        <input id={`${idCampo}-asunto`} value={form.asunto} onChange={(e) => form.setAsunto(e.target.value)} className={campo} maxLength={200} />
       </div>
       <div className="sm:col-span-2">
-        <label className={etiqueta}>Mensaje</label>
-        <textarea value={form.mensaje} onChange={(e) => form.setMensaje(e.target.value)} rows={compacto ? 4 : 5} className={campo} maxLength={4000} />
+        <label htmlFor={`${idCampo}-mensaje`} className={etiqueta}>Mensaje</label>
+        <textarea id={`${idCampo}-mensaje`} value={form.mensaje} onChange={(e) => form.setMensaje(e.target.value)} rows={compacto ? 4 : 5} className={campo} maxLength={4000} />
         <p className="mt-1 text-[11px] text-slate-500">
           El correo incluye además los datos del paciente, el procedimiento, el radicado{adjuntos.length ? ` y ${adjuntos.length} soporte(s) adjunto(s)` : ''}. Las respuestas llegan a su correo.
         </p>
@@ -357,6 +395,8 @@ async function enviarCorreoAutorizacion(autorizacionId: number, form: ReturnType
 function ModalRegistrarAutorizacion({ solicitudId, s, onCerrar, onGuardado }: {
   solicitudId: number; s: Partial<CamposAutorizacion>; onCerrar: () => void; onGuardado: (confirmacion: string) => void
 }) {
+  // Ids únicos para unir cada etiqueta con su campo (lectores de pantalla y clic en la etiqueta)
+  const idCampo = useId()
   const { perfil } = useAuth()
   const [estado, setEstado] = useState<EstadoAutorizacion>(s.autorizacion_estado === 'solicitada' ? 'autorizada' : 'solicitada')
   const [radicado, setRadicado] = useState('')
@@ -461,30 +501,30 @@ function ModalRegistrarAutorizacion({ solicitudId, s, onCerrar, onGuardado }: {
         {/* Columna 1: datos de la gestión y soportes */}
         <fieldset disabled={registradoId !== null} className="grid content-start gap-3 disabled:opacity-70 sm:grid-cols-2">
           {(estado === 'solicitada' || estado === 'devuelta') && (<>
-            <div><label className={etiqueta}>Fecha de la solicitud *</label><input type="date" max={hoyLocal()} value={fechaSolicitud} onChange={(e) => setFechaSolicitud(e.target.value)} className={campo} /></div>
-            <div><label className={etiqueta}>N.º de radicado</label><input value={radicado} onChange={(e) => setRadicado(e.target.value)} className={campo} placeholder="Radicado de la EPS" /></div>
+            <div><label htmlFor={`${idCampo}-fecha-solicitud`} className={etiqueta}>Fecha de la solicitud *</label><input id={`${idCampo}-fecha-solicitud`} type="date" max={hoyLocal()} value={fechaSolicitud} onChange={(e) => setFechaSolicitud(e.target.value)} className={campo} /></div>
+            <div><label htmlFor={`${idCampo}-radicado`} className={etiqueta}>N.º de radicado</label><input id={`${idCampo}-radicado`} value={radicado} onChange={(e) => setRadicado(e.target.value)} className={campo} placeholder="Radicado de la EPS" /></div>
           </>)}
           {estado === 'solicitada' && (
-            <div className="sm:col-span-2"><label className={etiqueta}>Canal</label>
-              <select value={canal} onChange={(e) => setCanal(e.target.value)} className={campo}>
+            <div className="sm:col-span-2"><label htmlFor={`${idCampo}-canal`} className={etiqueta}>Canal</label>
+              <select id={`${idCampo}-canal`} value={canal} onChange={(e) => setCanal(e.target.value)} className={campo}>
                 {['Portal web de la EPS', 'Correo electrónico', 'Ventanilla / radicación física', 'Línea telefónica', 'Plataforma MIPRES', 'Otro'].map((c) => <option key={c}>{c}</option>)}
               </select>
             </div>
           )}
           {estado === 'autorizada' && (<>
-            <div><label className={etiqueta}>N.º de autorización *</label><input value={numero} onChange={(e) => setNumero(e.target.value)} className={campo} /></div>
-            <div><label className={etiqueta}>Fecha de autorización *</label><input type="date" max={hoyLocal()} value={fechaAut} onChange={(e) => setFechaAut(e.target.value)} className={campo} /></div>
-            <div><label className={etiqueta}>Vigente hasta *</label><input type="date" min={fechaAut} value={vigencia} onChange={(e) => setVigencia(e.target.value)} className={campo} /></div>
-            <div><label className={etiqueta}>Servicios / CUPS autorizados</label><input value={servicios} onChange={(e) => setServicios(e.target.value)} className={campo} placeholder="Ej.: 790101 Osteosíntesis…" /></div>
+            <div><label htmlFor={`${idCampo}-autorizacion`} className={etiqueta}>N.º de autorización *</label><input id={`${idCampo}-autorizacion`} value={numero} onChange={(e) => setNumero(e.target.value)} className={campo} /></div>
+            <div><label htmlFor={`${idCampo}-fecha-autorizacion`} className={etiqueta}>Fecha de autorización *</label><input id={`${idCampo}-fecha-autorizacion`} type="date" max={hoyLocal()} value={fechaAut} onChange={(e) => setFechaAut(e.target.value)} className={campo} /></div>
+            <div><label htmlFor={`${idCampo}-vigente-hasta`} className={etiqueta}>Vigente hasta *</label><input id={`${idCampo}-vigente-hasta`} type="date" min={fechaAut} value={vigencia} onChange={(e) => setVigencia(e.target.value)} className={campo} /></div>
+            <div><label htmlFor={`${idCampo}-servicios-cups-autorizados`} className={etiqueta}>Servicios / CUPS autorizados</label><input id={`${idCampo}-servicios-cups-autorizados`} value={servicios} onChange={(e) => setServicios(e.target.value)} className={campo} placeholder="Ej.: 790101 Osteosíntesis…" /></div>
           </>)}
           <div className="sm:col-span-2">
-            <label className={etiqueta}>
+            <label htmlFor={`${idCampo}-observaciones`} className={etiqueta}>
               {estado === 'negada' ? 'Motivo de la negación *' : estado === 'devuelta' ? 'Información solicitada por el asegurador *' : estado === 'no_requiere' ? 'Justificación (atención de urgencias) *' : 'Observaciones'}
             </label>
-            <textarea value={observaciones} onChange={(e) => setObservaciones(e.target.value)} rows={2} className={campo} />
+            <textarea id={`${idCampo}-observaciones`} value={observaciones} onChange={(e) => setObservaciones(e.target.value)} rows={2} className={campo} />
           </div>
           <div className="sm:col-span-2">
-            <label className={etiqueta}>Soportes (Anexo 3 / Anexo 4 / respuesta del asegurador)</label>
+            <p className={etiqueta}>Soportes (Anexo 3 / Anexo 4 / respuesta del asegurador)</p>
             <SelectorAdjuntos adj={adj} accept=".pdf,image/*" deshabilitado={guardando || registradoId !== null}
               ayuda="PDF o imágenes · máximo 5 archivos de 10 MB c/u. Se cargan al registrar y quedan en el historial." />
           </div>

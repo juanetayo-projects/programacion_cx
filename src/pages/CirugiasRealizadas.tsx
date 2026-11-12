@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { useEffect, useMemo, useState } from 'react'
+import { useId, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { PageHeader, Boton, Modal, FilterBar, EstadoVacio, Spinner } from '../components/ui'
@@ -42,6 +42,8 @@ type Realizada = {
 }
 
 export default function CirugiasRealizadas() {
+  // Ids únicos para unir cada etiqueta con su campo (lectores de pantalla y clic en la etiqueta)
+  const idCampo = useId()
   const { session } = useAuth()
   const [filas, setFilas] = useState<Realizada[]>([])
   const [cargando, setCargando] = useState(true)
@@ -269,34 +271,34 @@ export default function CirugiasRealizadas() {
 
         <FilterBar>
           <div>
-            <label className="mb-0.5 block text-xs font-medium text-slate-500">Especialidad</label>
-            <select value={filtroEspecialidad} onChange={(e) => setFiltroEspecialidad(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
+            <label htmlFor={`${idCampo}-especialidad`} className="mb-0.5 block text-xs font-medium text-slate-500">Especialidad</label>
+            <select id={`${idCampo}-especialidad`} value={filtroEspecialidad} onChange={(e) => setFiltroEspecialidad(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
               <option value="">Todas</option>
               {especialidades.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
             </select>
           </div>
           <div>
-            <label className="mb-0.5 block text-xs font-medium text-slate-500">Médico</label>
-            <input value={filtroMedico} onChange={(e) => setFiltroMedico(e.target.value)} placeholder="Nombre del médico…" className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+            <label htmlFor={`${idCampo}-medico`} className="mb-0.5 block text-xs font-medium text-slate-500">Médico</label>
+            <input id={`${idCampo}-medico`} value={filtroMedico} onChange={(e) => setFiltroMedico(e.target.value)} placeholder="Nombre del médico…" className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
           </div>
           <div>
-            <label className="mb-0.5 block text-xs font-medium text-slate-500">Quirófano</label>
-            <select value={filtroQuirofano} onChange={(e) => setFiltroQuirofano(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
+            <label htmlFor={`${idCampo}-quirofano`} className="mb-0.5 block text-xs font-medium text-slate-500">Quirófano</label>
+            <select id={`${idCampo}-quirofano`} value={filtroQuirofano} onChange={(e) => setFiltroQuirofano(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">
               <option value="">Todos</option>
               {quirofanos.map((q) => <option key={q.id} value={q.id}>{q.nombre}</option>)}
             </select>
           </div>
           <div>
-            <label className="mb-0.5 block text-xs font-medium text-slate-500">Realizada desde</label>
-            <input type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+            <label htmlFor={`${idCampo}-realizada-desde`} className="mb-0.5 block text-xs font-medium text-slate-500">Realizada desde</label>
+            <input id={`${idCampo}-realizada-desde`} type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
           </div>
           <div>
-            <label className="mb-0.5 block text-xs font-medium text-slate-500">Realizada hasta</label>
-            <input type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+            <label htmlFor={`${idCampo}-realizada-hasta`} className="mb-0.5 block text-xs font-medium text-slate-500">Realizada hasta</label>
+            <input id={`${idCampo}-realizada-hasta`} type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
           </div>
           <div className="flex-1">
-            <label className="mb-0.5 block text-xs font-medium text-slate-500">Buscar</label>
-            <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Documento, nombre o # de ingreso…" className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+            <label htmlFor={`${idCampo}-buscar`} className="mb-0.5 block text-xs font-medium text-slate-500">Buscar</label>
+            <input id={`${idCampo}-buscar`} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Documento, nombre o # de ingreso…" className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
           </div>
         </FilterBar>
       </div>

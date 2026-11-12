@@ -284,8 +284,8 @@ export default function Quirofanos() {
                 <tr>{DIAS_SEMANA.map((d) => <th key={d} className="px-3 py-2.5">{d}</th>)}</tr>
               </thead>
               <tbody>
-                {semanasDelMes.map((fila, i) => (
-                  <tr key={i} className="border-t border-slate-100">
+                {semanasDelMes.map((fila) => (
+                  <tr key={fila[0]} className="border-t border-slate-100">
                     {fila.map((d) => {
                       const enMes = new Date(d + 'T12:00:00').getMonth() === new Date(fecha + 'T12:00:00').getMonth()
                       const items = cirugiasDelDia(d)

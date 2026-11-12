@@ -146,10 +146,8 @@ export function PanelComponente({ s, codigo, gm, onCerrar }: {
   s: SolicitudConBoleta; codigo: CodigoComponente; gm: ReturnType<typeof useComponentesGM>; onCerrar: () => void
 }) {
   const nota = gm.notas.get(s.id)
-  const datos = Object.entries(nota?.datos ?? {}).filter(([, v]) => v !== null && v !== '')
   const [error, setError] = useState('')
   const nombre = gm.config?.nombre ?? CORTO[codigo]
-  const enCurso = gm.consultando.has(s.id)
   async function actualizar() {
     setError('')
     try { await gm.traer(s) } catch (e) { setError((e as Error).message) }
@@ -161,37 +159,62 @@ export function PanelComponente({ s, codigo, gm, onCerrar }: {
       insignias={<span className="rounded-full bg-emerald-400/25 px-2 py-0.5 font-semibold text-emerald-100">Diligenciada en GoMedisys</span>}
       onCerrar={onCerrar}
       pie={<>
-        {gm.config?.script_disponible && (enCurso && gm.avance.get(s.id) ? <ProgresoBotonGM avance={gm.avance.get(s.id)!} /> : (
-          <Boton onClick={actualizar} disabled={!gm.puedeConsultar(s)} className="flex items-center gap-2"
-            title={gm.consultado(s) ? 'Consulta inhabilitada: ya tiene datos de GoMedisys' : `Consultar ${nombre} en GoMedisys por el ingreso ${s.numero_ingreso ?? '—'}`}>
-            {gm.consultado(s) ? <CheckCircle2 size={16} /> : <DatabaseZap size={16} />}
-            {nota ? 'Datos ya consultados' : gm.consultado(s) ? 'Ya registrada' : 'Actualizar desde GoMedisys'}
-          </Boton>
-        ))}
+        {gm.config?.script_disponible && <BotonActualizarGM s={s} gm={gm} nombre={nombre} conNota={!!nota} onActualizar={actualizar} />}
         <Boton variante="fantasma" onClick={onCerrar} className="ml-auto">Cerrar</Boton>
       </>}
     >
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{error}</p>}
-      {codigo === 'boleta' && !nota ? (
-        <Grupo color="boleta" icono={FileText} titulo="Boleta quirúrgica">
-          <Dato etiqueta="Duración estimada" valor={s.tiempo_estimado_minutos ? `${s.tiempo_estimado_minutos} min` : null} />
-          <Dato etiqueta="Destino probable" valor={s.destino} />
-          <Dato etiqueta="Procedimiento" valor={procedimientosCups(s.procedimiento)} ancho />
-          <Dato etiqueta="Especialista que opera" valor={s.especialista_opera} ancho />
-          <Dato etiqueta="Descripción y anotaciones" valor={s.boleta_quirurgica} ancho />
-        </Grupo>
-      ) : (
+      {codigo === 'boleta' && !nota ? <BoletaDeLaSolicitud s={s} /> : (
         <Grupo color="boleta" icono={FileText} titulo="Contenido del componente">
           <Dato etiqueta="Profesional" valor={nota?.profesional} />
           <Dato etiqueta="Diligenciada en GoMedisys" valor={fecha(nota?.fecha_registro)} />
           {nota?.texto && <Dato etiqueta="Nota" valor={nota.texto} ancho />}
-          {datos.map(([k, v]) => k === 'Procedimientos'
-            ? <Dato key={k} etiqueta={k} valor={procedimientosCups(String(v))} ancho />
-            : <Dato key={k} etiqueta={etiqueta(k)} valor={typeof v === 'object' ? JSON.stringify(v) : String(v)} ancho={String(v).length > 30} />)}
+          <DatosNotaGM datos={nota?.datos} nombrarCampo={etiqueta} />
         </Grupo>
       )}
       {nota && <p className="px-1 text-[11px] text-slate-400">Datos traídos de GoMedisys el {fecha(nota.consultado_en)}.</p>}
     </PanelLateral>
+  )
+}
+
+/** Botón del pie del panel: barra de progreso mientras consulta; inhabilitado si ya hay datos */
+function BotonActualizarGM({ s, gm, nombre, conNota, onActualizar }: {
+  s: SolicitudConBoleta; gm: ReturnType<typeof useComponentesGM>; nombre: string; conNota: boolean; onActualizar: () => void
+}) {
+  const avance = gm.consultando.has(s.id) ? gm.avance.get(s.id) : undefined
+  if (avance) return <ProgresoBotonGM avance={avance} />
+  const yaConsultado = gm.consultado(s)
+  return (
+    <Boton onClick={onActualizar} disabled={!gm.puedeConsultar(s)} className="flex items-center gap-2"
+      title={yaConsultado ? 'Consulta inhabilitada: ya tiene datos de GoMedisys' : `Consultar ${nombre} en GoMedisys por el ingreso ${s.numero_ingreso ?? '—'}`}>
+      {yaConsultado ? <CheckCircle2 size={16} /> : <DatabaseZap size={16} />}
+      {conNota ? 'Datos ya consultados' : yaConsultado ? 'Ya registrada' : 'Actualizar desde GoMedisys'}
+    </Boton>
+  )
+}
+
+/** Boleta tal como quedó en la solicitud (antes de traerla de GoMedisys) */
+function BoletaDeLaSolicitud({ s }: { s: SolicitudConBoleta }) {
+  return (
+    <Grupo color="boleta" icono={FileText} titulo="Boleta quirúrgica">
+      <Dato etiqueta="Duración estimada" valor={s.tiempo_estimado_minutos ? `${s.tiempo_estimado_minutos} min` : null} />
+      <Dato etiqueta="Destino probable" valor={s.destino} />
+      <Dato etiqueta="Procedimiento" valor={procedimientosCups(s.procedimiento)} ancho />
+      <Dato etiqueta="Especialista que opera" valor={s.especialista_opera} ancho />
+      <Dato etiqueta="Descripción y anotaciones" valor={s.boleta_quirurgica} ancho />
+    </Grupo>
+  )
+}
+
+/** Campos de la nota traída de GoMedisys; "Procedimientos" con los códigos CUPS resaltados */
+function DatosNotaGM({ datos, nombrarCampo = (k) => k }: { datos: Record<string, unknown> | null | undefined; nombrarCampo?: (k: string) => string }) {
+  const campos = Object.entries(datos ?? {}).filter(([, v]) => v !== null && v !== '')
+  return (
+    <>
+      {campos.map(([k, v]) => k === 'Procedimientos'
+        ? <Dato key={k} etiqueta={k} valor={procedimientosCups(String(v))} ancho />
+        : <Dato key={k} etiqueta={nombrarCampo(k)} valor={typeof v === 'object' ? JSON.stringify(v) : String(v)} ancho={String(v).length > 30} />)}
+    </>
   )
 }
 
@@ -211,7 +234,6 @@ export function BoletaGoMedisys({ s, onTraido }: { s: SolicitudConBoleta; onTrai
   // Ya tiene datos: traída de GoMedisys con este botón o con la consulta masiva
   const hecho = gm.consultado(s)
   if (gm.config && !gm.config.script_disponible) return null
-  const datos = Object.entries(nota?.datos ?? {}).filter(([, v]) => v !== null && v !== '')
 
   async function consultar() {
     setError('')
@@ -229,11 +251,7 @@ export function BoletaGoMedisys({ s, onTraido }: { s: SolicitudConBoleta; onTrai
             <Dato etiqueta="Descripción y anotaciones" valor={nota.texto} ancho />
             <Dato etiqueta="Profesional que solicita" valor={nota.profesional} />
             <Dato etiqueta="Diligenciada en GoMedisys" valor={fecha(nota.fecha_registro)} />
-            {datos.map(([k, v]) => (
-              k === 'Procedimientos'
-                ? <Dato key={k} etiqueta={k} valor={procedimientosCups(String(v))} ancho />
-                : <Dato key={k} etiqueta={k} valor={typeof v === 'object' ? JSON.stringify(v) : String(v)} ancho={String(v).length > 30} />
-            ))}
+            <DatosNotaGM datos={nota.datos} />
           </dl>
         </div>
       )}

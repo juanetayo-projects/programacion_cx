@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useId, useEffect, useMemo, useState } from 'react'
 import { CeldaComponente, BoletaGoMedisys } from '../components/ComponenteGM'
 import { useComponentesGM } from '../hooks/useComponentesGM'
 import { boletaConContenido } from '../lib/componentesGM'
@@ -379,6 +379,8 @@ export default function Mos() {
 
 // --- Hito 4: el proveedor aceptó / confirmó la disponibilidad del material ---
 function ModalConfirmacionProveedor({ s, onCerrar, onGuardado }: { s: Solicitud; onCerrar: () => void; onGuardado: () => void }) {
+  // Ids únicos para unir cada etiqueta con su campo (lectores de pantalla y clic en la etiqueta)
+  const idCampo = useId()
   const [obs, setObs] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
@@ -403,8 +405,8 @@ function ModalConfirmacionProveedor({ s, onCerrar, onGuardado }: { s: Solicitud;
           Registre que el proveedor respondió confirmando que cuenta con el material y lo entregará. Una vez registrado no se puede modificar.
         </p>
         <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Observaciones (quién confirmó, medio, fecha prometida…)</label>
-          <textarea value={obs} onChange={(e) => setObs(e.target.value)} rows={3} className={`${CLASE_CAMPO} w-full`} />
+          <label htmlFor={`${idCampo}-observaciones-quien-confirmo`} className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Observaciones (quién confirmó, medio, fecha prometida…)</label>
+          <textarea id={`${idCampo}-observaciones-quien-confirmo`} value={obs} onChange={(e) => setObs(e.target.value)} rows={3} className={`${CLASE_CAMPO} w-full`} />
         </div>
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2">
@@ -418,6 +420,8 @@ function ModalConfirmacionProveedor({ s, onCerrar, onGuardado }: { s: Solicitud;
 
 // --- Hito 2: respuesta del asegurador (aprobado / rechazado) ---
 function ModalRespuestaAsegurador({ s, onCerrar, onGuardado }: { s: Solicitud; onCerrar: () => void; onGuardado: () => void }) {
+  // Ids únicos para unir cada etiqueta con su campo (lectores de pantalla y clic en la etiqueta)
+  const idCampo = useId()
   const [respuesta, setRespuesta] = useState<'aprobado' | 'rechazado' | ''>(s.mos_respuesta_asegurador ?? '')
   const [obs, setObs] = useState(s.mos_respuesta_obs ?? '')
   const [guardando, setGuardando] = useState(false)
@@ -452,10 +456,10 @@ function ModalRespuestaAsegurador({ s, onCerrar, onGuardado }: { s: Solicitud; o
           {opcion('rechazado', ShieldX, 'Rechazó los materiales', 'border-red-500 bg-red-50 text-red-700')}
         </div>
         <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <label htmlFor={`${idCampo}-observaciones`} className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
             Observaciones {respuesta === 'rechazado' ? '(motivo del rechazo)' : '(n.º de autorización, condiciones…)'}
           </label>
-          <textarea value={obs} onChange={(e) => setObs(e.target.value)} rows={3} className={`${CLASE_CAMPO} w-full`} />
+          <textarea id={`${idCampo}-observaciones`} value={obs} onChange={(e) => setObs(e.target.value)} rows={3} className={`${CLASE_CAMPO} w-full`} />
         </div>
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2">
@@ -554,11 +558,12 @@ function PanelVer({ s, puedeGestionar, onCerrar, onGestionar, onProveedor, onRes
 // lateral con los datos por grupos, editor de observaciones y vista previa del
 // correo exacto antes de enviar.
 // El proveedor no se pide al notificar: se registrará en la gestión de la entrega
-type FilaItem = { cantidad: string; descripcion: string }
+// `clave` identifica la fila mientras se edita (no se envía: itemsValidos solo toma cantidad y descripción)
+type FilaItem = { clave: string; cantidad: string; descripcion: string }
 
 function PanelGestion({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () => void; onEnviado: (correoId: number) => void }) {
   const { perfil } = useAuth()
-  const filaVacia = (): FilaItem => ({ cantidad: '1', descripcion: '' })
+  const filaVacia = (): FilaItem => ({ clave: crypto.randomUUID(), cantidad: '1', descripcion: '' })
 
   const [aseguradores, setAseguradores] = useState<Asegurador[]>([])
   // Por defecto, el contrato que Gestión clínica registró para el paciente
@@ -577,7 +582,7 @@ function PanelGestion({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () =
     // Si ya se notificó, se parte de los ítems pendientes de entrega registrados
     sb.from('mos_items').select('*').eq('solicitud_id', s.id).eq('estado', 'pendiente_entrega').order('orden')
       .then(({ data }: { data: RegistroItem[] | null }) => {
-        if (data?.length) setFilasItems(data.map((i) => ({ cantidad: String(i.cantidad), descripcion: i.descripcion })))
+        if (data?.length) setFilasItems(data.map((i) => ({ clave: crypto.randomUUID(), cantidad: String(i.cantidad), descripcion: i.descripcion })))
       })
   }, [s.id])
 
@@ -603,8 +608,8 @@ function PanelGestion({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () =
     },
   )), [s, asegurador, items, observaciones, archivos, perfil])
 
-  function cambiarFila(i: number, campo: keyof FilaItem, valor: string) {
-    setFilasItems((fs) => fs.map((f, n) => (n === i ? { ...f, [campo]: valor } : f)))
+  function cambiarFila(clave: string, campo: 'cantidad' | 'descripcion', valor: string) {
+    setFilasItems((fs) => fs.map((f) => (f.clave === clave ? { ...f, [campo]: valor } : f)))
   }
 
   function elegirArchivo(tipo: TipoAdjunto, f: File | null) {
@@ -750,17 +755,17 @@ function PanelGestion({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () =
             </thead>
             <tbody>
               {filasItems.map((f, i) => (
-                <tr key={i} className="border-t border-amber-100 align-top">
+                <tr key={f.clave} className="border-t border-amber-100 align-top">
                   <td className="px-2 py-1.5 text-center text-xs text-slate-400">{i + 1}</td>
                   <td className="px-1 py-1">
-                    <input type="number" min={1} step={1} value={f.cantidad} onChange={(e) => cambiarFila(i, 'cantidad', e.target.value)} className={`${CLASE_CAMPO} w-full !px-2`} />
+                    <input type="number" min={1} step={1} value={f.cantidad} onChange={(e) => cambiarFila(f.clave, 'cantidad', e.target.value)} className={`${CLASE_CAMPO} w-full !px-2`} />
                   </td>
                   <td className="px-1 py-1">
-                    <input value={f.descripcion} onChange={(e) => cambiarFila(i, 'descripcion', e.target.value)} className={`${CLASE_CAMPO} w-full !px-2`} placeholder="Ej.: Placa bloqueada 3.5 mm de 8 orificios" />
+                    <input value={f.descripcion} onChange={(e) => cambiarFila(f.clave, 'descripcion', e.target.value)} className={`${CLASE_CAMPO} w-full !px-2`} placeholder="Ej.: Placa bloqueada 3.5 mm de 8 orificios" />
                   </td>
                   <td className="px-1 py-1.5 text-center">
                     <button type="button" title="Quitar ítem" disabled={filasItems.length === 1}
-                      onClick={() => setFilasItems((fs) => fs.filter((_, n) => n !== i))}
+                      onClick={() => setFilasItems((fs) => fs.filter((x) => x.clave !== f.clave))}
                       className="text-slate-400 hover:text-red-600 disabled:opacity-30"><Trash2 size={14} /></button>
                   </td>
                 </tr>

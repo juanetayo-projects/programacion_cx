@@ -5,6 +5,8 @@ export interface HeatCol<T> { header: string; get: (r: T) => string | number }
 interface Props<T> {
   registros: T[]
   getFecha: (r: T) => string | Date
+  /** Identificador estable de cada registro (clave de las filas del tooltip) */
+  getId: (r: T) => string | number
   columnas: HeatCol<T>[]
   titulo?: string
   offsetHorasGMT?: number
@@ -16,7 +18,7 @@ const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const PAL_DARK = ['#0d2444', '#13335c', '#185FA5', '#2f7ccb', '#378ADD', '#6aa6e6', '#85B7EB']
 const PAL_LIGHT = ['#EAF0FA', '#B5D4F4', '#85B7EB', '#378ADD', '#185FA5', '#0C447C', '#0D2D6B']
 
-export default function HeatmapDiaHora<T>({ registros, getFecha, columnas, titulo, offsetHorasGMT = -5, dark = false, maxFilasTooltip = 8 }: Props<T>) {
+export default function HeatmapDiaHora<T>({ registros, getFecha, getId, columnas, titulo, offsetHorasGMT = -5, dark = false, maxFilasTooltip = 8 }: Props<T>) {
   const cont = useRef<HTMLDivElement>(null)
   const [hover, setHover] = useState<{ dow: number; hora: number; x: number; y: number } | null>(null)
   const PAL = dark ? PAL_DARK : PAL_LIGHT
@@ -77,8 +79,8 @@ export default function HeatmapDiaHora<T>({ registros, getFecha, columnas, titul
           <table style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
             <thead><tr>{columnas.map((c) => <th key={c.header} style={{ textAlign: 'left', padding: '4px 8px', color: col.label, fontWeight: 500 }}>{c.header}</th>)}</tr></thead>
             <tbody>
-              {regs.slice(0, maxFilasTooltip).map((r, i) => (
-                <tr key={i} style={{ borderTop: `1px solid ${col.tipBorder}` }}>
+              {regs.slice(0, maxFilasTooltip).map((r) => (
+                <tr key={getId(r)} style={{ borderTop: `1px solid ${col.tipBorder}` }}>
                   {columnas.map((c) => <td key={c.header} style={{ padding: '3px 8px', color: dark ? '#E6F1FB' : '#1f2937', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 110 }}>{String(c.get(r) ?? '')}</td>)}
                 </tr>
               ))}
