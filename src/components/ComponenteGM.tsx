@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ClipboardCheck, ClipboardX, DatabaseZap, Lock, Stethoscope, Info, FileText, Loader2, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { consultarGoMedisys, ErrorConsultaGM } from '../lib/gomedisys'
+import { consultarGoMedisys, ErrorConsultaGM, type EstadoTrabajo } from '../lib/gomedisys'
 import { Modal, Boton } from './ui'
 import { PanelLateral, Grupo, Dato } from './PanelLateral'
 import { procedimientosCups } from './ProcedimientosCups'
@@ -43,6 +43,65 @@ const CORTO: Record<CodigoComponente, string> = {
   boleta: 'Boleta Qx', nota_mos: 'Nota adm. MOS', nota_gestion_clinica: 'Nota adm. GC', nota_posqx: 'Nota adm. PosQx',
 }
 
+/** Estado de una consulta en curso: etapa del trabajo, inicio y cuándo cambió de etapa (ms) */
+export type AvanceGM = { estado: EstadoTrabajo; inicio: number; cambio: number }
+
+// Etapas del trabajo: texto y rango de la barra. Dentro de cada etapa la barra
+// avanza con el tiempo acercándose al tope (nunca se queda quieta ni llega a
+// 100 % antes de terminar). `tau` = segundos para recorrer ~63 % del tramo.
+const ETAPAS_GM: Record<EstadoTrabajo, { texto: string; desde: number; hasta: number; tau: number }> = {
+  pendiente: { texto: 'Enviando la solicitud…', desde: 2, hasta: 10, tau: 3 },
+  despachado: { texto: 'Encendiendo el servidor de consulta…', desde: 10, hasta: 55, tau: 25 },
+  en_proceso: { texto: 'Consultando la boleta en GoMedisys…', desde: 55, hasta: 95, tau: 8 },
+  listo: { texto: 'Guardando la boleta…', desde: 100, hasta: 100, tau: 1 },
+  error: { texto: 'La consulta falló', desde: 100, hasta: 100, tau: 1 },
+}
+
+/**
+ * Barra de progreso que reemplaza al botón mientras se consulta GoMedisys:
+ * etapa, porcentaje y tiempo transcurrido.
+ */
+export function ProgresoBotonGM({ avance, compacto = false }: { avance: AvanceGM; compacto?: boolean }) {
+  const [ahora, setAhora] = useState(Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setAhora(Date.now()), 250)
+    return () => clearInterval(t)
+  }, [])
+  const e = ETAPAS_GM[avance.estado]
+  const t = Math.max(0, (ahora - avance.cambio) / 1000)
+  const pct = Math.round(e.desde + (e.hasta - e.desde) * (1 - Math.exp(-t / e.tau)))
+  const seg = Math.max(0, Math.floor((ahora - avance.inicio) / 1000))
+  const reloj = `${String(Math.floor(seg / 60)).padStart(2, '0')}:${String(seg % 60).padStart(2, '0')}`
+
+  return (
+    <div
+      role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label={e.texto}
+      className={`relative overflow-hidden rounded-lg bg-[#0D2D6B]/15 ring-1 ring-[#0D2D6B]/20 ${compacto ? 'w-full' : 'w-full min-w-[16rem] max-w-sm'}`}
+    >
+      {/* Texto azul sobre el fondo claro */}
+      <TextoProgreso texto={e.texto} pct={pct} reloj={reloj} className="text-[#0D2D6B]" />
+      {/* Relleno con el mismo texto en blanco, recortado al avance */}
+      <div
+        aria-hidden
+        className="absolute inset-0 bg-gradient-to-r from-[#0D2D6B] to-[#16468E] transition-[clip-path] duration-300 ease-out"
+        style={{ clipPath: `inset(0 ${100 - pct}% 0 0)` }}
+      >
+        <TextoProgreso texto={e.texto} pct={pct} reloj={reloj} className="text-white" />
+      </div>
+    </div>
+  )
+}
+
+function TextoProgreso({ texto, pct, reloj, className }: { texto: string; pct: number; reloj: string; className: string }) {
+  return (
+    <div className={`flex items-center gap-2 px-3 py-2 text-sm font-medium ${className}`}>
+      <Loader2 size={16} className="shrink-0 animate-spin" />
+      <span className="truncate">{texto}</span>
+      <span className="ml-auto shrink-0 font-mono text-xs tabular-nums">{pct}% · {reloj}</span>
+    </div>
+  )
+}
+
 /** Boleta con contenido real: una de relleno como "." no cuenta (igual que boleta_con_contenido, migración 0044) */
 export const boletaConContenido = (t: string | null | undefined) => /[\p{L}\p{N}]{3,}/u.test(t ?? '')
 
@@ -70,6 +129,13 @@ export function useComponentesGM(codigo: CodigoComponente, solicitudIds: number[
 
   // Consultas en curso por solicitud (compartidas por la celda, el panel y el aviso)
   const [consultando, setConsultando] = useState<Set<number>>(new Set())
+  // Avance del trabajo en GitHub Actions por solicitud (para la barra de progreso)
+  const [avance, setAvance] = useState<Map<number, AvanceGM>>(new Map())
+  const fijarAvance = useCallback((id: number, a: AvanceGM | null) => setAvance((m) => {
+    const n = new Map(m)
+    if (a) n.set(id, a); else n.delete(id)
+    return n
+  }), [])
   /** Ya se trajo de GoMedisys: la consulta queda inhabilitada */
   const consultado = useCallback((s: SolicitudConBoleta) => notas.has(s.id), [notas])
   const puedeConsultar = useCallback((s: SolicitudConBoleta) =>
@@ -78,8 +144,16 @@ export function useComponentesGM(codigo: CodigoComponente, solicitudIds: number[
   /** Trae el componente de GoMedisys. Devuelve true si quedó guardado. */
   const traer = useCallback(async (s: SolicitudConBoleta): Promise<boolean> => {
     setConsultando((c) => new Set(c).add(s.id))
+    const inicio = Date.now()
+    let actual: AvanceGM = { estado: 'pendiente', inicio, cambio: inicio }
+    fijarAvance(s.id, actual)
     try {
-      await consultarGoMedisys('componente', { componente: codigo, solicitud: String(s.id) })
+      await consultarGoMedisys('componente', { componente: codigo, solicitud: String(s.id) }, (t) => {
+        if (t.estado === actual.estado) return
+        actual = { estado: t.estado, inicio, cambio: Date.now() }
+        fijarAvance(s.id, actual)
+      })
+      fijarAvance(s.id, { estado: 'listo', inicio, cambio: Date.now() })
       // El trigger de la migración 0043 guarda la nota al terminar el trabajo; se relee
       const { data } = await supabase.from('notas_gomedisys').select('solicitud_id')
         .eq('solicitud_id', s.id).eq('componente', codigo).maybeSingle()
@@ -92,15 +166,16 @@ export function useComponentesGM(codigo: CodigoComponente, solicitudIds: number[
       throw e
     } finally {
       setConsultando((c) => { const n = new Set(c); n.delete(s.id); return n })
+      fijarAvance(s.id, null)
     }
-  }, [codigo, config, recargar])
+  }, [codigo, config, recargar, fijarAvance])
 
   const tiene = useCallback((s: SolicitudConBoleta) =>
     notas.has(s.id) || (codigo === 'boleta' && boletaConContenido(s.boleta_quirurgica)), [notas, codigo])
   // Mientras carga la configuración se asume que exige (no deja avanzar por error)
   const bloquea = useCallback((s: SolicitudConBoleta) => (config?.exige ?? true) && !tiene(s), [config, tiene])
 
-  return { config, notas, tiene, bloquea, recargar, traer, consultando, consultado, puedeConsultar }
+  return { config, notas, tiene, bloquea, recargar, traer, consultando, avance, consultado, puedeConsultar }
 }
 
 /** Celda Sí / No; el clic abre el panel con los datos o el aviso para diligenciarlo */
@@ -191,13 +266,13 @@ export function PanelComponente({ s, codigo, gm, onCerrar }: {
       insignias={<span className="rounded-full bg-emerald-400/25 px-2 py-0.5 font-semibold text-emerald-100">Diligenciada en GoMedisys</span>}
       onCerrar={onCerrar}
       pie={<>
-        {gm.config?.script_disponible && (
+        {gm.config?.script_disponible && (enCurso && gm.avance.get(s.id) ? <ProgresoBotonGM avance={gm.avance.get(s.id)!} /> : (
           <Boton onClick={actualizar} disabled={!gm.puedeConsultar(s)} className="flex items-center gap-2"
             title={nota ? 'Consulta inhabilitada: los datos ya se trajeron de GoMedisys' : `Consultar ${nombre} en GoMedisys por el ingreso ${s.numero_ingreso ?? '—'}`}>
-            {enCurso ? <Loader2 size={16} className="animate-spin" /> : nota ? <CheckCircle2 size={16} /> : <DatabaseZap size={16} />}
-            {enCurso ? 'Consultando GoMedisys…' : nota ? 'Datos ya consultados' : 'Actualizar desde GoMedisys'}
+            {nota ? <CheckCircle2 size={16} /> : <DatabaseZap size={16} />}
+            {nota ? 'Datos ya consultados' : 'Actualizar desde GoMedisys'}
           </Boton>
-        )}
+        ))}
         <Boton variante="fantasma" onClick={onCerrar} className="ml-auto">Cerrar</Boton>
       </>}
     >
@@ -266,18 +341,20 @@ export function BoletaGoMedisys({ s, onTraido }: { s: SolicitudConBoleta; onTrai
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2">
-        <Boton
-          type="button"
-          onClick={consultar}
-          disabled={!gm.puedeConsultar(s)}
-          className="flex items-center gap-2"
-          title={nota ? 'Consulta inhabilitada: la boleta ya se trajo de GoMedisys'
-            : sinIngreso ? 'La solicitud no tiene # de ingreso'
-              : `Consultar la Boleta quirúrgica en GoMedisys por el ingreso ${s.numero_ingreso}`}
-        >
-          {enCurso ? <Loader2 size={16} className="animate-spin" /> : nota ? <CheckCircle2 size={16} /> : <DatabaseZap size={16} />}
-          {enCurso ? 'Consultando GoMedisys…' : nota ? 'Boleta ya consultada' : 'Consultar boleta en GoMedisys'}
-        </Boton>
+        {enCurso && gm.avance.get(s.id) ? <ProgresoBotonGM avance={gm.avance.get(s.id)!} /> : (
+          <Boton
+            type="button"
+            onClick={consultar}
+            disabled={!gm.puedeConsultar(s)}
+            className="flex items-center gap-2"
+            title={nota ? 'Consulta inhabilitada: la boleta ya se trajo de GoMedisys'
+              : sinIngreso ? 'La solicitud no tiene # de ingreso'
+                : `Consultar la Boleta quirúrgica en GoMedisys por el ingreso ${s.numero_ingreso}`}
+          >
+            {nota ? <CheckCircle2 size={16} /> : <DatabaseZap size={16} />}
+            {nota ? 'Boleta ya consultada' : 'Consultar boleta en GoMedisys'}
+          </Boton>
+        )}
         <span className="text-[11px] text-slate-500">
           {nota ? 'La consulta queda inhabilitada para no cargar la base de datos.'
             : sinIngreso ? 'Sin # de ingreso no se puede consultar.'
@@ -338,10 +415,12 @@ export function ModalComponenteFaltante({ s, codigo, gm, onCerrar }: {
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-1">
           <Boton variante="fantasma" onClick={onCerrar}>Cerrar</Boton>
-          <Boton onClick={traer} disabled={!gm.puedeConsultar(s)} className="flex items-center gap-2"
-            title={disponible ? `Consultar solo ${nombre} en GoMedisys por el ingreso ${s.numero_ingreso ?? '—'}` : 'Script en desarrollo'}>
-            {trayendo ? <Loader2 size={16} className="animate-spin" /> : <DatabaseZap size={16} />} {trayendo ? 'Consultando GoMedisys…' : 'Traer datos de GoMedisys'}
-          </Boton>
+          {trayendo && gm.avance.get(s.id) ? <ProgresoBotonGM avance={gm.avance.get(s.id)!} /> : (
+            <Boton onClick={traer} disabled={!gm.puedeConsultar(s)} className="flex items-center gap-2"
+              title={disponible ? `Consultar solo ${nombre} en GoMedisys por el ingreso ${s.numero_ingreso ?? '—'}` : 'Script en desarrollo'}>
+              <DatabaseZap size={16} /> Traer datos de GoMedisys
+            </Boton>
+          )}
         </div>
       </div>
     </Modal>
