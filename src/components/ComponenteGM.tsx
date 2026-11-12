@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ClipboardCheck, ClipboardX, DatabaseZap, Lock, Stethoscope, Info, FileText, Loader2, CheckCircle2 } from 'lucide-react'
-import { supabase } from '../lib/supabase'
-import { consultarGoMedisys, ErrorConsultaGM, type EstadoTrabajo } from '../lib/gomedisys'
+import type { EstadoTrabajo } from '../lib/gomedisys'
+import { CORTO, type AvanceGM, type CodigoComponente, type SolicitudConBoleta } from '../lib/componentesGM'
+import { useComponentesGM } from '../hooks/useComponentesGM'
 import { Modal, Boton } from './ui'
 import { PanelLateral, Grupo, Dato } from './PanelLateral'
-import { procedimientosCups } from './ProcedimientosCups'
+import { procedimientosCups } from '../lib/valorProcedimientos'
 
 // Componentes de GoMedisys que gobiernan el avance (migración 0038):
 // Boleta quirúrgica y Notas administrativas MOS / GestionClinica / PosQx.
@@ -15,36 +16,6 @@ import { procedimientosCups } from './ProcedimientosCups'
 // Boleta quirúrgica (migración 0043): el botón de la celda / panel consulta
 // GoMedisys por el # de ingreso de la solicitud. Una vez traída, la consulta
 // queda inhabilitada para no consumir recursos de la base de datos.
-
-export type CodigoComponente = 'boleta' | 'nota_mos' | 'nota_gestion_clinica' | 'nota_posqx'
-
-export type ConfigComponente = {
-  codigo: CodigoComponente; nombre: string; modulo: string; exige: boolean; script_disponible: boolean; mensaje: string | null
-}
-export type NotaGM = {
-  solicitud_id: number; componente: CodigoComponente; texto: string | null; datos: Record<string, unknown>
-  profesional: string | null; fecha_registro: string | null; consultado_en: string
-}
-
-/** Campos de la solicitud que alimentan la boleta (llegan con la consulta masiva) */
-export type SolicitudConBoleta = {
-  id: number
-  nombre_paciente?: string | null
-  documento_paciente?: string | null
-  numero_ingreso?: string | null
-  boleta_quirurgica?: string | null
-  tiempo_estimado_minutos?: number | null
-  destino?: string | null
-  procedimiento?: string | null
-  especialista_opera?: string | null
-}
-
-const CORTO: Record<CodigoComponente, string> = {
-  boleta: 'Boleta Qx', nota_mos: 'Nota adm. MOS', nota_gestion_clinica: 'Nota adm. GC', nota_posqx: 'Nota adm. PosQx',
-}
-
-/** Estado de una consulta en curso: etapa del trabajo, inicio y cuándo cambió de etapa (ms) */
-export type AvanceGM = { estado: EstadoTrabajo; inicio: number; cambio: number }
 
 // Etapas del trabajo: texto y rango de la barra. Dentro de cada etapa la barra
 // avanza con el tiempo acercándose al tope (nunca se queda quieta ni llega a
@@ -100,86 +71,6 @@ function TextoProgreso({ texto, pct, reloj, className }: { texto: string; pct: n
       <span className="ml-auto shrink-0 font-mono text-xs tabular-nums">{pct}% · {reloj}</span>
     </div>
   )
-}
-
-/** Boleta con contenido real: una de relleno como "." no cuenta (igual que boleta_con_contenido, migración 0044) */
-export const boletaConContenido = (t: string | null | undefined) => /[\p{L}\p{N}]{3,}/u.test(t ?? '')
-
-/** Configuración de los componentes y notas traídas de GoMedisys para un módulo */
-export function useComponentesGM(codigo: CodigoComponente, solicitudIds: number[], onTraido?: () => void) {
-  const alTraer = useRef(onTraido)
-  alTraer.current = onTraido
-  const [config, setConfig] = useState<ConfigComponente | null>(null)
-  const [notas, setNotas] = useState<Map<number, NotaGM>>(new Map())
-  const clave = solicitudIds.join(',')
-
-  const recargar = useCallback(async () => {
-    const ids = clave ? clave.split(',').map(Number) : []
-    const [{ data: cfg }, notasRes] = await Promise.all([
-      supabase.from('componentes_gomedisys').select('codigo, nombre, modulo, exige, script_disponible, mensaje').eq('codigo', codigo).maybeSingle(),
-      ids.length
-        ? supabase.from('notas_gomedisys').select('solicitud_id, componente, texto, datos, profesional, fecha_registro, consultado_en').eq('componente', codigo).in('solicitud_id', ids)
-        : Promise.resolve({ data: [] }),
-    ])
-    setConfig((cfg as ConfigComponente | null) ?? null)
-    setNotas(new Map(((notasRes.data ?? []) as unknown as NotaGM[]).map((n) => [n.solicitud_id, n])))
-  }, [codigo, clave])
-
-  useEffect(() => { recargar() }, [recargar])
-
-  // Consultas en curso por solicitud (compartidas por la celda, el panel y el aviso)
-  const [consultando, setConsultando] = useState<Set<number>>(new Set())
-  // Avance del trabajo en GitHub Actions por solicitud (para la barra de progreso)
-  const [avance, setAvance] = useState<Map<number, AvanceGM>>(new Map())
-  const fijarAvance = useCallback((id: number, a: AvanceGM | null) => setAvance((m) => {
-    const n = new Map(m)
-    if (a) n.set(id, a); else n.delete(id)
-    return n
-  }), [])
-  /**
-   * La consulta queda inhabilitada si ya se trajo de GoMedisys o, para la
-   * boleta, si la solicitud ya tiene una boleta con datos (consulta masiva)
-   */
-  const consultado = useCallback((s: SolicitudConBoleta) =>
-    notas.has(s.id) || (codigo === 'boleta' && boletaConContenido(s.boleta_quirurgica)), [notas, codigo])
-  const puedeConsultar = useCallback((s: SolicitudConBoleta) =>
-    !!config?.script_disponible && !consultado(s) && !consultando.has(s.id) && !!s.numero_ingreso?.trim(), [config, consultado, consultando])
-
-  /** Trae el componente de GoMedisys. Devuelve true si quedó guardado. */
-  const traer = useCallback(async (s: SolicitudConBoleta): Promise<boolean> => {
-    setConsultando((c) => new Set(c).add(s.id))
-    const inicio = Date.now()
-    let actual: AvanceGM = { estado: 'pendiente', inicio, cambio: inicio }
-    fijarAvance(s.id, actual)
-    try {
-      await consultarGoMedisys('componente', { componente: codigo, solicitud: String(s.id) }, (t) => {
-        if (t.estado === actual.estado) return
-        actual = { estado: t.estado, inicio, cambio: Date.now() }
-        fijarAvance(s.id, actual)
-      })
-      fijarAvance(s.id, { estado: 'listo', inicio, cambio: Date.now() })
-      // El trigger de la migración 0043 guarda la nota al terminar el trabajo; se relee
-      const { data } = await supabase.from('notas_gomedisys').select('solicitud_id')
-        .eq('solicitud_id', s.id).eq('componente', codigo).maybeSingle()
-      await recargar()
-      if (!data) throw new Error(`GoMedisys no tiene ${config?.nombre ?? CORTO[codigo]} registrada para el ingreso ${s.numero_ingreso ?? '—'}. Solicite al médico diligenciarla y vuelva a consultar.`)
-      alTraer.current?.() // la solicitud pudo completarse con datos de la boleta
-      return true
-    } catch (e) {
-      if (e instanceof ErrorConsultaGM && e.codigo === 'ya_consultado') { await recargar(); alTraer.current?.(); return true }
-      throw e
-    } finally {
-      setConsultando((c) => { const n = new Set(c); n.delete(s.id); return n })
-      fijarAvance(s.id, null)
-    }
-  }, [codigo, config, recargar, fijarAvance])
-
-  const tiene = useCallback((s: SolicitudConBoleta) =>
-    notas.has(s.id) || (codigo === 'boleta' && boletaConContenido(s.boleta_quirurgica)), [notas, codigo])
-  // Mientras carga la configuración se asume que exige (no deja avanzar por error)
-  const bloquea = useCallback((s: SolicitudConBoleta) => (config?.exige ?? true) && !tiene(s), [config, tiene])
-
-  return { config, notas, tiene, bloquea, recargar, traer, consultando, avance, consultado, puedeConsultar }
 }
 
 /** Celda Sí / No; el clic abre el panel con los datos o el aviso para diligenciarlo */
@@ -431,17 +322,4 @@ export function ModalComponenteFaltante({ s, codigo, gm, onCerrar }: {
       </div>
     </Modal>
   )
-}
-
-/** Modal de bloqueo al intentar avanzar sin el componente */
-export function useBloqueoComponente(codigo: CodigoComponente, gm: ReturnType<typeof useComponentesGM>) {
-  const [faltante, setFaltante] = useState<SolicitudConBoleta | null>(null)
-  /** true si puede avanzar; si no, abre el aviso */
-  const verificar = useCallback((s: SolicitudConBoleta) => {
-    if (!gm.bloquea(s)) return true
-    setFaltante(s)
-    return false
-  }, [gm])
-  const modal = faltante ? <ModalComponenteFaltante s={faltante} codigo={codigo} gm={gm} onCerrar={() => setFaltante(null)} /> : null
-  return { verificar, modal }
 }

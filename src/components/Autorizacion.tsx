@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../lib/auth'
+import { useAuth } from '../hooks/useAuth'
 import { Modal, Boton, Badge, Spinner, CLASE_CAMPO } from './ui'
-import { ModalAdjunto, fechaHora, type Adjunto } from './NotasSeguimiento'
-import { useAdjuntos, SelectorAdjuntos } from './Adjuntos'
+import { ModalAdjunto, type Adjunto } from './NotasSeguimiento'
+import { fechaHora } from '../lib/fechas'
+import { SelectorAdjuntos } from './Adjuntos'
+import { useAdjuntos } from '../hooks/useAdjuntos'
 import {
   plantillaAutorizacion, asuntoAutorizacion, MENSAJE_AUTORIZACION_POR_DEFECTO,
 } from '../../supabase/functions/notificar-autorizacion/plantilla'

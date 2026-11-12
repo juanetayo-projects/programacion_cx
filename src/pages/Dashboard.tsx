@@ -4,17 +4,15 @@ import {
 } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { TituloEnHeader, CLASE_CAMPO, CampoLinea, Spinner } from '../components/ui'
-import {
-  AnilloSimple, AnillosConcentricos, PopoverDetalle, abrirPopover, TarjetaFase, MiniKpi, Leyenda, TOOLTIP_OSCURO,
-  type PopoverState, type PopCol,
-} from '../components/dashboard/Graficos'
+import { AnilloSimple, AnillosConcentricos, PopoverDetalle, TarjetaFase, MiniKpi, Leyenda } from '../components/dashboard/Graficos'
+import { abrirPopover, TOOLTIP_OSCURO, type PopoverState, type PopCol } from '../lib/graficos'
 import { ESTADOS, ESTADOS_LABEL, ESTADOS_MOS_LABEL, type Estado, type EstadoMos } from '../lib/constantes'
 import { ESTADOS_AUT, estadoAutorizacion, autorizacionVigente, diasVigencia, type CamposAutorizacion, type EstadoAutEfectivo } from '../lib/autorizacion'
-import { faltantesCierre, type CamposCierre } from '../components/CierreCirugia'
+import { faltantesCierre, type CamposCierre } from '../lib/cierreCirugia'
 import MapaCalor from '../components/dashboard/MapaCalor'
 import HeroQuirofano from '../components/dashboard/HeroQuirofano'
-import { useAuth } from '../lib/auth'
-import { useCatalogosGC } from '../components/EstadoGestionClinica'
+import { useAuth } from '../hooks/useAuth'
+import { useCatalogosGC } from '../hooks/useCatalogosGC'
 import {
   DatabaseZap, ClipboardList, ShieldCheck, CalendarClock, Bone, HeartPulse, PackageCheck, Stethoscope, CalendarCheck,
   Activity, Timer, AlertTriangle, Eraser, Hospital, Ambulance, Users, Receipt, Truck, BellRing, ClipboardX, ShieldAlert,

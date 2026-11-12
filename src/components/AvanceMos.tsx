@@ -1,52 +1,8 @@
-import { MailCheck, ShieldCheck, ShieldX, Truck, PackageCheck, Building2, type LucideIcon } from 'lucide-react'
-import { aFecha } from '../lib/fechas'
+import { hitosMos, fechaHoraHito, type CamposAvanceMos, type EstadoHito } from '../lib/avanceMos'
 
 // Avance del proceso MOS (materiales de osteosíntesis) en 5 hitos. Se muestra
 // en Gestión de solicitudes, Gestión MOS y los detalles, para identificar a
 // primera vista en qué va cada paciente.
-
-export type CamposAvanceMos = {
-  estado_mos: string | null
-  mos_notificado_en: string | null
-  mos_respuesta_asegurador: 'aprobado' | 'rechazado' | null
-  mos_respuesta_en: string | null
-  mos_proveedor_notificado_en: string | null
-  mos_proveedor_confirmado_en: string | null
-  mos_material_recibido_en: string | null
-}
-
-type EstadoHito = 'hecho' | 'rechazado' | 'en_espera' | 'pendiente'
-type Hito = { clave: string; titulo: string; icono: LucideIcon; estado: EstadoHito; fecha: string | null; detalle?: string }
-
-const fechaHora = (v: string | null) => (v ? aFecha(v).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : null)
-
-export function hitosMos(s: CamposAvanceMos): Hito[] {
-  const rechazado = s.mos_respuesta_asegurador === 'rechazado'
-  const base: Omit<Hito, 'estado'>[] = [
-    { clave: 'asegurador', titulo: 'Notificación al asegurador', icono: MailCheck, fecha: s.mos_notificado_en },
-    {
-      clave: 'respuesta', titulo: rechazado ? 'Asegurador rechazó' : 'Aprobación del asegurador',
-      icono: rechazado ? ShieldX : ShieldCheck, fecha: s.mos_respuesta_en,
-    },
-    { clave: 'proveedor', titulo: 'Notificación al proveedor', icono: Truck, fecha: s.mos_proveedor_notificado_en },
-    { clave: 'confirmado', titulo: 'Proveedor confirma material', icono: PackageCheck, fecha: s.mos_proveedor_confirmado_en },
-    { clave: 'recibido', titulo: 'Material en la clínica', icono: Building2, fecha: s.mos_material_recibido_en },
-  ]
-  const hechos = [
-    !!s.mos_notificado_en,
-    s.mos_respuesta_asegurador === 'aprobado',
-    !!s.mos_proveedor_notificado_en,
-    !!s.mos_proveedor_confirmado_en,
-    !!s.mos_material_recibido_en,
-  ]
-  // El primer hito no cumplido queda "en espera" (salvo que el asegurador haya rechazado)
-  let enEspera = hechos.findIndex((h) => !h)
-  if (rechazado) enEspera = -1
-  return base.map((h, i) => ({
-    ...h,
-    estado: i === 1 && rechazado ? 'rechazado' : hechos[i] ? 'hecho' : i === enEspera && hechos[0] ? 'en_espera' : 'pendiente',
-  }))
-}
 
 const COLOR: Record<EstadoHito, { circulo: string; texto: string; linea: string }> = {
   hecho: { circulo: 'bg-emerald-500 border-emerald-500 text-white', texto: 'text-emerald-700', linea: 'bg-emerald-400' },
@@ -61,7 +17,7 @@ const ETIQUETA: Record<EstadoHito, string> = { hecho: 'Cumplido', rechazado: 'Re
 export function AvanceMosCompacto({ s, onClick }: { s: CamposAvanceMos; onClick?: () => void }) {
   if (!s.estado_mos) return null
   const hitos = hitosMos(s)
-  const resumen = hitos.map((h, i) => `${i + 1}. ${h.titulo}: ${ETIQUETA[h.estado]}${h.fecha ? ` (${fechaHora(h.fecha)})` : ''}`).join('\n')
+  const resumen = hitos.map((h, i) => `${i + 1}. ${h.titulo}: ${ETIQUETA[h.estado]}${h.fecha ? ` (${fechaHoraHito(h.fecha)})` : ''}`).join('\n')
   const cumplidos = hitos.filter((h) => h.estado === 'hecho').length
   const Contenedor = onClick ? 'button' : 'div'
   return (
@@ -100,7 +56,7 @@ export function AvanceMos({ s }: { s: CamposAvanceMos }) {
               <h.icono size={15} />
             </span>
             <span className={`mt-1 text-[10px] font-semibold leading-tight ${c.texto}`}>{i + 1}. {h.titulo}</span>
-            <span className="text-[10px] leading-tight text-slate-400">{h.fecha ? fechaHora(h.fecha) : ETIQUETA[h.estado]}</span>
+            <span className="text-[10px] leading-tight text-slate-400">{h.fecha ? fechaHoraHito(h.fecha) : ETIQUETA[h.estado]}</span>
           </li>
         )
       })}

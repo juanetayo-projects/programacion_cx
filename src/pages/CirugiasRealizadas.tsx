@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../lib/auth'
+import { useAuth } from '../hooks/useAuth'
 import { PageHeader, Boton, Modal, FilterBar, EstadoVacio, Spinner } from '../components/ui'
 import { ESTADOS_COLOR, ESTADOS_COLOR_HEX } from '../lib/constantes'
 import { Eye, Undo2, X, FileSpreadsheet, ClipboardCheck, AlertTriangle } from 'lucide-react'
-import { ModalCierreCirugia, faltantesCierre, DESTINOS, type CamposCierre } from '../components/CierreCirugia'
-import { procedimientosCups } from '../components/ProcedimientosCups'
+import { ModalCierreCirugia } from '../components/CierreCirugia'
+import { faltantesCierre, DESTINOS, type CamposCierre } from '../lib/cierreCirugia'
+import { procedimientosCups } from '../lib/valorProcedimientos'
 import { ubicacionCama } from '../lib/ubicacionPaciente'
 
 type Realizada = {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useAdjuntos, SelectorAdjuntos } from './Adjuntos'
+import { SelectorAdjuntos } from './Adjuntos'
+import { useAdjuntos } from '../hooks/useAdjuntos'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { Boton, Badge, Modal, Spinner, CLASE_CAMPO } from './ui'
@@ -7,7 +8,8 @@ import { ModalRecordatorio } from './RecordatorioCita'
 import {
   CalendarClock, FileText, Image as ImageIcon, Plus, Save, StickyNote, Download, BarChart3, MessageCircle,
 } from 'lucide-react'
-import { enBogota, isoLocal, aFecha, desdeInputBogota } from '../lib/fechas'
+import { enBogota, isoLocal, aFecha, desdeInputBogota, fechaHora } from '../lib/fechas'
+import { ESTADO_CITA, type EstadoCita } from '../lib/citasSeguimiento'
 
 // Notas de seguimiento (Gestión clínica y Gestión postquirúrgica): inmutables,
 // con fecha, hora, usuario y rol fijados por el servidor, adjuntos con vista
@@ -18,7 +20,6 @@ const sb = supabase as any
 
 export type Ambito = 'gestion_clinica' | 'prequirurgico'
 type Fase = 'prequirurgico' | 'posquirurgico' | 'general'
-type EstadoCita = 'programada' | 'confirmada' | 'cumplida' | 'no_asistio' | 'reprogramada' | 'cancelada'
 export type Adjunto = { nombre: string; path: string; bytes: number; tipo: string }
 
 export type Nota = {
@@ -46,15 +47,6 @@ export type TipoSeguimiento = { id: number; nombre: string; fase: Fase; dias_sug
 const MAX_BYTES = 10 * 1024 * 1024
 const MAX_ADJUNTOS = 5
 
-export const ESTADO_CITA: Record<EstadoCita, { label: string; color: string }> = {
-  programada: { label: 'Programada', color: 'bg-sky-100 text-sky-700 border-sky-300' },
-  confirmada: { label: 'Confirmada por el paciente', color: 'bg-indigo-100 text-indigo-700 border-indigo-300' },
-  cumplida: { label: 'Cumplida', color: 'bg-emerald-100 text-emerald-700 border-emerald-300' },
-  no_asistio: { label: 'No asistió', color: 'bg-red-100 text-red-700 border-red-300' },
-  reprogramada: { label: 'Reprogramada', color: 'bg-amber-100 text-amber-700 border-amber-300' },
-  cancelada: { label: 'Cancelada', color: 'bg-neutral-200 text-neutral-600 border-neutral-400' },
-}
-
 const FASE: Record<Fase, { label: string; color: string; hex: string }> = {
   prequirurgico: { label: 'Prequirúrgico', color: 'bg-indigo-100 text-indigo-700 border-indigo-300', hex: '#6366F1' },
   posquirurgico: { label: 'Posquirúrgico', color: 'bg-teal-100 text-teal-700 border-teal-300', hex: '#14B8A6' },
@@ -66,7 +58,6 @@ const ROL_LABEL: Record<string, string> = {
   mos: 'MOS', esterilizacion: 'Esterilización',
 }
 
-export const fechaHora = (v: string | null) => (v ? aFecha(v).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : '—')
 const tamano = (b: number) => (b >= 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`)
 const esImagen = (a: Adjunto) => a.tipo.startsWith('image/')
 const esPdf = (a: Adjunto) => a.tipo === 'application/pdf' || a.nombre.toLowerCase().endsWith('.pdf')

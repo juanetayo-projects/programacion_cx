@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../lib/auth'
+import { useAuth } from '../hooks/useAuth'
 import { PageHeader, Boton, Modal, Badge, FilterBar, EstadoVacio, Spinner } from '../components/ui'
 import { ESTADOS_LABEL, ESTADOS_COLOR } from '../lib/constantes'
 import { Eye, Zap, Ban, FileWarning, XCircle, Loader2, X } from 'lucide-react'

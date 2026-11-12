@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../lib/auth'
+import { useAuth } from '../hooks/useAuth'
 import { TituloEnHeader, Boton, Modal, Spinner } from '../components/ui'
 import {
   consultarGoMedisys, programacionVigente, camposDeProgramacion, emparejarCatalogo,
@@ -9,7 +9,7 @@ import {
 } from '../lib/gomedisys'
 import { SUBESPECIALIDADES_ORTOPEDIA, ESTADOS_LABEL, type Estado } from '../lib/constantes'
 import { UploadCloud, CheckCircle2, Search, UserRound, AlertTriangle, X, CalendarClock } from 'lucide-react'
-import { procedimientosCups } from '../components/ProcedimientosCups'
+import { procedimientosCups } from '../lib/valorProcedimientos'
 import { ubicacionCama } from '../lib/ubicacionPaciente'
 
 type Especialidad = { id: number; nombre: string }

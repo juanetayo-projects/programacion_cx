@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { PageHeader, Boton, Modal, EstadoVacio, Badge } from '../../components/ui'
 import { ROLES, ROLES_LABEL, ESPECIALIDADES, type Rol } from '../../lib/constantes'
-import { PasswordStrengthMeter, MensajeConfirmarPassword, passwordEsValida } from '../../components/PasswordStrength'
+import { PasswordStrengthMeter, MensajeConfirmarPassword } from '../../components/PasswordStrength'
+import { passwordEsValida } from '../../lib/password'
 import { Plus, KeyRound, UserX, UserCheck, Pencil } from 'lucide-react'
 
 type Perfil = {

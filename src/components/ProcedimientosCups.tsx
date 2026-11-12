@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react'
 import { lineasProcedimientos } from '../lib/cups'
 
 // Procedimientos de GoMedisys ("CÓDIGO-NOMBRE", uno por línea) con el código
@@ -27,7 +26,3 @@ export function ProcedimientosCups({ texto }: { texto: string | null | undefined
     </ol>
   )
 }
-
-/** Para el `valor` de <Dato>: null si no hay procedimientos (el Dato muestra "—") */
-export const procedimientosCups = (texto: string | null | undefined): ReactNode =>
-  lineasProcedimientos(texto).length ? <ProcedimientosCups texto={texto} /> : null

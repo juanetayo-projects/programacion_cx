@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../lib/auth'
+import { useAuth } from '../hooks/useAuth'
 import { Modal, Boton, CLASE_CAMPO } from './ui'
 import { Stethoscope, AlertTriangle, Save } from 'lucide-react'
 import { aFecha, aInputBogota } from '../lib/fechas'
+import { DESTINOS, faltantesCierre, type CamposCierre } from '../lib/cierreCirugia'
 
 // Cierre de la cirugía (Programación de cirugía): fecha y hora real de inicio
 // y fin, cirujano, procedimiento realizado y destino posoperatorio. Sin este
@@ -12,45 +13,6 @@ import { aFecha, aInputBogota } from '../lib/fechas'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const sb = supabase as any
-
-export type CamposCierre = {
-  id: number
-  estado: string
-  nombre_paciente: string | null
-  documento_paciente: string
-  procedimiento: string | null
-  fecha_programada: string | null
-  hora_programada: string | null
-  tiempo_estimado_minutos: number | null
-  especialista_opera: string | null
-  especialista_ordena: string | null
-  cirugia_inicio: string | null
-  cirugia_fin: string | null
-  cirujano_realizo: string | null
-  procedimiento_realizado: string | null
-  destino_postoperatorio: string | null
-  cierre_observaciones: string | null
-}
-
-export const DESTINOS: Record<string, string> = {
-  casa: 'Egreso a casa (ambulatorio)', hospitalizacion: 'Hospitalización', uci: 'UCI', ucin: 'UCIN',
-  observacion: 'Observación / recuperación', otro: 'Otro',
-}
-
-/** Datos del cierre que aún faltan (vacío = cierre completo) */
-export function faltantesCierre(s: Partial<CamposCierre>): string[] {
-  return [
-    s.estado !== 'realizado' && 'marcar la cirugía como realizada',
-    !s.cirugia_inicio && 'fecha y hora de inicio',
-    !s.cirugia_fin && 'fecha y hora final',
-    !s.cirujano_realizo?.trim() && 'cirujano que realizó',
-    !s.procedimiento_realizado?.trim() && 'procedimiento realizado',
-    !s.destino_postoperatorio && 'destino posoperatorio',
-  ].filter(Boolean) as string[]
-}
-
-/** Fecha base de los controles posquirúrgicos: el fin real de la cirugía */
-export const fechaBasePosquirurgica = (s: Partial<CamposCierre>) => s.cirugia_fin?.slice(0, 10) ?? null
 
 /** Alerta con el motivo y la acción para continuar el proceso */
 export function AlertaCierre({ s, contexto }: { s: Partial<CamposCierre>; contexto: string }) {

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../lib/auth'
+import { useAuth } from '../hooks/useAuth'
 import { TituloEnHeader, CLASE_CAMPO, Boton, Modal, Badge, EstadoVacio } from '../components/ui'
 import { PanelLateral, Grupo, Dato } from '../components/PanelLateral'
 import ProgresoConsulta, { type Tramo } from '../components/ProgresoConsulta'
 import { consultarGoMedisys, emparejarCatalogo as emparejar, normalizar, camposDeProgramacion, ErrorConsultaGM, type ProgramacionGM, type EstadoTrabajo } from '../lib/gomedisys'
 import { ESTADOS_LABEL, type Estado } from '../lib/constantes'
-import { procedimientosCups } from '../components/ProcedimientosCups'
+import { procedimientosCups } from '../lib/valorProcedimientos'
 import { ubicacionCama } from '../lib/ubicacionPaciente'
 import {
   DatabaseZap, Search, CheckCircle2, Lock, Users, AlertTriangle, ListChecks, ArrowRight, X, Ban, RotateCw,

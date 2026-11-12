@@ -5,7 +5,7 @@ import {
   LayoutDashboard, ListChecks, Stethoscope, CalendarRange, Flame,
   BarChart3, ScrollText, Settings, ShieldCheck, ChevronDown, LogOut, User, DatabaseZap, Bone, PackageCheck, HeartPulse, CalendarCheck,
 } from 'lucide-react'
-import { useAuth } from '../lib/auth'
+import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
 import { ROLES_LABEL, type Modulo } from '../lib/constantes'
 import { ID_TITULO_HEADER } from './ui'

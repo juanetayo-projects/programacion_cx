@@ -1,20 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../lib/auth'
+import { useAuth } from '../hooks/useAuth'
 import { TituloEnHeader, CampoLinea, CLASE_CAMPO, Boton, Modal, Badge, EstadoVacio, Spinner } from '../components/ui'
 import { PanelLateral, Grupo, Dato } from '../components/PanelLateral'
 import RichTextEditor from '../components/RichTextEditor'
 import { ModalDetalleMos } from './Mos'
-import { ModalCierreCirugia, type CamposCierre } from '../components/CierreCirugia'
+import { ModalCierreCirugia } from '../components/CierreCirugia'
+import type { CamposCierre } from '../lib/cierreCirugia'
 import { IndicadorAutorizacion, AlertaAutorizacion, PanelAutorizacion } from '../components/Autorizacion'
-import { CeldaComponente, useComponentesGM, useBloqueoComponente, BoletaGoMedisys } from '../components/ComponenteGM'
+import { CeldaComponente, BoletaGoMedisys, ModalComponenteFaltante } from '../components/ComponenteGM'
+import { useComponentesGM, useBloqueoComponente } from '../hooks/useComponentesGM'
 import { autorizacionVigente, type CamposAutorizacion } from '../lib/autorizacion'
 import {
   IndicadorClinico, IndicadorPostquirurgico, IndicadorEsterilizacion, ModalGestionClinica, ModalPostquirurgico, ModalEsterilizacion,
-  cargarResumenSeguimiento, type ResumenNota, type ResumenItem,
 } from '../components/IndicadoresSeguimiento'
+import { cargarResumenSeguimiento, type ResumenNota, type ResumenItem } from '../lib/resumenSeguimiento'
 import { AvanceMos, AvanceMosCompacto } from '../components/AvanceMos'
-import { useCatalogosGC } from '../components/EstadoGestionClinica'
+import { useCatalogosGC } from '../hooks/useCatalogosGC'
 import FiltroEtapaMos from '../components/FiltroEtapaMos'
 import { filtrarPorEtapaMos } from '../lib/filtrosMos'
 import {
@@ -34,7 +36,7 @@ import {
   PencilLine, RotateCcw, Paperclip, X as XIcon, CalendarCheck,
 } from 'lucide-react'
 import { hoyBogota } from '../lib/fechas'
-import { procedimientosCups } from '../components/ProcedimientosCups'
+import { procedimientosCups } from '../lib/valorProcedimientos'
 import { ubicacionCama } from '../lib/ubicacionPaciente'
 
 type Solicitud = CamposAutorizacion & {
@@ -165,7 +167,7 @@ export default function Solicitudes() {
   const idsSolicitudes = useMemo(() => filas.map((f) => f.id), [filas])
   // El botón del componente trae la boleta de GoMedisys por # de ingreso (migración 0043)
   const gmBoleta = useComponentesGM('boleta', idsSolicitudes, () => { cargar() })
-  const bloqueoBoleta = useBloqueoComponente('boleta', gmBoleta)
+  const bloqueoBoleta = useBloqueoComponente(gmBoleta)
   const [seguimiento, setSeguimiento] = useState<{ id: number; tipo: 'clinica' | 'postquirurgico' | 'esterilizacion'; titulo: string } | null>(null)
   const [resumen, setResumen] = useState<{ notas: ResumenNota[]; items: ResumenItem[]; actas: Record<number, number> }>({ notas: [], items: [], actas: {} })
   const notasDe = (id: number) => resumen.notas.filter((n) => n.solicitud_id === id)
@@ -837,7 +839,9 @@ export default function Solicitudes() {
       {envioManual && <ModalEnvioManual {...envioManual} onClose={() => setEnvioManual(null)} />}
 
       {detalleMos !== null && <ModalDetalleMos solicitudId={detalleMos} onCerrar={() => setDetalleMos(null)} />}
-      {bloqueoBoleta.modal}
+      {bloqueoBoleta.faltante && (
+        <ModalComponenteFaltante s={bloqueoBoleta.faltante} codigo="boleta" gm={gmBoleta} onCerrar={bloqueoBoleta.cerrar} />
+      )}
 
       {sinMos && (
         <Modal open onClose={() => setSinMos(null)} titulo="Material de osteosíntesis pendiente" ancho="max-w-lg">

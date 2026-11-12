@@ -1,7 +1,8 @@
 import { useState, type ReactElement } from 'react'
 import { supabase } from './lib/supabase'
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { AuthProvider, useAuth } from './lib/auth'
+import { AuthProvider } from './lib/auth'
+import { useAuth } from './hooks/useAuth'
 import Shell from './components/Shell'
 import Login from './pages/Login'
 import Reset from './pages/Reset'
@@ -45,8 +46,8 @@ function Guard({ modulo, children }: { modulo?: Modulo; children: ReactElement }
   const autorizado = !modulo || perfil.rol === 'administrador' || permisos.has(modulo)
   if (!autorizado) {
     // Sin acceso al inicio (p. ej. Esterilización): ir al primer módulo permitido
-    const destino = RUTA_INICIO.find(([m]) => permisos.has(m))?.[0]
-    if (modulo === 'dashboard' && destino) return <Navigate to={RUTA_INICIO.find(([m]) => m === destino)![1]} replace />
+    const destino = RUTA_INICIO.find(([m]) => permisos.has(m))
+    if (modulo === 'dashboard' && destino) return <Navigate to={destino[1]} replace />
     // Un rol sin ningún módulo asignado no puede redirigirse a "/" (bucle)
     if (modulo === 'dashboard') return <Shell><EstadoVacio titulo="Su rol no tiene módulos asignados" descripcion="Solicite al administrador que le asigne módulos en Roles y permisos." /></Shell>
     return <Navigate to="/" replace />

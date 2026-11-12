@@ -1,33 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { supabase, renovarSesion, EVENTO_SESION_EXPIRADA } from './supabase'
 import type { Session } from '@supabase/supabase-js'
-import type { Rol, Modulo } from './constantes'
-
-type Perfil = {
-  id: string
-  email: string
-  nombre: string
-  rol: Rol
-  especialidad: string | null
-  activo: boolean
-}
-
-type AuthCtx = {
-  session: Session | null
-  perfil: Perfil | null
-  loading: boolean
-  /** Módulos habilitados para el rol del usuario actual (vacío si es administrador: tiene acceso total) */
-  permisos: Set<Modulo>
-  /** Motivo por el que no se pudo cargar el perfil (la app no se queda "cargando") */
-  errorPerfil: string | null
-  /** Minutos de diferencia entre el reloj del equipo y el del servidor (null si es normal) */
-  desfaseReloj: number | null
-  recargarPerfil: () => Promise<void>
-}
-
-const Ctx = createContext<AuthCtx>({
-  session: null, perfil: null, loading: true, permisos: new Set(), errorPerfil: null, desfaseReloj: null, recargarPerfil: async () => {},
-})
+import type { Modulo } from './constantes'
+import { Ctx, type Perfil } from './authContext'
 
 /** Clave de sessionStorage con el aviso que muestra el login tras cerrar una sesión vencida */
 export const AVISO_LOGIN = 'aviso_login'
@@ -155,4 +130,3 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 }
 
-export const useAuth = () => useContext(Ctx)

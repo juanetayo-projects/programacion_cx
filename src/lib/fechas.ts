@@ -80,3 +80,6 @@ export function instalarZonaBogota() {
   }
   proto.__zonaBogota = true
 }
+
+/** Fecha y hora legible ('8 nov 2026, 7:00 a. m.'); '—' si no hay valor */
+export const fechaHora = (v: string | null) => (v ? aFecha(v).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : '—')

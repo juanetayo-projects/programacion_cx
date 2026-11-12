@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../lib/auth'
+import { useAuth } from '../hooks/useAuth'
 import { TituloEnHeader, CampoLinea, CLASE_CAMPO, Boton, Badge, EstadoVacio, Spinner } from '../components/ui'
 import { PanelLateral, Grupo, Dato } from '../components/PanelLateral'
-import { AvanceMos, AvanceMosCompacto, type CamposAvanceMos } from '../components/AvanceMos'
-import { ListaEvidencias, ModalActa, fechaHora, type Recepcion } from '../components/EvidenciasMos'
+import { AvanceMos, AvanceMosCompacto } from '../components/AvanceMos'
+import type { CamposAvanceMos } from '../lib/avanceMos'
+import { ListaEvidencias, ModalActa, type Recepcion } from '../components/EvidenciasMos'
+import { fechaHora } from '../lib/fechas'
 import FiltroEtapaMos from '../components/FiltroEtapaMos'
 import { filtrarPorEtapaMos, type CamposFiltroMos } from '../lib/filtrosMos'
 import { ModalDetalleMos, type RegistroItem } from './Mos'
@@ -16,7 +18,7 @@ import {
   AlertTriangle, CheckCircle2, FileText,
 } from 'lucide-react'
 import { hoyBogota } from '../lib/fechas'
-import { procedimientosCups } from '../components/ProcedimientosCups'
+import { procedimientosCups } from '../lib/valorProcedimientos'
 import { ubicacionCama } from '../lib/ubicacionPaciente'
 
 // Recepción de materiales de osteosíntesis por Esterilización: por cada

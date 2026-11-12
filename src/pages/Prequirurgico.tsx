@@ -1,20 +1,25 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../lib/auth'
+import { useAuth } from '../hooks/useAuth'
 import { TituloEnHeader, CampoLinea, CLASE_CAMPO, Badge, EstadoVacio, Spinner } from '../components/ui'
 import { PanelLateral, Grupo, Dato } from '../components/PanelLateral'
-import { AvanceMos, AvanceMosCompacto, type CamposAvanceMos } from '../components/AvanceMos'
-import NotasSeguimiento, { ESTADO_CITA, fechaHora, type Nota } from '../components/NotasSeguimiento'
+import { AvanceMos, AvanceMosCompacto } from '../components/AvanceMos'
+import type { CamposAvanceMos } from '../lib/avanceMos'
+import NotasSeguimiento, { type Nota } from '../components/NotasSeguimiento'
+import { fechaHora } from '../lib/fechas'
+import { ESTADO_CITA } from '../lib/citasSeguimiento'
 import { ModalRecordatorio } from '../components/RecordatorioCita'
-import { CeldaComponente, useComponentesGM } from '../components/ComponenteGM'
-import { AlertaCierre, faltantesCierre, fechaBasePosquirurgica, DESTINOS, type CamposCierre } from '../components/CierreCirugia'
+import { CeldaComponente } from '../components/ComponenteGM'
+import { useComponentesGM } from '../hooks/useComponentesGM'
+import { AlertaCierre } from '../components/CierreCirugia'
+import { faltantesCierre, fechaBasePosquirurgica, DESTINOS, type CamposCierre } from '../lib/cierreCirugia'
 import { ESTADOS_LABEL, ESTADOS_COLOR, type Estado, type EstadoMos } from '../lib/constantes'
 import {
   CalendarClock, Search, Eraser, Eye, UserRound, Stethoscope, Bone, ClipboardCheck, AlertTriangle, CalendarDays,
   BellRing, MessageCircle, HelpCircle, ClipboardX,
 } from 'lucide-react'
 import { hoyBogota } from '../lib/fechas'
-import { procedimientosCups } from '../components/ProcedimientosCups'
+import { procedimientosCups } from '../lib/valorProcedimientos'
 import { ubicacionCama } from '../lib/ubicacionPaciente'
 
 // Gestión postquirúrgica: seguimiento del paciente (antes y después de la
