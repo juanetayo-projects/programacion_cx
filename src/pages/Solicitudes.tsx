@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
-import type { Json } from '../lib/database.types'
 import { TituloEnHeader, CampoLinea, CLASE_CAMPO, Boton, Modal, Badge, EstadoVacio, Spinner } from '../components/ui'
 import { PanelLateral, Grupo, Dato } from '../components/PanelLateral'
 import RichTextEditor from '../components/RichTextEditor'
@@ -30,7 +29,7 @@ import {
 import {
   Eye, Pencil, CalendarClock, BellRing, RefreshCw, Ban, Undo2, Stethoscope,
   CheckCircle2, Clock, Send, Repeat, PauseCircle, CircleSlash, FileSpreadsheet, AlertTriangle,
-  Search, SlidersHorizontal, Eraser, UserRound, ClipboardList, ShieldCheck, Save, LayoutGrid,
+  Search, SlidersHorizontal, Eraser, UserRound, ClipboardList, ShieldCheck, LayoutGrid,
   Bone, FileWarning, XCircle, Mail, MessageCircle, Smartphone, Copy, ExternalLink, Eye as EyeIcon,
   PencilLine, RotateCcw, Paperclip, X as XIcon, CalendarCheck,
 } from 'lucide-react'
@@ -347,23 +346,6 @@ export default function Solicitudes() {
     setModal('')
     setSeleccion(null)
     setError('')
-  }
-
-  async function guardarEdicion(campos: {
-    autorizacion_aseguradora: string | null
-    observaciones_programacion: string | null
-    estado_material_osteosintesis: string | null
-    casa_medica_material: string | null
-  }) {
-    if (!seleccion) return
-    setGuardando(true)
-    setError('')
-    const { error } = await supabase.from('solicitudes_cirugia').update(campos).eq('id', seleccion.id)
-    setGuardando(false)
-    if (error) { setError(error.message); return }
-    await supabase.from('solicitudes_historial').insert({ solicitud_id: seleccion.id, accion: 'editado', usuario_id: session!.user.id, detalle: campos as Json })
-    cerrar()
-    cargar()
   }
 
   async function programar(quirofanoId: number, fecha: string, hora: string, esReprogramacion: boolean, duracion: number) {
@@ -815,7 +797,7 @@ export default function Solicitudes() {
 
       {/* EDITAR */}
       {modal === 'editar' && seleccion && (
-        <PanelEditar seleccion={seleccion} medico={medicoDe(seleccion)} error={error} guardando={guardando} onClose={cerrarPanel} onGuardar={guardarEdicion} />
+        <PanelEditar seleccion={seleccion} medico={medicoDe(seleccion)} onClose={cerrarPanel} onTraido={cargar} />
       )}
 
       {/* PROGRAMAR / REPROGRAMAR */}
@@ -940,7 +922,7 @@ function BadgeTipoOrden({ tipo }: { tipo: string }) {
 }
 
 /** Datos de la solicitud agrupados por concepto (mismo diseño de la consulta masiva) */
-function GruposSolicitud({ s, medico, compacto }: { s: Solicitud; medico: string; compacto?: boolean }) {
+function GruposSolicitud({ s, medico, compacto, onTraido }: { s: Solicitud; medico: string; compacto?: boolean; onTraido?: () => void }) {
   return (
     <>
       <Grupo color="paciente" icono={UserRound} titulo="Datos del paciente">
@@ -979,12 +961,13 @@ function GruposSolicitud({ s, medico, compacto }: { s: Solicitud; medico: string
         <Dato etiqueta="Boleta (GoMedisys)" valor={s.boleta_quirurgica} ancho />
         {!compacto && <>
           <Dato etiqueta="Valoración preanestésica" valor={s.valoracion_preanestesica} />
-          <Dato etiqueta="Autorización aseguradora" valor={s.autorizacion_aseguradora} />
-          <Dato etiqueta="Estado material osteosíntesis" valor={s.estado_material_osteosintesis} />
-          <Dato etiqueta="Casa médica" valor={s.casa_medica_material} />
+          {/* Campos que ya no se editan en la app: solo se muestran si traen un dato histórico */}
+          {s.autorizacion_aseguradora && <Dato etiqueta="Autorización aseguradora" valor={s.autorizacion_aseguradora} />}
+          {s.estado_material_osteosintesis && <Dato etiqueta="Estado material osteosíntesis" valor={s.estado_material_osteosintesis} />}
+          {s.casa_medica_material && <Dato etiqueta="Casa médica" valor={s.casa_medica_material} />}
         </>}
         {/* Consulta de la boleta en GoMedisys por # de ingreso (migración 0043) */}
-        <BoletaGoMedisys s={s} />
+        <BoletaGoMedisys s={s} onTraido={onTraido} />
       </Grupo>
 
       {s.estado_mos && (
@@ -999,7 +982,7 @@ function GruposSolicitud({ s, medico, compacto }: { s: Solicitud; medico: string
           <Dato etiqueta="Estado" valor={ESTADOS_LABEL[s.estado]} />
           <Dato etiqueta="Fecha de reporte" valor={new Date(s.fecha_reporte).toLocaleDateString('es-CO')} />
           <Dato etiqueta="Programación" valor={s.fecha_programada ? `${s.quirofanos?.nombre ?? ''} · ${s.fecha_programada} ${s.hora_programada?.slice(0, 5) ?? ''}` : null} ancho />
-          <Dato etiqueta="Observaciones de programación" valor={s.observaciones_programacion} ancho />
+          {s.observaciones_programacion && <Dato etiqueta="Observaciones de programación" valor={s.observaciones_programacion} ancho />}
           {s.estado === 'cancelado' && <Dato etiqueta="Motivo de cancelación" valor={s.motivo_cancelacion} ancho />}
           <Dato etiqueta="Notificado" valor={s.notificado_en ? `${new Date(s.notificado_en).toLocaleString('es-CO')}${s.canales_notificacion?.length ? ` · ${s.canales_notificacion.join(', ')}` : ''}` : null} ancho />
           {s.notas_notificacion && (
@@ -1017,58 +1000,21 @@ function GruposSolicitud({ s, medico, compacto }: { s: Solicitud; medico: string
   )
 }
 
-function PanelEditar({ seleccion, medico, error, guardando, onClose, onGuardar }: {
-  seleccion: Solicitud; medico: string; error: string; guardando: boolean
-  onClose: () => void; onGuardar: (c: {
-    autorizacion_aseguradora: string | null
-    observaciones_programacion: string | null
-    estado_material_osteosintesis: string | null
-    casa_medica_material: string | null
-  }) => void
+// Los antiguos "Campos editables por programación" (autorización, casa médica,
+// estado del material y observaciones) se retiraron (nov-2026): esa
+// información llega con la Boleta quirúrgica consultada en GoMedisys.
+function PanelEditar({ seleccion, medico, onClose, onTraido }: {
+  seleccion: Solicitud; medico: string; onClose: () => void; onTraido: () => void
 }) {
-  const [autorizacion, setAutorizacion] = useState(seleccion.autorizacion_aseguradora ?? '')
-  const [obs, setObs] = useState(seleccion.observaciones_programacion ?? '')
-  const [material, setMaterial] = useState(seleccion.estado_material_osteosintesis ?? '')
-  const [casa, setCasa] = useState(seleccion.casa_medica_material ?? '')
-  const campo = `${CLASE_CAMPO} w-full`
-
   return (
     <PanelLateral
       titulo="Editar solicitud"
       subtitulo={`SC-${String(seleccion.id).padStart(6, '0')} · ${seleccion.nombre_paciente ?? seleccion.documento_paciente}`}
       insignias={<Badge className={ESTADOS_COLOR[seleccion.estado]}>{ESTADOS_LABEL[seleccion.estado]}</Badge>}
       onCerrar={onClose}
-      pie={<>
-        <Boton variante="secundario" onClick={onClose}>Cancelar</Boton>
-        <Boton disabled={guardando} className="flex flex-1 items-center justify-center gap-1.5" onClick={() => onGuardar({
-          autorizacion_aseguradora: autorizacion || null,
-          observaciones_programacion: obs || null,
-          estado_material_osteosintesis: material || null,
-          casa_medica_material: casa || null,
-        })}><Save size={14} /> {guardando ? 'Guardando…' : 'Guardar cambios'}</Boton>
-      </>}
+      pie={<Boton variante="secundario" onClick={onClose} className="ml-auto">Cerrar</Boton>}
     >
-      <GruposSolicitud s={seleccion} medico={medico} compacto />
-
-      <Grupo color="boleta" icono={Pencil} titulo="Campos editables por programación">
-        <div className="col-span-2">
-          <label className="mb-1 block text-xs font-medium text-slate-600">Autorización del asegurador</label>
-          <input value={autorizacion} onChange={(e) => setAutorizacion(e.target.value)} className={campo} />
-        </div>
-        <div className="col-span-2">
-          <label className="mb-1 block text-xs font-medium text-slate-600">Casa médica que entrega material</label>
-          <input value={casa} onChange={(e) => setCasa(e.target.value)} className={campo} />
-        </div>
-        <div className="col-span-2">
-          <label className="mb-1 block text-xs font-medium text-slate-600">Estado material de osteosíntesis</label>
-          <textarea value={material} onChange={(e) => setMaterial(e.target.value)} rows={2} className={campo} />
-        </div>
-        <div className="col-span-2">
-          <label className="mb-1 block text-xs font-medium text-slate-600">Observaciones de programación</label>
-          <textarea value={obs} onChange={(e) => setObs(e.target.value)} rows={3} className={campo} />
-        </div>
-      </Grupo>
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+      <GruposSolicitud s={seleccion} medico={medico} compacto onTraido={onTraido} />
     </PanelLateral>
   )
 }
