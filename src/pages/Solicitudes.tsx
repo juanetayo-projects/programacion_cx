@@ -34,6 +34,7 @@ import {
   PencilLine, RotateCcw, Paperclip, X as XIcon, CalendarCheck,
 } from 'lucide-react'
 import { hoyBogota } from '../lib/fechas'
+import { procedimientosCups } from '../components/ProcedimientosCups'
 
 type Solicitud = CamposAutorizacion & {
   id: number
@@ -944,7 +945,7 @@ function GruposSolicitud({ s, medico, compacto, onTraido }: { s: Solicitud; medi
       </Grupo>
 
       <Grupo color="orden" icono={Stethoscope} titulo="Orden quirúrgica">
-        <Dato etiqueta="Procedimiento" valor={s.procedimiento} ancho />
+        <Dato etiqueta="Procedimiento" valor={procedimientosCups(s.procedimiento)} ancho />
         <Dato etiqueta="Especialidad" valor={s.especialidades?.nombre} />
         <Dato etiqueta="Tiempo estimado" valor={s.tiempo_estimado_minutos ? `${s.tiempo_estimado_minutos} min` : null} />
         {!compacto && <>

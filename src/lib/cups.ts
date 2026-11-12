@@ -4,6 +4,19 @@
 
 const LINEA_CUPS = /^\s*([0-9A-Z]{4,8})\s*-\s*(.+)$/
 
+/** Cada procedimiento con su código CUPS (null si la línea no trae código), sin repetidos */
+export function lineasProcedimientos(texto: string | null | undefined): { codigo: string | null; nombre: string }[] {
+  const vistos = new Set<string>()
+  const r: { codigo: string | null; nombre: string }[] = []
+  for (const linea of (texto ?? '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean)) {
+    if (vistos.has(linea)) continue
+    vistos.add(linea)
+    const m = LINEA_CUPS.exec(linea)
+    r.push(m ? { codigo: m[1], nombre: m[2].trim() } : { codigo: null, nombre: linea })
+  }
+  return r
+}
+
 export function separarProcedimientos(texto: string | null | undefined): { codigos: string[]; nombres: string[] } {
   const codigos: string[] = []
   const nombres: string[] = []

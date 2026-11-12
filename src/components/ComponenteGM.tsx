@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { consultarGoMedisys, ErrorConsultaGM } from '../lib/gomedisys'
 import { Modal, Boton } from './ui'
 import { PanelLateral, Grupo, Dato } from './PanelLateral'
+import { procedimientosCups } from './ProcedimientosCups'
 
 // Componentes de GoMedisys que gobiernan el avance (migración 0038):
 // Boleta quirúrgica y Notas administrativas MOS / GestionClinica / PosQx.
@@ -205,7 +206,7 @@ export function PanelComponente({ s, codigo, gm, onCerrar }: {
         <Grupo color="boleta" icono={FileText} titulo="Boleta quirúrgica">
           <Dato etiqueta="Duración estimada" valor={s.tiempo_estimado_minutos ? `${s.tiempo_estimado_minutos} min` : null} />
           <Dato etiqueta="Destino probable" valor={s.destino} />
-          <Dato etiqueta="Procedimiento" valor={s.procedimiento} ancho />
+          <Dato etiqueta="Procedimiento" valor={procedimientosCups(s.procedimiento)} ancho />
           <Dato etiqueta="Especialista que opera" valor={s.especialista_opera} ancho />
           <Dato etiqueta="Descripción y anotaciones" valor={s.boleta_quirurgica} ancho />
         </Grupo>
@@ -214,7 +215,9 @@ export function PanelComponente({ s, codigo, gm, onCerrar }: {
           <Dato etiqueta="Profesional" valor={nota?.profesional} />
           <Dato etiqueta="Diligenciada en GoMedisys" valor={fecha(nota?.fecha_registro)} />
           {nota?.texto && <Dato etiqueta="Nota" valor={nota.texto} ancho />}
-          {datos.map(([k, v]) => <Dato key={k} etiqueta={etiqueta(k)} valor={typeof v === 'object' ? JSON.stringify(v) : String(v)} ancho={String(v).length > 30} />)}
+          {datos.map(([k, v]) => k === 'Procedimientos'
+            ? <Dato key={k} etiqueta={k} valor={procedimientosCups(String(v))} ancho />
+            : <Dato key={k} etiqueta={etiqueta(k)} valor={typeof v === 'object' ? JSON.stringify(v) : String(v)} ancho={String(v).length > 30} />)}
         </Grupo>
       )}
       {nota && <p className="px-1 text-[11px] text-slate-400">Datos traídos de GoMedisys el {fecha(nota.consultado_en)}.</p>}
@@ -255,7 +258,9 @@ export function BoletaGoMedisys({ s, onTraido }: { s: SolicitudConBoleta; onTrai
             <Dato etiqueta="Profesional que solicita" valor={nota.profesional} />
             <Dato etiqueta="Diligenciada en GoMedisys" valor={fecha(nota.fecha_registro)} />
             {datos.map(([k, v]) => (
-              <Dato key={k} etiqueta={k} valor={typeof v === 'object' ? JSON.stringify(v) : String(v)} ancho={String(v).length > 30} />
+              k === 'Procedimientos'
+                ? <Dato key={k} etiqueta={k} valor={procedimientosCups(String(v))} ancho />
+                : <Dato key={k} etiqueta={k} valor={typeof v === 'object' ? JSON.stringify(v) : String(v)} ancho={String(v).length > 30} />
             ))}
           </dl>
         </div>

@@ -19,6 +19,7 @@ import {
   Stethoscope, Search, Eraser, Eye, UserRound, ClipboardList, Receipt, History, StickyNote, Save, Bone, CalendarClock, ShieldCheck, ClipboardCheck,
 } from 'lucide-react'
 import { aFecha } from '../lib/fechas'
+import { procedimientosCups } from '../components/ProcedimientosCups'
 
 // Gestión clínica: el gestor clínico gestiona la AUTORIZACIÓN del asegurador
 // (sin ella no se programa ni se inicia ningún proceso de la cirugía),
@@ -354,7 +355,7 @@ function PanelClinico({ s, items, puedeEscribir, gm, onCerrar, onCambio }: {
           <Dato etiqueta="Correo" valor={s.email_paciente} ancho />
         </Grupo>
         <Grupo color="orden" icono={Stethoscope} titulo="Cirugía">
-          <Dato etiqueta="Procedimiento" valor={s.procedimiento} ancho />
+          <Dato etiqueta="Procedimiento" valor={procedimientosCups(s.procedimiento)} ancho />
           <Dato etiqueta="Diagnóstico" valor={s.diagnostico_preoperatorio} ancho />
           <Dato etiqueta="Especialidad" valor={s.especialidades?.nombre} />
           <Dato etiqueta="Especialista" valor={s.especialista_opera || s.especialista_ordena || s.nombre_medico_reporta} />

@@ -16,6 +16,7 @@ import {
   AlertTriangle, CheckCircle2, FileText,
 } from 'lucide-react'
 import { hoyBogota } from '../lib/fechas'
+import { procedimientosCups } from '../components/ProcedimientosCups'
 
 // Recepción de materiales de osteosíntesis por Esterilización: por cada
 // remisión del proveedor se registra la cantidad recibida de cada ítem, los
@@ -321,7 +322,7 @@ function PanelRecibo({ s, onCerrar, onRegistrado }: {
 
       <Grupo color="orden" icono={Stethoscope} titulo="Paciente y cirugía">
         <Dato etiqueta="Paciente" valor={`${s.nombre_paciente ?? '—'} · ${s.documento_paciente}`} ancho />
-        <Dato etiqueta="Procedimiento" valor={s.procedimiento} ancho />
+        <Dato etiqueta="Procedimiento" valor={procedimientosCups(s.procedimiento)} ancho />
         <Dato etiqueta="Programación" valor={s.fecha_programada ? `${s.fecha_programada} ${s.hora_programada?.slice(0, 5) ?? ''}` : null} />
         <Dato etiqueta="Asegurador" valor={s.aseguradores?.nombre} />
       </Grupo>

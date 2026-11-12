@@ -28,6 +28,7 @@ import {
   Plus, Trash2, Stethoscope, MessageSquareText, Truck, Info, Save, MapPin, Hash, ShieldCheck, ShieldX, PackageCheck,
 } from 'lucide-react'
 import { hoyBogota } from '../lib/fechas'
+import { procedimientosCups } from '../components/ProcedimientosCups'
 
 // Las tablas del módulo MOS (aseguradores, mos_correos) son posteriores a
 // database.types.ts; se consultan con el cliente sin tipar, como CrudTable.
@@ -506,7 +507,7 @@ function PanelVer({ s, puedeGestionar, onCerrar, onGestionar, onProveedor, onRes
         <Dato etiqueta="EPS / Contrato" valor={[s.eps_gomedisys || s.eps?.nombre, s.plan_gomedisys].filter(Boolean).join(' · ')} ancho />
       </Grupo>
       <Grupo color="orden" icono={ClipboardList} titulo="Procedimiento">
-        <Dato etiqueta="Procedimiento" valor={s.procedimiento} ancho />
+        <Dato etiqueta="Procedimiento" valor={procedimientosCups(s.procedimiento)} ancho />
         <Dato etiqueta="Diagnóstico" valor={s.diagnostico_preoperatorio} ancho />
         <Dato etiqueta="Especialidad" valor={s.especialidad_gomedisys || s.especialidades?.nombre} />
         <Dato etiqueta="Especialista" valor={s.especialista_opera || s.especialista_ordena || s.nombre_medico_reporta} />
@@ -682,7 +683,7 @@ function PanelGestion({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: () =
 
       <Grupo color="orden" icono={Stethoscope} titulo="Cirugía">
         <Dato etiqueta="Paciente" valor={`${s.nombre_paciente ?? '—'} · ${s.documento_paciente}`} ancho />
-        <Dato etiqueta="Procedimiento" valor={s.procedimiento} ancho />
+        <Dato etiqueta="Procedimiento" valor={procedimientosCups(s.procedimiento)} ancho />
         <Dato etiqueta="EPS / Contrato" valor={[s.eps_gomedisys || s.eps?.nombre, s.plan_gomedisys].filter(Boolean).join(' · ')} />
         <Dato etiqueta="Programación" valor={s.fecha_programada ? `${s.fecha_programada} ${s.hora_programada?.slice(0, 5) ?? ''}` : null} />
       </Grupo>
@@ -1006,7 +1007,7 @@ function PanelProveedor({ s, onCerrar, onEnviado }: { s: Solicitud; onCerrar: ()
 
       <Grupo color="orden" icono={Stethoscope} titulo="Cirugía">
         <Dato etiqueta="Paciente" valor={`${s.nombre_paciente ?? '—'} · ${s.documento_paciente}`} ancho />
-        <Dato etiqueta="Procedimiento" valor={s.procedimiento} ancho />
+        <Dato etiqueta="Procedimiento" valor={procedimientosCups(s.procedimiento)} ancho />
         <Dato etiqueta="Asegurador que autoriza" valor={s.aseguradores?.nombre} />
         <Dato etiqueta="Programación" valor={s.fecha_programada ? `${s.fecha_programada} ${s.hora_programada?.slice(0, 5) ?? ''}` : null} />
       </Grupo>
@@ -1252,7 +1253,7 @@ export function ModalDetalleMos({ solicitudId, onCerrar }: { solicitudId: number
           <div className="grid gap-3 md:grid-cols-2">
             <Grupo color="orden" icono={Stethoscope} titulo="Paciente y cirugía">
               <Dato etiqueta="Paciente" valor={`${s.nombre_paciente ?? '—'} · ${s.documento_paciente}`} ancho />
-              <Dato etiqueta="Procedimiento" valor={s.procedimiento} ancho />
+              <Dato etiqueta="Procedimiento" valor={procedimientosCups(s.procedimiento)} ancho />
               <Dato etiqueta="EPS / Contrato" valor={[s.eps_gomedisys || s.eps?.nombre, s.plan_gomedisys].filter(Boolean).join(' · ')} />
               <Dato etiqueta="Programación" valor={s.fecha_programada ? `${s.fecha_programada} ${s.hora_programada?.slice(0, 5) ?? ''}` : null} />
             </Grupo>
