@@ -48,6 +48,9 @@
         de texto (MAX ordenaba fechas 'dd/MM/yyyy' alfabéticamente).
      7. Se agregan idProgramming / idPaciente / Quirofano / HoraProgramada,
         necesarios para la app (llave anti-duplicados y programación).
+     8. (nov-2026) ServicioPaciente / UbicacionPaciente / CamaPaciente:
+        servicio, ubicación y cama actuales del paciente en el ingreso
+        (encounterRecords.idActualService / idActualLocation / idActualBed).
    ===================================================================== */
 SET NOCOUNT ON;
 SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;   -- réplica de lectura: sin bloqueos
@@ -183,6 +186,9 @@ SELECT
     CONVERT(VARCHAR(16), ing.dateStart, 120)                     AS FechaIngreso,
     cs.name                                                      AS ContratoIngresoCirugia,
     cp.name                                                      AS [Plan(Aseguradora)],
+    hsp.name                                                     AS ServicioPaciente,
+    plp.name                                                     AS UbicacionPaciente,
+    bed.code                                                     AS CamaPaciente,
     diag.DiagnosticoPreoperatorio,
     CASE ordAct.idAction WHEN 409 THEN 'Intra-Hospitalaria' WHEN 410 THEN 'Ambulatoria' END AS TipoOrden,
     COALESCE(CONVERT(VARCHAR(10), o.dateRecorded, 103), cust.FechaOrdenamientoCustom)       AS FechaOrdenamiento,
@@ -232,12 +238,17 @@ OUTER APPLY (
 ) AS ing
 
 OUTER APPLY (
-    SELECT TOP (1) r.idPrincipalContract, r.idPrincipalPlan
+    SELECT TOP (1) r.idPrincipalContract, r.idPrincipalPlan,
+                   r.idActualService, r.idActualLocation, r.idActualBed
     FROM encounterRecords AS r
     WHERE r.idEncounter = COALESCE(evt.idEncounter, ing.idEncounter)
 ) AS ers
 LEFT JOIN contracts        AS cs  ON cs.idContract = ers.idPrincipalContract
 LEFT JOIN contractPlans    AS cp  ON cp.idPlan = ers.idPrincipalPlan AND cp.idContract = cs.idContract
+/* Servicio, ubicación y cama actuales del paciente en el ingreso */
+LEFT JOIN healthservices           AS hsp ON hsp.idHealthService = ers.idActualService
+LEFT JOIN physicalLocations        AS plp ON plp.idPhysicalLocation = ers.idActualLocation
+LEFT JOIN physicalLocationRoomBeds AS bed ON bed.idBed = ers.idActualBed
 
 LEFT JOIN EHREventSurgeryPractitioners AS ehrpract
        ON ehrpract.idEHREvent = evt.idEHREvent AND ehrpract.idOccupation = 2

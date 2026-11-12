@@ -8,6 +8,7 @@ import ProgresoConsulta, { type Tramo } from '../components/ProgresoConsulta'
 import { consultarGoMedisys, emparejarCatalogo as emparejar, normalizar, camposDeProgramacion, ErrorConsultaGM, type ProgramacionGM, type EstadoTrabajo } from '../lib/gomedisys'
 import { ESTADOS_LABEL, type Estado } from '../lib/constantes'
 import { procedimientosCups } from '../components/ProcedimientosCups'
+import { ubicacionCama } from '../lib/ubicacionPaciente'
 import {
   DatabaseZap, Search, CheckCircle2, Lock, Users, AlertTriangle, ListChecks, ArrowRight, X, Ban, RotateCw,
   CalendarDays, Eraser, FileSpreadsheet, UserRound, Stethoscope, ClipboardList, ShieldCheck, Hourglass,
@@ -1204,6 +1205,8 @@ function PanelDetalle({ f, s, seleccionada, otrosSeleccionando, onAlternar, onCe
             <Dato etiqueta="Edad / género" valor={`${f['Edad(Anos)'] ?? '—'} años${f.Genero ? ` · ${f.Genero}` : ''}`} />
             <Dato etiqueta="Teléfono" valor={f.Telefono1} />
             <Dato etiqueta="# Ingreso" valor={f.NumeroIngreso != null ? `${f.NumeroIngreso}${f.IngresoInferido ? ' (inferido)' : ''}` : null} />
+            <Dato etiqueta="Servicio" valor={f.ServicioPaciente} />
+            <Dato etiqueta="Ubicación" valor={ubicacionCama(f.UbicacionPaciente, f.CamaPaciente)} />
             <Dato etiqueta="Contrato" valor={f.ContratoIngresoCirugia} ancho />
             <Dato etiqueta="Plan (aseguradora)" valor={f['Plan(Aseguradora)']} ancho />
           </Grupo>

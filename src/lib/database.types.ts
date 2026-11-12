@@ -1005,6 +1005,8 @@ export type Database = {
           estado_material_osteosintesis: string | null
           estado_mos: string | null
           fecha_ingreso: string | null
+          servicio_paciente: string | null
+          ubicacion_paciente: string | null
           fecha_ordenamiento: string | null
           fecha_programada: string | null
           fecha_programada_gomedisys: string | null
@@ -1102,6 +1104,8 @@ export type Database = {
           estado_material_osteosintesis?: string | null
           estado_mos?: string | null
           fecha_ingreso?: string | null
+          servicio_paciente?: string | null
+          ubicacion_paciente?: string | null
           fecha_ordenamiento?: string | null
           fecha_programada?: string | null
           fecha_programada_gomedisys?: string | null
@@ -1199,6 +1203,8 @@ export type Database = {
           estado_material_osteosintesis?: string | null
           estado_mos?: string | null
           fecha_ingreso?: string | null
+          servicio_paciente?: string | null
+          ubicacion_paciente?: string | null
           fecha_ordenamiento?: string | null
           fecha_programada?: string | null
           fecha_programada_gomedisys?: string | null

@@ -35,8 +35,12 @@ import {
 } from 'lucide-react'
 import { hoyBogota } from '../lib/fechas'
 import { procedimientosCups } from '../components/ProcedimientosCups'
+import { ubicacionCama } from '../lib/ubicacionPaciente'
 
 type Solicitud = CamposAutorizacion & {
+  /** Servicio, ubicación y cama actuales del paciente (GoMedisys, migración 0045) */
+  servicio_paciente?: string | null
+  ubicacion_paciente?: string | null
   id: number
   requiere_mos?: boolean | null
   numero_ingreso: string
@@ -935,12 +939,13 @@ function GruposSolicitud({ s, medico, compacto, onTraido }: { s: Solicitud; medi
         <Dato etiqueta="Fecha del ingreso" valor={fechaHoraTexto(s.fecha_ingreso ?? null)} />
         <Dato etiqueta="Edad" valor={s.edad != null ? `${s.edad} años` : null} />
         <Dato etiqueta="EPS" valor={s.eps?.nombre ?? s.eps_gomedisys} />
+        <Dato etiqueta="Servicio" valor={s.servicio_paciente} />
+        <Dato etiqueta="Ubicación" valor={ubicacionCama(s.ubicacion_paciente ?? s.unidades?.nombre, s.cama)} />
         {!compacto && <>
           <Dato etiqueta="Teléfono" valor={s.telefono_paciente} />
           <Dato etiqueta="Correo" valor={s.email_paciente} />
           <Dato etiqueta="Contrato (GoMedisys)" valor={s.eps_gomedisys} ancho />
           <Dato etiqueta="Plan (aseguradora)" valor={s.plan_gomedisys} ancho />
-          <Dato etiqueta="Unidad / cama" valor={[s.unidades?.nombre, s.cama].filter(Boolean).join(' - ')} ancho />
         </>}
       </Grupo>
 

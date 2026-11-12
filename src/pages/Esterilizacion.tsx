@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { hoyBogota } from '../lib/fechas'
 import { procedimientosCups } from '../components/ProcedimientosCups'
+import { ubicacionCama } from '../lib/ubicacionPaciente'
 
 // Recepción de materiales de osteosíntesis por Esterilización: por cada
 // remisión del proveedor se registra la cantidad recibida de cada ítem, los
@@ -27,6 +28,10 @@ import { procedimientosCups } from '../components/ProcedimientosCups'
 const sb = supabase as any
 
 type Solicitud = CamposAvanceMos & CamposFiltroMos & {
+  /** Servicio, ubicación y cama actuales del paciente (GoMedisys, migración 0045) */
+  servicio_paciente?: string | null
+  ubicacion_paciente?: string | null
+  cama?: string | null
   id: number
   numero_ingreso: string
   documento_paciente: string
@@ -322,6 +327,8 @@ function PanelRecibo({ s, onCerrar, onRegistrado }: {
 
       <Grupo color="orden" icono={Stethoscope} titulo="Paciente y cirugía">
         <Dato etiqueta="Paciente" valor={`${s.nombre_paciente ?? '—'} · ${s.documento_paciente}`} ancho />
+        <Dato etiqueta="Servicio" valor={s.servicio_paciente} />
+        <Dato etiqueta="Ubicación" valor={ubicacionCama(s.ubicacion_paciente, s.cama)} />
         <Dato etiqueta="Procedimiento" valor={procedimientosCups(s.procedimiento)} ancho />
         <Dato etiqueta="Programación" valor={s.fecha_programada ? `${s.fecha_programada} ${s.hora_programada?.slice(0, 5) ?? ''}` : null} />
         <Dato etiqueta="Asegurador" valor={s.aseguradores?.nombre} />

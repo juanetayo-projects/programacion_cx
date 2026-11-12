@@ -7,8 +7,12 @@ import { ESTADOS_COLOR, ESTADOS_COLOR_HEX } from '../lib/constantes'
 import { Eye, Undo2, X, FileSpreadsheet, ClipboardCheck, AlertTriangle } from 'lucide-react'
 import { ModalCierreCirugia, faltantesCierre, DESTINOS, type CamposCierre } from '../components/CierreCirugia'
 import { procedimientosCups } from '../components/ProcedimientosCups'
+import { ubicacionCama } from '../lib/ubicacionPaciente'
 
 type Realizada = {
+  /** Servicio, ubicación y cama actuales del paciente (GoMedisys, migración 0045) */
+  servicio_paciente?: string | null
+  ubicacion_paciente?: string | null
   id: number
   numero_ingreso: string
   documento_paciente: string
@@ -378,7 +382,8 @@ export default function CirugiasRealizadas() {
                 <Campo label="Paciente" valor={seleccion.nombre_paciente} full />
                 <Campo label="Edad" valor={seleccion.edad} />
                 <Campo label="EPS" valor={seleccion.eps?.nombre} />
-                <Campo label="Unidad / Cama" valor={[seleccion.unidades?.nombre, seleccion.cama].filter(Boolean).join(' - ')} full />
+                <Campo label="Servicio" valor={seleccion.servicio_paciente} />
+                <Campo label="Ubicación" valor={ubicacionCama(seleccion.ubicacion_paciente ?? seleccion.unidades?.nombre, seleccion.cama)} />
               </div>
             </div>
 

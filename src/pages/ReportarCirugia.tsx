@@ -10,6 +10,7 @@ import {
 import { SUBESPECIALIDADES_ORTOPEDIA, ESTADOS_LABEL, type Estado } from '../lib/constantes'
 import { UploadCloud, CheckCircle2, Search, UserRound, AlertTriangle, X, CalendarClock } from 'lucide-react'
 import { procedimientosCups } from '../components/ProcedimientosCups'
+import { ubicacionCama } from '../lib/ubicacionPaciente'
 
 type Especialidad = { id: number; nombre: string }
 
@@ -365,6 +366,8 @@ export default function ReportarCirugia() {
                   <Dato etiqueta="Fecha de ordenamiento" valor={programacion.FechaOrdenamiento} />
                   <Dato etiqueta="Especialista que opera" valor={programacion.EspecialistaOpera} />
                   <Dato etiqueta="Especialidad que opera" valor={programacion.EspecialidadOpera} />
+                  <Dato etiqueta="Servicio del paciente" valor={programacion.ServicioPaciente} />
+                  <Dato etiqueta="Ubicación del paciente" valor={ubicacionCama(programacion.UbicacionPaciente, programacion.CamaPaciente)} />
                   <Dato etiqueta="Contrato del ingreso" valor={programacion.ContratoIngresoCirugia} />
                   <Dato etiqueta="Plan (aseguradora)" valor={programacion['Plan(Aseguradora)']} />
                   <Dato etiqueta="Duración boleta" valor={programacion.DuracionBoleta != null && programacion.DuracionBoleta !== '' ? `${programacion.DuracionBoleta} min` : null} />

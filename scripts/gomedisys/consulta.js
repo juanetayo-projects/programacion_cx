@@ -96,6 +96,10 @@ function armarBoleta(filas) {
     fecha_registro: txt(base.FechaSolicitudBoleta),
     duracion: base.DuracionMinutosCirugia ?? null,
     destino: txt(base.Destino),
+    // Servicio, ubicación y cama actuales del paciente (migración 0045)
+    servicio: txt(base.Servicio),
+    ubicacion: txt(base.Ubicacion),
+    cama: txt(base.Cama),
     datos: Object.fromEntries(Object.entries(datos).filter(([, v]) => v !== null && v !== '')),
   }
 }

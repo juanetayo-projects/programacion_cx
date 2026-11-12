@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import { hoyBogota } from '../lib/fechas'
 import { procedimientosCups } from '../components/ProcedimientosCups'
+import { ubicacionCama } from '../lib/ubicacionPaciente'
 
 // Las tablas del módulo MOS (aseguradores, mos_correos) son posteriores a
 // database.types.ts; se consultan con el cliente sin tipar, como CrudTable.
@@ -36,6 +37,10 @@ import { procedimientosCups } from '../components/ProcedimientosCups'
 const sb = supabase as any
 
 type Solicitud = SolicitudMos & CamposAvanceMos & CamposAutorizacion & {
+  /** Servicio, ubicación y cama actuales del paciente (GoMedisys, migración 0045) */
+  servicio_paciente?: string | null
+  ubicacion_paciente?: string | null
+  cama?: string | null
   id: number
   requiere_mos?: boolean | null
   estado: Estado
@@ -504,6 +509,8 @@ function PanelVer({ s, puedeGestionar, onCerrar, onGestionar, onProveedor, onRes
         <Dato etiqueta="Paciente" valor={s.nombre_paciente} ancho />
         <Dato etiqueta="Documento" valor={s.documento_paciente} />
         <Dato etiqueta="Edad" valor={s.edad != null ? `${s.edad} años` : null} />
+        <Dato etiqueta="Servicio" valor={s.servicio_paciente} />
+        <Dato etiqueta="Ubicación" valor={ubicacionCama(s.ubicacion_paciente, s.cama)} />
         <Dato etiqueta="EPS / Contrato" valor={[s.eps_gomedisys || s.eps?.nombre, s.plan_gomedisys].filter(Boolean).join(' · ')} ancho />
       </Grupo>
       <Grupo color="orden" icono={ClipboardList} titulo="Procedimiento">

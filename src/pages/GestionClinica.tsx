@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { aFecha } from '../lib/fechas'
 import { procedimientosCups } from '../components/ProcedimientosCups'
+import { ubicacionCama } from '../lib/ubicacionPaciente'
 
 // Gestión clínica: el gestor clínico gestiona la AUTORIZACIÓN del asegurador
 // (sin ella no se programa ni se inicia ningún proceso de la cirugía),
@@ -30,6 +31,9 @@ import { procedimientosCups } from '../components/ProcedimientosCups'
 const sb = supabase as any
 
 type Solicitud = CamposAvanceMos & CamposFiltroMos & CamposAutorizacion & {
+  /** Servicio, ubicación y cama actuales del paciente (GoMedisys, migración 0045) */
+  servicio_paciente?: string | null
+  ubicacion_paciente?: string | null
   id: number
   numero_ingreso: string
   documento_paciente: string
@@ -252,7 +256,7 @@ export default function GestionClinica() {
                       <div className="font-mono text-[10px] text-slate-400">{codigo(s.id)}</div>
                     </td>
                     <td className="whitespace-nowrap px-2.5 py-2 font-mono">{s.numero_ingreso}</td>
-                    <td className="whitespace-nowrap px-2.5 py-2">{[s.unidades?.nombre, s.cama].filter(Boolean).join(' · ') || '—'}</td>
+                    <td className="whitespace-nowrap px-2.5 py-2">{ubicacionCama(s.ubicacion_paciente ?? s.unidades?.nombre, s.cama) ?? '—'}</td>
                     <td className="whitespace-nowrap px-2.5 py-2">{fechaHoraCorta(s.fecha_ingreso)}</td>
                     <td className="min-w-[160px] px-2.5 py-2">
                       {contrato ? <span className="font-medium">{contrato}</span> : <span className="text-amber-700">Sin definir</span>}
@@ -350,6 +354,8 @@ function PanelClinico({ s, items, puedeEscribir, gm, onCerrar, onCambio }: {
           <Dato etiqueta="Documento" valor={s.documento_paciente} />
           <Dato etiqueta="Edad" valor={s.edad != null ? `${s.edad} años` : null} />
           <Dato etiqueta="N.º de ingreso" valor={s.numero_ingreso} />
+          <Dato etiqueta="Servicio" valor={s.servicio_paciente} />
+          <Dato etiqueta="Ubicación" valor={ubicacionCama(s.ubicacion_paciente ?? s.unidades?.nombre, s.cama)} />
           <Dato etiqueta="Teléfono" valor={s.telefono_paciente} />
           <Dato etiqueta="EPS / Contrato" valor={[s.eps_gomedisys || s.eps?.nombre, s.plan_gomedisys].filter(Boolean).join(' · ')} ancho />
           <Dato etiqueta="Correo" valor={s.email_paciente} ancho />

@@ -48,6 +48,10 @@ export type ProgramacionGM = {
   IngresoInferido: number | boolean | null
   /** yyyy-mm-dd hh:mi — inicio del ingreso */
   FechaIngreso?: string | null
+  /** Servicio, ubicación y cama actuales del paciente en el ingreso (v6 nov-2026) */
+  ServicioPaciente?: string | null
+  UbicacionPaciente?: string | null
+  CamaPaciente?: string | null
   ContratoIngresoCirugia: string | null
   'Plan(Aseguradora)': string | null
   DiagnosticoPreoperatorio: string | null
@@ -179,6 +183,10 @@ export function camposDeProgramacion(p: ProgramacionGM) {
     destino: texto(p.DestinoBoleta),
     fecha_ingreso: texto(p.FechaIngreso),
     fecha_ordenamiento: fechaISO(p.FechaOrdenamiento),
+    // Servicio / ubicación / cama: solo si GoMedisys los trae (no borra lo que ya había)
+    ...(texto(p.ServicioPaciente) ? { servicio_paciente: texto(p.ServicioPaciente) } : {}),
+    ...(texto(p.UbicacionPaciente) ? { ubicacion_paciente: texto(p.UbicacionPaciente) } : {}),
+    ...(texto(p.CamaPaciente) ? { cama: texto(p.CamaPaciente) } : {}),
   }
 }
 

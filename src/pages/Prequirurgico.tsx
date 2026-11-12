@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { hoyBogota } from '../lib/fechas'
 import { procedimientosCups } from '../components/ProcedimientosCups'
+import { ubicacionCama } from '../lib/ubicacionPaciente'
 
 // Gestión postquirúrgica: seguimiento del paciente (antes y después de la
 // cirugía) por Programación de cirugía y Gestión clínica. Notas con fecha,
@@ -28,6 +29,10 @@ import { procedimientosCups } from '../components/ProcedimientosCups'
 const sb = supabase as any
 
 type Solicitud = CamposAvanceMos & CamposCierre & {
+  /** Servicio, ubicación y cama actuales del paciente (GoMedisys, migración 0045) */
+  servicio_paciente?: string | null
+  ubicacion_paciente?: string | null
+  cama?: string | null
   numero_ingreso: string
   edad: number | null
   telefono_paciente: string | null
@@ -329,6 +334,8 @@ export default function Prequirurgico() {
               <Dato etiqueta="Edad" valor={seleccion.edad != null ? `${seleccion.edad} años` : null} />
               <Dato etiqueta="Teléfono" valor={seleccion.telefono_paciente} />
               <Dato etiqueta="EPS" valor={seleccion.eps_gomedisys || seleccion.eps?.nombre} />
+              <Dato etiqueta="Servicio" valor={seleccion.servicio_paciente} />
+              <Dato etiqueta="Ubicación" valor={ubicacionCama(seleccion.ubicacion_paciente, seleccion.cama)} />
             </Grupo>
             <Grupo color="orden" icono={Stethoscope} titulo="Cirugía">
               <Dato etiqueta="Procedimiento" valor={procedimientosCups(seleccion.procedimiento_realizado || seleccion.procedimiento)} ancho />
