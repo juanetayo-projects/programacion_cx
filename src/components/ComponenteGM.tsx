@@ -136,10 +136,14 @@ export function useComponentesGM(codigo: CodigoComponente, solicitudIds: number[
     if (a) n.set(id, a); else n.delete(id)
     return n
   }), [])
-  /** Ya se trajo de GoMedisys: la consulta queda inhabilitada */
-  const consultado = useCallback((s: SolicitudConBoleta) => notas.has(s.id), [notas])
+  /**
+   * La consulta queda inhabilitada si ya se trajo de GoMedisys o, para la
+   * boleta, si la solicitud ya tiene una boleta con datos (consulta masiva)
+   */
+  const consultado = useCallback((s: SolicitudConBoleta) =>
+    notas.has(s.id) || (codigo === 'boleta' && boletaConContenido(s.boleta_quirurgica)), [notas, codigo])
   const puedeConsultar = useCallback((s: SolicitudConBoleta) =>
-    !!config?.script_disponible && !notas.has(s.id) && !consultando.has(s.id) && !!s.numero_ingreso?.trim(), [config, notas, consultando])
+    !!config?.script_disponible && !consultado(s) && !consultando.has(s.id) && !!s.numero_ingreso?.trim(), [config, consultado, consultando])
 
   /** Trae el componente de GoMedisys. Devuelve true si quedó guardado. */
   const traer = useCallback(async (s: SolicitudConBoleta): Promise<boolean> => {
@@ -217,7 +221,7 @@ function BotonConsultaGM({ s, gm }: { s: SolicitudConBoleta; gm: ReturnType<type
   const enCurso = gm.consultando.has(s.id)
   const hecho = gm.consultado(s)
   const sinIngreso = !s.numero_ingreso?.trim()
-  const titulo = hecho ? `${nombre} ya consultada en GoMedisys (consulta inhabilitada)`
+  const titulo = hecho ? `${nombre} ya tiene datos de GoMedisys (consulta inhabilitada)`
     : enCurso ? 'Consultando GoMedisys…'
       : sinIngreso ? 'La solicitud no tiene # de ingreso'
         : error || `Actualizar ${nombre} desde GoMedisys (ingreso ${s.numero_ingreso})`
@@ -268,9 +272,9 @@ export function PanelComponente({ s, codigo, gm, onCerrar }: {
       pie={<>
         {gm.config?.script_disponible && (enCurso && gm.avance.get(s.id) ? <ProgresoBotonGM avance={gm.avance.get(s.id)!} /> : (
           <Boton onClick={actualizar} disabled={!gm.puedeConsultar(s)} className="flex items-center gap-2"
-            title={nota ? 'Consulta inhabilitada: los datos ya se trajeron de GoMedisys' : `Consultar ${nombre} en GoMedisys por el ingreso ${s.numero_ingreso ?? '—'}`}>
-            {nota ? <CheckCircle2 size={16} /> : <DatabaseZap size={16} />}
-            {nota ? 'Datos ya consultados' : 'Actualizar desde GoMedisys'}
+            title={gm.consultado(s) ? 'Consulta inhabilitada: ya tiene datos de GoMedisys' : `Consultar ${nombre} en GoMedisys por el ingreso ${s.numero_ingreso ?? '—'}`}>
+            {gm.consultado(s) ? <CheckCircle2 size={16} /> : <DatabaseZap size={16} />}
+            {nota ? 'Datos ya consultados' : gm.consultado(s) ? 'Ya registrada' : 'Actualizar desde GoMedisys'}
           </Boton>
         ))}
         <Boton variante="fantasma" onClick={onCerrar} className="ml-auto">Cerrar</Boton>
@@ -313,6 +317,8 @@ export function BoletaGoMedisys({ s, onTraido }: { s: SolicitudConBoleta; onTrai
   const nota = gm.notas.get(s.id)
   const enCurso = gm.consultando.has(s.id)
   const sinIngreso = !s.numero_ingreso?.trim()
+  // Ya tiene datos: traída de GoMedisys con este botón o con la consulta masiva
+  const hecho = gm.consultado(s)
   if (gm.config && !gm.config.script_disponible) return null
   const datos = Object.entries(nota?.datos ?? {}).filter(([, v]) => v !== null && v !== '')
 
@@ -347,16 +353,16 @@ export function BoletaGoMedisys({ s, onTraido }: { s: SolicitudConBoleta; onTrai
             onClick={consultar}
             disabled={!gm.puedeConsultar(s)}
             className="flex items-center gap-2"
-            title={nota ? 'Consulta inhabilitada: la boleta ya se trajo de GoMedisys'
+            title={hecho ? 'Consulta inhabilitada: la boleta ya tiene datos de GoMedisys'
               : sinIngreso ? 'La solicitud no tiene # de ingreso'
                 : `Consultar la Boleta quirúrgica en GoMedisys por el ingreso ${s.numero_ingreso}`}
           >
-            {nota ? <CheckCircle2 size={16} /> : <DatabaseZap size={16} />}
-            {nota ? 'Boleta ya consultada' : 'Consultar boleta en GoMedisys'}
+            {hecho ? <CheckCircle2 size={16} /> : <DatabaseZap size={16} />}
+            {nota ? 'Boleta ya consultada' : hecho ? 'Boleta ya registrada' : 'Consultar boleta en GoMedisys'}
           </Boton>
         )}
         <span className="text-[11px] text-slate-500">
-          {nota ? 'La consulta queda inhabilitada para no cargar la base de datos.'
+          {hecho ? 'La boleta ya tiene datos; la consulta queda inhabilitada para no cargar la base de datos.'
             : sinIngreso ? 'Sin # de ingreso no se puede consultar.'
               : enCurso ? 'Puede tardar 1–2 minutos.'
                 : `Por # de ingreso ${s.numero_ingreso}.`}
