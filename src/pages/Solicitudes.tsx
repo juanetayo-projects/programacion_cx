@@ -39,6 +39,8 @@ type Solicitud = CamposAutorizacion & {
   id: number
   requiere_mos?: boolean | null
   numero_ingreso: string
+  /** yyyy-mm-dd hh:mi — inicio del ingreso en GoMedisys */
+  fecha_ingreso?: string | null
   documento_paciente: string
   especialidad_id: number
   estado: Estado
@@ -929,6 +931,7 @@ function GruposSolicitud({ s, medico, compacto, onTraido }: { s: Solicitud; medi
         <Dato etiqueta="Paciente" valor={s.nombre_paciente} ancho />
         <Dato etiqueta="Documento" valor={s.documento_paciente} />
         <Dato etiqueta="# Ingreso" valor={s.numero_ingreso} />
+        <Dato etiqueta="Fecha del ingreso" valor={fechaHoraTexto(s.fecha_ingreso ?? null)} />
         <Dato etiqueta="Edad" valor={s.edad != null ? `${s.edad} años` : null} />
         <Dato etiqueta="EPS" valor={s.eps?.nombre ?? s.eps_gomedisys} />
         {!compacto && <>
