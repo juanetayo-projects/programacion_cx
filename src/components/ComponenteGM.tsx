@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ClipboardCheck, ClipboardX, DatabaseZap, Lock, Stethoscope, Info, FileText, Loader2, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { consultarGoMedisys, ErrorConsultaGM } from '../lib/gomedisys'
@@ -41,6 +41,9 @@ export type SolicitudConBoleta = {
 const CORTO: Record<CodigoComponente, string> = {
   boleta: 'Boleta Qx', nota_mos: 'Nota adm. MOS', nota_gestion_clinica: 'Nota adm. GC', nota_posqx: 'Nota adm. PosQx',
 }
+
+/** Boleta con contenido real: una de relleno como "." no cuenta (igual que boleta_con_contenido, migración 0044) */
+export const boletaConContenido = (t: string | null | undefined) => /[\p{L}\p{N}]{3,}/u.test(t ?? '')
 
 /** Configuración de los componentes y notas traídas de GoMedisys para un módulo */
 export function useComponentesGM(codigo: CodigoComponente, solicitudIds: number[], onTraido?: () => void) {
@@ -92,7 +95,7 @@ export function useComponentesGM(codigo: CodigoComponente, solicitudIds: number[
   }, [codigo, config, recargar])
 
   const tiene = useCallback((s: SolicitudConBoleta) =>
-    notas.has(s.id) || (codigo === 'boleta' && !!s.boleta_quirurgica?.trim()), [notas, codigo])
+    notas.has(s.id) || (codigo === 'boleta' && boletaConContenido(s.boleta_quirurgica)), [notas, codigo])
   // Mientras carga la configuración se asume que exige (no deja avanzar por error)
   const bloquea = useCallback((s: SolicitudConBoleta) => (config?.exige ?? true) && !tiene(s), [config, tiene])
 
@@ -216,6 +219,69 @@ export function PanelComponente({ s, codigo, gm, onCerrar }: {
       )}
       {nota && <p className="px-1 text-[11px] text-slate-400">Datos traídos de GoMedisys el {fecha(nota.consultado_en)}.</p>}
     </PanelLateral>
+  )
+}
+
+/**
+ * Consulta de la Boleta quirúrgica en GoMedisys dentro de un panel de detalle
+ * (va dentro de un <Grupo>). Muestra el botón de consulta por # de ingreso y,
+ * una vez traída, los datos de la boleta con el botón inhabilitado.
+ */
+export function BoletaGoMedisys({ s, onTraido }: { s: SolicitudConBoleta; onTraido?: () => void }) {
+  const ids = useMemo(() => [s.id], [s.id])
+  const gm = useComponentesGM('boleta', ids, onTraido)
+  const [error, setError] = useState('')
+  useEffect(() => { setError('') }, [s.id])
+  const nota = gm.notas.get(s.id)
+  const enCurso = gm.consultando.has(s.id)
+  const sinIngreso = !s.numero_ingreso?.trim()
+  if (gm.config && !gm.config.script_disponible) return null
+  const datos = Object.entries(nota?.datos ?? {}).filter(([, v]) => v !== null && v !== '')
+
+  async function consultar() {
+    setError('')
+    try { await gm.traer(s) } catch (e) { setError((e as Error).message) }
+  }
+
+  return (
+    <div className="col-span-2 space-y-2">
+      {nota && (
+        <div className="rounded-lg border border-emerald-200 bg-white p-2.5">
+          <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700">
+            <CheckCircle2 size={13} /> Boleta consultada en GoMedisys · {fecha(nota.consultado_en)}
+          </p>
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
+            <Dato etiqueta="Descripción y anotaciones" valor={nota.texto} ancho />
+            <Dato etiqueta="Profesional que solicita" valor={nota.profesional} />
+            <Dato etiqueta="Diligenciada en GoMedisys" valor={fecha(nota.fecha_registro)} />
+            {datos.map(([k, v]) => (
+              <Dato key={k} etiqueta={k} valor={typeof v === 'object' ? JSON.stringify(v) : String(v)} ancho={String(v).length > 30} />
+            ))}
+          </dl>
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <Boton
+          type="button"
+          onClick={consultar}
+          disabled={!gm.puedeConsultar(s)}
+          className="flex items-center gap-2"
+          title={nota ? 'Consulta inhabilitada: la boleta ya se trajo de GoMedisys'
+            : sinIngreso ? 'La solicitud no tiene # de ingreso'
+              : `Consultar la Boleta quirúrgica en GoMedisys por el ingreso ${s.numero_ingreso}`}
+        >
+          {enCurso ? <Loader2 size={16} className="animate-spin" /> : nota ? <CheckCircle2 size={16} /> : <DatabaseZap size={16} />}
+          {enCurso ? 'Consultando GoMedisys…' : nota ? 'Boleta ya consultada' : 'Consultar boleta en GoMedisys'}
+        </Boton>
+        <span className="text-[11px] text-slate-500">
+          {nota ? 'La consulta queda inhabilitada para no cargar la base de datos.'
+            : sinIngreso ? 'Sin # de ingreso no se puede consultar.'
+              : enCurso ? 'Puede tardar 1–2 minutos.'
+                : `Por # de ingreso ${s.numero_ingreso}.`}
+        </span>
+      </div>
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{error}</p>}
+    </div>
   )
 }
 

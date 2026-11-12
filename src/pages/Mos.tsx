@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CeldaComponente, useComponentesGM } from '../components/ComponenteGM'
+import { CeldaComponente, useComponentesGM, BoletaGoMedisys, boletaConContenido } from '../components/ComponenteGM'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { TituloEnHeader, CampoLinea, CLASE_CAMPO, Boton, Modal, Badge, EstadoVacio, Spinner } from '../components/ui'
@@ -78,7 +78,7 @@ const ESTADO_ITEM_COLOR: Record<EstadoItem, string> = {
 }
 
 const MAX_BYTES = 10 * 1024 * 1024
-const tieneBoleta = (s: Solicitud) => !!s.boleta_quirurgica?.trim()
+const tieneBoleta = (s: Solicitud) => boletaConContenido(s.boleta_quirurgica)
 const estadoMos = (s: Solicitud): EstadoMos => s.estado_mos ?? 'pendiente'
 const codigo = (id: number) => `SC-${String(id).padStart(6, '0')}`
 const tamano = (b: number) => (b >= 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`)
@@ -514,6 +514,8 @@ function PanelVer({ s, puedeGestionar, onCerrar, onGestionar, onProveedor, onRes
       </Grupo>
       <Grupo color="boleta" icono={ClipboardList} titulo="Boleta quirúrgica">
         <Dato etiqueta="Boleta (GoMedisys)" valor={s.boleta_quirurgica} ancho />
+        {/* Consulta de la boleta en GoMedisys por # de ingreso (migración 0043) */}
+        <BoletaGoMedisys s={s} />
       </Grupo>
       <Grupo color="gestion" icono={History} titulo="Gestión MOS">
         {s.estado_mos && <div className="col-span-2 rounded-lg bg-white px-2 py-3"><AvanceMos s={s} /></div>}

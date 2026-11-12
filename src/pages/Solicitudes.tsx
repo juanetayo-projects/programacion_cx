@@ -8,7 +8,7 @@ import RichTextEditor from '../components/RichTextEditor'
 import { ModalDetalleMos } from './Mos'
 import { ModalCierreCirugia, type CamposCierre } from '../components/CierreCirugia'
 import { IndicadorAutorizacion, AlertaAutorizacion, PanelAutorizacion } from '../components/Autorizacion'
-import { CeldaComponente, useComponentesGM, useBloqueoComponente } from '../components/ComponenteGM'
+import { CeldaComponente, useComponentesGM, useBloqueoComponente, BoletaGoMedisys } from '../components/ComponenteGM'
 import { autorizacionVigente, type CamposAutorizacion } from '../lib/autorizacion'
 import {
   IndicadorClinico, IndicadorPostquirurgico, IndicadorEsterilizacion, ModalGestionClinica, ModalPostquirurgico, ModalEsterilizacion,
@@ -975,15 +975,17 @@ function GruposSolicitud({ s, medico, compacto }: { s: Solicitud; medico: string
         </>}
       </Grupo>
 
-      {!compacto && (
-        <Grupo color="boleta" icono={ClipboardList} titulo="Boleta quirúrgica">
-          <Dato etiqueta="Boleta (GoMedisys)" valor={s.boleta_quirurgica} ancho />
+      <Grupo color="boleta" icono={ClipboardList} titulo="Boleta quirúrgica">
+        <Dato etiqueta="Boleta (GoMedisys)" valor={s.boleta_quirurgica} ancho />
+        {!compacto && <>
           <Dato etiqueta="Valoración preanestésica" valor={s.valoracion_preanestesica} />
           <Dato etiqueta="Autorización aseguradora" valor={s.autorizacion_aseguradora} />
           <Dato etiqueta="Estado material osteosíntesis" valor={s.estado_material_osteosintesis} />
           <Dato etiqueta="Casa médica" valor={s.casa_medica_material} />
-        </Grupo>
-      )}
+        </>}
+        {/* Consulta de la boleta en GoMedisys por # de ingreso (migración 0043) */}
+        <BoletaGoMedisys s={s} />
+      </Grupo>
 
       {s.estado_mos && (
         <Grupo color="neutro" icono={Bone} titulo="Gestión MOS · materiales de osteosíntesis">
